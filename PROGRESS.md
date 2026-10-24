@@ -305,7 +305,8 @@ Historical verification from the incoming branch's source checkout:
   the available ML environment. System Python: **218 discovered, 178 pass, 40
   optional-ML skips**. This adds 40 regressions to the 178-test workspace checkpoint.
   Catalog remains 16 model / 14 dataset records. JavaScript/whitespace checks pass.
-- [ ] Independent review and full Torch/model-loading regression remain open.
+- [ ] Independent review remains open. The full Torch/model-loading checks are done; see
+  "Real model files, loading and tiny extraction" below.
   Hashing overhead is unbenchmarked; before/after checks are not file locks. Local
   hashes do not establish rights, authentic labels/patients, publisher trust or
   clinical validity. Migration/limits: `docs/reports/E-feature-provenance.md`.
@@ -345,3 +346,13 @@ The review branch consolidates all three local patches and provides readable res
 The user corrected the operation to rebase `research/overnight-integration` onto main, leaving main unchanged. The branch now contains main `79c51d5ac9d508b602193fd0e457a8a5eecec3c5`, including Inam's demo-readiness and Sebastian's desktop/Experiments integration. Conflicts preserve upstream's broader model/processor/image/payload/head provenance and its existing tests; the earlier narrower overlapping repair commits and incompatible duplicate cache tests are superseded. The original patches/source archive remain historical artifacts. No shared main merge is performed.
 
 The new offline release/evidence review adds 25 tests to main's 218. Current local suite: **243 discovered, 203 pass, 40 optional ML skips**. Catalog: 16 model / 14 dataset records valid. Gemma example default/profile parsing and whitespace checks pass. The current upstream app, coordinator, evaluation, learning, encoder and encoder-provenance test paths match the rebased main checkpoint byte-for-byte. Full supported ML/Torch checks remain open; no actual medical inference, training, acquisition or cluster run occurred. Patient/lesion grouping and per-row diagnostic-reference evidence remain unresolved.
+
+
+## Real model files, loading and tiny extraction (2026-10-24)
+
+- [x] Hashed every RAD-DINO and ResNet-50 file against its `PROVENANCE.json`: all match, and both weight files match the publisher checksum. The model identity now also binds each encoder's processor file (`preprocessor_config.json` / timm `config.json`). It refuses when that file's size, mean/std, interpolation or crop settings disagree with the code. All model fingerprints change; the six `runs/features` caches were already replay-only.
+- [x] Real weights load completely: RAD-DINO has no missing/unexpected/mismatched keys (86.6 M parameters), and ResNet-50 loads strict, dropping only `fc`. Embeddings are finite, agree across batch sizes and agree between MPS and CPU.
+- [x] Fixed `native_crop` rounding: the code rounded the long edge where both publishers truncate, and always floored the crop offset where timm rounds. ResNet-50 now matches timm exactly on synthetic images, and RAD-DINO matches transformers to within one gray level. On real JPEGs, the documented draft decode is the only remaining difference (embedding cosine ≥ 0.988). Whether to drop draft for that variant is open.
+- [x] Measured tiny extraction, `scripts/extraction_smoke.py`: 16 label-free BTXRD images, both encoders × three variants on MPS. All six caches validate against their bindings. RAD-DINO runs at 2.1–2.6 images/s (about 25–30 min for all 3,746 images); ResNet-50 at 36 images/s (about 2 min). Runtime measurement only; no fitting or scoring. Details: `docs/reports/E-model-runtime-check.md`.
+- [x] `tests/test_model_loading.py` adds four opt-in real-weight checks (`CW_MODEL_TESTS=1`, synthetic images only), and two synthetic processor-binding regressions were added. Suite: **249 discovered**. In the ML environment, 245 pass with the 4 opt-in tests skipped; with `CW_MODEL_TESTS=1`, all 249 pass. Plain Python: 205 pass, 44 skips. Catalog: 16 models, 14 datasets.
+- [ ] Independent review of the binding and rounding change. Decide on draft decoding for `native_crop`. Any new full extraction needs an explicitly authorized, reviewed run.
