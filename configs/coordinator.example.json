@@ -1,6 +1,6 @@
 {
   "_comment": "Copy to configs/coordinator.json (gitignored) and edit. Every profile speaks the OpenAI chat-completions API, so any server works: vLLM, SGLang, llama.cpp, Ollama, LM Studio, TGI, or a hosted gateway. base_url_env lets a profile read its URL from an environment variable. Server-side tool-calling flags (e.g. vLLM --enable-auto-tool-choice --tool-call-parser ...) must match the model; follow the official recipe linked per profile rather than guessing.",
-  "default_profile": "qwen-fp8-vllm",
+  "default_profile": "gemma-31b-vllm",
   "profiles": {
     "claude-research": {
       "type": "openai_compatible",
@@ -20,7 +20,11 @@
       "model": "Qwen/Qwen3.8-27B",
       "api_key_env": "CW_QWEN_API_KEY",
       "timeout_s": 300,
-      "default_params": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 4096},
+      "default_params": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "max_tokens": 4096
+      },
       "extra_body": {},
       "_notes": "~55.6 GB BF16 weights: ~80 GB GPU or tensor parallel. Recipe: https://recipes.vllm.ai/Qwen/Qwen3.8-27B"
     },
@@ -31,7 +35,11 @@
       "model": "Qwen/Qwen3.8-27B-FP8",
       "api_key_env": "CW_QWEN_API_KEY",
       "timeout_s": 300,
-      "default_params": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 4096},
+      "default_params": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "max_tokens": 4096
+      },
       "extra_body": {},
       "_notes": "Official FP8 build, ~30.9 GB weights."
     },
@@ -41,8 +49,15 @@
       "base_url_env": "CW_QWEN_BASE_URL",
       "model": "Qwen/Qwen3.8-27B-FP8",
       "api_key_env": "CW_QWEN_API_KEY",
-      "default_params": {"temperature": 0.7, "max_tokens": 2048},
-      "extra_body": {"chat_template_kwargs": {"enable_thinking": false}},
+      "default_params": {
+        "temperature": 0.7,
+        "max_tokens": 2048
+      },
+      "extra_body": {
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      },
       "_notes": "Same weights with thinking disabled per request (vLLM/SGLang chat_template_kwargs). Compare latency vs tool-selection accuracy."
     },
     "qwen-sglang": {
@@ -69,6 +84,20 @@
       "base_url": "http://localhost:8080/v1",
       "model": "local",
       "_notes": "llama-server with --jinja for tool calling."
+    },
+    "gemma-31b-vllm": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:8000/v1",
+      "base_url_env": "CW_GEMMA_BASE_URL",
+      "model": "google/gemma-4-31B-it",
+      "api_key_env": "CW_GEMMA_API_KEY",
+      "timeout_s": 300,
+      "default_params": {
+        "temperature": 0.3,
+        "max_tokens": 4096
+      },
+      "extra_body": {},
+      "_notes": "Proposed coordinator; serving, tool parser and runtime compatibility require a real smoke test. Follow the official Gemma recipe: https://docs.vllm.ai/projects/recipes/en/stable/Google/Gemma4.html"
     }
   }
 }
