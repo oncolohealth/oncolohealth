@@ -394,6 +394,7 @@ const img = { src: "btxrd", meta: null, rows: [], byId: {}, uploads: [], upById:
 const keyOf = (set, id) => `${set}:${id}`;
 const media = (set, file) => `/media/${encodeURIComponent(set)}/${file.split("/").map(encodeURIComponent).join("/")}?t=${encodeURIComponent(TOKEN)}`;
 const fmtP = p => (p == null ? "" : p.toFixed(2));
+const variantTag = (variant, selected) => (variant && variant !== "pad" ? ` · ${variant}${selected ? " (selected)" : ""}` : variant ? " · pad" : "");
 function setWidths(root) { $$("[data-w]", root).forEach(el => { el.style.width = `${Math.max(0, Math.min(100, Number(el.dataset.w)))}%`; }); }
 function selectedResult() {
   const run = img.runs.find(r => r.id === $("#img-tools").run.value);
@@ -402,7 +403,7 @@ function selectedResult() {
 
 function setRunResults() {
   const t = $("#img-tools"), run = img.runs.find(r => r.id === t.run.value);
-  t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${r.protocol} · ${r.endpoint} · ${r.encoder}`)} (${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
+  t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${r.protocol} · ${r.endpoint} · ${r.encoder}${variantTag(r.variant, r.selected)}`)} (${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
   t.result.disabled = !run;
 }
 async function loadImages() {
@@ -603,7 +604,7 @@ function updateImgSelection() {
   $("#img-tools").result.disabled = busy || !sr;
   $$("[data-pick]", $("#img-grid")).forEach(cb => { cb.disabled = busy; });
   if ($("#img-delete")) $("#img-delete").disabled = busy;
-  $("#img-run-context").textContent = img.review ? `Stored predictions are available for validation and test images. Live scoring uses ${img.review.encoder} with the selected ${img.review.endpoint.replaceAll("_", " ")} head. Training images will be refused.` : "Choose a baseline run to review predictions or score images live.";
+  $("#img-run-context").textContent = img.review ? `Stored predictions are available for validation and test images. Live scoring uses ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} with the selected ${img.review.endpoint.replaceAll("_", " ")} head. Training images will be refused.` : "Choose a baseline run to review predictions or score images live.";
 }
 
 function probBars(probs, classes, pred, threshold) {
@@ -766,7 +767,7 @@ function renderLive(res) {
   const right = labeled.filter(e => e.correct).length;
   $("#img-live").innerHTML = `<div class="live">
     <div class="audit-head"><h2>${scoringActive() ? "Results so far" : "Live scores"}</h2><span class="badge synthetic">Exploratory</span></div>
-    <p class="hint">${esc(res.run)} / ${esc(res.result)}, encoder ${esc(res.encoder)} on ${esc(res.device)}, ${res.seconds} s. ${res.threshold != null ? `${esc(res.positive_class)} when P ≥ ${fmtP(res.threshold)}.` : "Argmax over classes."}
+    <p class="hint">${esc(res.run)} / ${esc(res.result)}, encoder ${esc(res.encoder)}${res.variant && res.variant !== "pad" ? ` (${esc(res.variant)} preprocessing)` : ""} on ${esc(res.device)}, ${res.seconds} s. ${res.threshold != null ? `${esc(res.positive_class)} when P ≥ ${fmtP(res.threshold)}.` : "Argmax over classes."}
       ${labeled.length ? `${right} of ${labeled.length} labeled images match the reference label${labeled.some(e => e.partition === "val") ? ", including val images, which are optimistic" : ""}.` : ""} ${esc(res.note)}</p>
     <div class="table-scroll" tabindex="0" role="region" aria-label="Live score results"><table><thead><tr><th aria-label="Preview"></th><th>Image</th><th>In run</th><th>Reference</th><th>Live</th><th>Stored</th><th>Notes</th></tr></thead><tbody>
     ${res.items.map(e => {

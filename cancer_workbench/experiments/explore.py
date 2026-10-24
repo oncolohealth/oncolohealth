@@ -3,7 +3,8 @@
 Replay (standard library): a run's stored val/test probabilities joined with
 its split, so single images can be looked at and errors sorted. Live scoring
 (`ml` extra): embed chosen images with the run's frozen encoder and apply the
-run's head. A head comes from `runs/<run>/heads/`; for runs made before heads
+run's head, preprocessing images with the variant the head was trained on
+(`pad` unless the result names another). A head comes from `runs/<run>/heads/`; for runs made before heads
 were saved it is refit from the run's split and cached features, and used only
 if it reproduces the run's stored val probabilities.
 
@@ -63,6 +64,7 @@ def list_runs() -> list[dict]:
         res = json.loads((d / "results.json").read_text())
         out.append({"id": d.name, "label": res.get("label", ""), "results": [
             {"id": r["id"], "protocol": r["protocol"], "endpoint": r["endpoint"], "encoder": r["encoder"], "counts": r["counts"],
+             "variant": r.get("variant"), "selected": r.get("selected"),
              "roc_auc": r["test"].get("roc_auc", r["test"].get("macro_roc_auc")), "macro": "macro_roc_auc" in r["test"],
              "threshold": r["test"].get("threshold"), "has_head": (d / "heads" / f"{r['id']}.npz").exists()}
             for r in res["results"]]})
@@ -90,7 +92,7 @@ def review(run: str, result_id: str) -> dict:
             pred = decide(probs, classes, threshold)
             rows[sid].update(probs=probs, pred=pred, correct=pred == rows[sid]["label"])
     return {"run": run, "result": result_id, "label": LABEL, "protocol": r["protocol"], "endpoint": r["endpoint"],
-            "encoder": r["encoder"], "classes": classes, "threshold": threshold,
+            "encoder": r["encoder"], "variant": r.get("variant", "pad"), "classes": classes, "threshold": threshold,
             "positive_class": classes[1] if len(classes) == 2 else None, "rows": rows}
 
 
@@ -101,7 +103,7 @@ def _refit(d: Path, r: dict):
     from ..learning.features import cache_path, load_features
     from ..learning.heads import evaluate_head, train_feature_head
 
-    fpath = cache_path(r["encoder"], "btxrd", RUNS_DIR / "features")
+    fpath = cache_path(r["encoder"], "btxrd", RUNS_DIR / "features", r.get("variant", "pad"))
     if not fpath.exists():
         raise FileNotFoundError(f"{fpath.name} is missing, so the head can't be rebuilt. Re-run the baseline.")
     f = load_features(fpath)
@@ -155,14 +157,15 @@ def score(run: str, result_id: str, items: list[dict], progress=None) -> dict:
     if len(items) > MAX_SCORE:
         raise ValueError(f"Score at most {MAX_SCORE} images at a time.")
     view = review(run, result_id)
-    metadata = {k: view[k] for k in ("run", "result", "encoder", "classes", "threshold", "positive_class", "label")}
+    metadata = {k: view[k] for k in ("run", "result", "encoder", "variant", "classes", "threshold", "positive_class", "label")}
     metadata.update(note=NOTE, device="pending")
     report("head")
-    head, enc, classes = head_for(run, result_id), view["encoder"], view["classes"]
-    if head.encoder != {"encoder_id": enc, "revision": str(revision(enc)), "preprocessing_hash": preprocessing_hash(enc)}:
-        raise ValueError("The head was trained on features from other weights or preprocessing than the encoder installed now.")
+    head, enc, variant, classes = head_for(run, result_id), view["encoder"], view["variant"], view["classes"]
+    if head.encoder != {"encoder_id": enc, "revision": str(revision(enc)), "preprocessing_hash": preprocessing_hash(enc, variant)}:
+        raise ValueError(f"The head was trained on features from other weights or preprocessing than {enc} "
+                         f"with {variant} preprocessing as installed now.")
     with _LOCK:
-        adapter = _ENCODERS.setdefault(enc, FrozenEncoderAdapter(enc))
+        adapter = _ENCODERS.get((enc, variant)) or _ENCODERS.setdefault((enc, variant), FrozenEncoderAdapter(enc, variant=variant))
     for it in items:
         report("scoring", it["key"])
         sid = it.get("sample_id") or None
@@ -193,6 +196,6 @@ def score(run: str, result_id: str, items: list[dict], progress=None) -> dict:
             e["correct"] = e["pred"] == e["label"]
         metadata["device"] = str(adapter.device)
         report("scoring")
-    return {"label": LABEL, "note": NOTE, "run": run, "result": result_id, "encoder": enc, "device": str(adapter.device),
+    return {"label": LABEL, "note": NOTE, "run": run, "result": result_id, "encoder": enc, "variant": variant, "device": str(adapter.device),
             "classes": classes, "threshold": view["threshold"], "positive_class": view["positive_class"],
             "seconds": round(time.monotonic() - t0, 2), "items": out}
