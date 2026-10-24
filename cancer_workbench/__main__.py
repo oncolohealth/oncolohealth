@@ -1,4 +1,4 @@
-"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd> ..."""
+"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|baseline> ..."""
 from __future__ import annotations
 
 import argparse
@@ -112,6 +112,23 @@ def _btxrd(argv: list[str]) -> int:
     return 0
 
 
+def _baseline(argv: list[str]) -> int:
+    from .experiments import btxrd_baseline as bb
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench baseline", description=bb.LABEL)
+    ap.add_argument("--encoder", action="append", choices=bb.ENCODERS)
+    ap.add_argument("--endpoint", action="append", choices=sorted(bb.CLASSES))
+    ap.add_argument("--protocol", action="append", choices=bb.PROTOCOLS)
+    ap.add_argument("--seed", default="0")
+    ap.add_argument("--n-boot", type=int, default=1000)
+    a = ap.parse_args(argv)
+    out = bb.run(a.encoder or bb.ENCODERS, a.endpoint or tuple(bb.CLASSES), a.protocol or bb.PROTOCOLS,
+                 seed=a.seed, n_boot=a.n_boot)
+    print((out / "summary.md").read_text())
+    print(f"wrote {out}")
+    return 0
+
+
 def _app(argv: list[str]) -> int:
     from .app.server import serve
 
@@ -125,12 +142,13 @@ def _app(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "app": _app}
+    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "baseline": _baseline, "app": _app}
     if not argv or argv[0] not in commands:
         print(__doc__ + "\n  app          open the local researcher app in your browser\n"
               "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
               "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
-              "  btxrd        describe the BTXRD release / build its manifest")
+              "  btxrd        describe the BTXRD release / build its manifest\n"
+              "  baseline     exploratory frozen-encoder baseline on BTXRD (needs the ml extra)")
         return 0 if not argv else 2
     if argv[0] == "fetch":
         from .acquisition.fetch import main as fetch_main
