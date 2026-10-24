@@ -11,7 +11,7 @@ catalog/*.json ──► registry ──► routing ──► adapters ──►
  acquisition ──► data/<id>/, models/<id>/ + PROVENANCE.json
                          │
                          ▼
-                 datasets (manifest → audit → grouped split) ──► learning ──► evaluation   [stubs]
+                 datasets (manifest → audit → grouped split) ──► learning ──► evaluation   [partial]
                                                                     └──── experiments   [partial]
 
 app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything above.
@@ -48,13 +48,15 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist` | done |
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
-| `experiments/plan.py` | `plan_experiment` | stub |
+| `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (library only; never executes) |
 | `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, records; `baseline` CLI | done (`ml` extra) |
 | `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing hash | done (`ml` extra) |
 | `learning/heads.py` | `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals | done (`ml` extra; distillation not implemented) |
 | `evaluation/metrics.py` | `binary_report`, `multiclass_report` (bootstrap CIs), `calibration` | done (`ml` extra) |
 | `evaluation/thresholds.py` | `choose_threshold` on development data (`youden`, `sensitivity>=X`) | done (`ml` extra) |
-| `evaluation/` (rest) | Patient-level aggregation, leakage vs. pretraining data | stub (contracts in package docstring) |
+| `evaluation/aggregate.py` | Binary patient max/mean aggregation; declared IDs and consistent labels/partition required | done (stdlib) |
+| `evaluation/leakage.py` | Declared split and namespaced pretraining overlap; unresolved coverage stays explicit | done (stdlib; no pixel or identity inference) |
+| `evaluation/comparison.py` | Binary ROC-AUC/AP, paired patient-cluster bootstrap differences and invalid-draw accounting | done (stdlib; not wired into baseline) |
 | `retrieval/` | PubMed search + MedCPT rerank | stub (contract in docstring) |
 | `curriculum/` | Export reviewed tool-use transcripts | stub (contract in docstring) |
 | `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token | done |
@@ -126,6 +128,12 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 **Audit and split** (Datasets screen):
 `read_manifest` → `audit_dataset(spec, rows)` → `grouped_split(rows, fractions, seed)` → re-audit. A saved split goes to `data/<id>/splits/<name>.csv` with a `.json` sidecar recording the source manifest hash, fractions, seed and audit.
 
+**Experiment draft** (library only):
+`plan_experiment(path, model, audit, budget)` checks declared immutable identity, reuse rights, audit findings and explicit storage amounts. It returns `blocked` or `ready_for_review`, always `execution_authorized: false`. It changes no catalog state and launches nothing. See `docs/reports/B-plan-contract.md`.
+
+**Evaluation utilities** (library only):
+`leakage.check(train, eval, pretraining_refs)` reports declared identity/provenance intersections and unresolved coverage. `aggregate.patient_level` explicitly aggregates binary predictions with genuine declared patient IDs. `comparison.paired_binary` requires matched samples, labels and patients; it resamples patient clusters jointly across arms and reports B-minus-A ranking differences, invalid draws and withheld intervals. The existing exploratory runner still uses the older metrics. See `docs/reports/F-evaluation-protocol.md`.
+
 **App request:**
 browser → `server.Handler` checks the Host header and `X-CW-Token` → looks up the path in `api.*_ROUTES` → plain function → JSON. `api.ApiError` maps to its HTTP status; other exceptions return 500.
 
@@ -154,6 +162,8 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_acquisition.py` | Download, resume and verification; zip safety |
 | `test_datasets.py` | Audit findings, grouped splits |
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
+| `test_experiment_plan.py` | Three draft paths, reviewed rights, audit and budget refusal; synthetic records |
+| `test_evaluation_protocol.py` | Patient aggregation, declared/pretraining overlap, paired comparisons and 1,134 metric oracle cases |
 | `test_learning_eval.py` | Split protocols, heads, metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
 | `test_app.py` | `PROGRESS.md` editing, API functions, server Host and token guards |

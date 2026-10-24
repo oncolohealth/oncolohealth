@@ -16,13 +16,13 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 | WS | Focus | Module(s) | Depends on | Owner |
 |---|---|---|---|---|
 | A | Dataset & evidence curator | `datasets/`, `acquisition/`, `catalog/datasets.json` | none | |
-| B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | |
+| B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | Codex (planner + protocol draft) |
 | C | Registry & specialist adapters | `registry/`, `routing/`, `adapters/`, `catalog/models.json` | none | |
 | D | Coordinator & retrieval | `coordinator/`, `retrieval/`, `curriculum/` | C (tool schemas) | |
 | E | Transfer learning & distillation | `learning/` | A (manifest), F (metrics) | |
-| F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | |
+| F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Codex (utilities + protocol draft) |
 | G | Researcher UI & API | `api/` (new), `ui/` (new) | C, D interfaces | |
-| H | Independent review | `docs/reports/H-*` | all | |
+| H | Independent review | `docs/reports/H-*` | all | Codex (source check only; independent review pending) |
 
 ## Phase 0: Foundation (done in this session)
 
@@ -35,12 +35,12 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] `execute_specialist` + clearly SYNTHETIC adapter; catalog-only models cannot execute
 - [x] Dataset manifest contract, `audit_dataset` (patient/duplicate leakage, missing ids, labels, file hashes), deterministic `grouped_split`
 - [x] Coordinator: multi-profile OpenAI-compatible providers (vLLM/SGLang/Ollama/LM Studio/llama.cpp), tool box with argument validation, tool loop that feeds back only observed results, CLI `coordinator profiles|ping|ask --profile A --profile B`
-- [x] 30 synthetic unit tests passing (`python3 -m unittest discover -s tests`)
+- [x] Foundation synthetic unit tests; see Local source takeover verification below for the current suite count and environment-specific skips
 - [x] Default-tier download: 13 artifacts fetched and checksum-verified (HF sha256 / Zenodo md5 / figshare md5; the 3 TCIA series are trust-on-first-use sha256), 6.35 GB used including extracted copies
 - [ ] Review each `PROVENANCE.json`, then PR evidence_state `cataloged → access_obtained`
 - [x] Local app (`python3 -m cancer_workbench app`): catalog + router, downloads with live progress/cancel/budget, dataset inventory + audit + grouped splits, multi-model assistant chat with visible tool calls, editable PROGRESS checklist. Standard library only, localhost-only, per-launch token
 - [x] Install the `ml` extra into `.venv` (`uv venv --python 3.12 .venv; uv pip install --python .venv/bin/python --exclude-newer <two weeks ago> -e ".[ml]"`). Installed 2026-10-23 after a supply-chain check; `--exclude-newer 2026-10-09` keeps transitive dependencies at least two weeks old
-- [ ] `git init` + first commit + shared remote (waiting on the user)
+- [x] Local Git repository and first commit available: `7d4bf64c47946439691bcaa02883aebb2ec296d2`; local source access confirmed. Connected GitHub access/push has not been verified
 
 ## Milestone 1: Bone X-ray workflow (BTXRD)
 
@@ -58,27 +58,31 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [~] Protocol: eligibility, preprocessing policy, grouped split fractions + seed, threshold rule, metrics, error review. Exploratory version implemented in `experiments/btxrd_baseline.py` (two split protocols, Youden threshold on val); a reviewed protocol is still needed
 - [~] Arms (Hub Q03, decided 2026-10-23): frozen RAD-DINO + linear head vs. frozen ResNet-50 + linear head, both already downloaded. MedSigLIP joins as a second medical arm once its gated access is granted
 - [~] Check MedSigLIP/RAD-DINO pretraining overlap with BTXRD sources. RAD-DINO: chest X-rays only per its card (no overlap expected; `training_images.csv` not checked). MedSigLIP: not acquired
-- [ ] Implement `experiments/plan.py::plan_experiment`
+- [x] `experiments/plan.py::plan_experiment`: side-effect-free draft gates for three reuse paths, pinned identity, reviewed rights, dataset findings and storage. Eight synthetic tests. Contract: `docs/reports/B-plan-contract.md`; no execution or catalog promotion
 
 ### C: Registry and adapters
 - [x] Encoder adapter (`adapters/encoder.py`) wrapping a frozen backbone → embedding envelope (RAD-DINO, ResNet-50; contract in `docs/reports/C-model-cards.md`)
 - [ ] Bone classifier adapter once E produces a head
 - [ ] Full input validation: geometry, bit depth, channels, normalization
+- [ ] Convert exceptions from adapter validation into failed result envelopes (H source check)
 - [ ] Promote models' `evidence_state` via PR as each one is actually run
 
 ### E: Transfer learning
 - [x] `learning/features.py::extract_features` (RAD-DINO and ResNet-50 over all 3,746 BTXRD images; cached in `runs/features/`)
-- [x] `learning/heads.py::train_feature_head` / `evaluate_head` (logistic / linear head). First exploratory run: `docs/reports/E-btxrd-exploratory-baseline.md`. ROC-AUC 0.83 to 0.86 on an image-level split but 0.60 to 0.62 when trained on center 1 and tested on centers 2 + 3; no difference between RAD-DINO and ResNet-50
+- [x] `learning/heads.py::train_feature_head` / `evaluate_head` (logistic / linear head). Existing exploratory report: `docs/reports/E-btxrd-exploratory-baseline.md`. Reported image-level and source-holdout estimates have not been independently reproduced in this checkout; they do not establish equivalence between encoders or medical performance
+- [ ] Pre-fit train/val identity, duplicate, shape, finite-feature and class-coverage validation (H source check); reject leakage before C selection
 - [ ] Optional: teacher-student distillation, after a baseline exists and with teacher rights checked
 
 ### F: Evaluation
-- [ ] Protocol `docs/reports/F-evaluation-protocol.md`: patient-level aggregation, grouped bootstrap CIs, calibration, threshold from dev only
-- [~] `evaluation/metrics.py`: `binary_report`, `multiclass_report`, `calibration` and `thresholds.py` done; leakage check vs. pretraining data and patient-level aggregation still to do
-- [ ] Error review template (per-site, per-age, per-anatomy subgroups)
+- [~] Review draft `docs/reports/F-evaluation-protocol.md`: actual baseline recipe, patient aggregation policy, paired grouped CIs, calibration, development-only choices and overlap review. Endpoint/patient/reference-standard evidence still unresolved; protocol not approved
+- [x] Stdlib `evaluation/aggregate.py`, `leakage.py`, `comparison.py`: explicit binary patient aggregation, declared split/pretraining overlap and paired patient-cluster ROC-AUC/AP differences. 22 new synthetic tests, including 1,134 small metric oracle cases; no patient identities inferred
+- [~] Existing ML `evaluation/metrics.py` and `thresholds.py`: implemented but still need input/non-finite/invalid-bootstrap-draw hardening (see H source check); new utilities are not automatically wired into the baseline
+- [x] Empty error-review template `docs/reports/F-error-review-template.csv` and subgroup policy in F protocol; no real cases reviewed
 
 ### D: Coordinator
 - [ ] 🔒 Live Qwen endpoint. Blocked on the GPU machine: confirm its VRAM to choose BF16 (~80 GB) or FP8 (~40–48 GB). See `docs/big-machine.md`
 - [ ] Develop locally against a small model via an Ollama/LM Studio profile meanwhile
+- [ ] Enforce coordinator tool argument types/enums and nested schema constraints before calling handlers (H source check)
 - [ ] Held-out workflow evaluation set: missing inputs, unknown models, catalog-only models, tool failures, unsupported requests, conflicting sources
 - [ ] Compare profiles on that set (routing accuracy, invalid args, invented results, latency)
 - [ ] `retrieval/`: PubMed E-utilities search + MedCPT rerank; citation-support check
@@ -91,7 +95,8 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [ ] Visual QA pass in a real browser (light + dark, phone width)
 
 ### H: Review
-- [ ] Review of this foundation: interfaces, gaps, smallest next experiment
+- [x] Source check of existing foundation: `docs/reports/H-local-source-review.md`, with evidence-backed E/C/D/F gaps and next experiment prerequisites
+- [ ] Independent review of new B/F additions and fixes to the remaining source findings
 
 ## Later milestones (only once their adapters, data and evaluation hold up)
 - [ ] Lung CT: MONAI nodule-detection adapter on `lidc-idri-sample` (smoke test only, since LIDC is in its training data); NoduleMNIST3D prototyping
@@ -117,3 +122,9 @@ Run `python3 -m cancer_workbench fetch list` for live status. Budget: 40 GB (`CW
 - [ ] Fetch the optional tier? (non-commercial licenses; 7.6 GB brain MRI)
 - [ ] Which gated models to request access for (MedSigLIP is the doc's primary bone candidate)
 - [ ] Repository hosting + license for the project code (none established)
+
+## Local source takeover verification
+
+- Source baseline: `7d4bf64c47946439691bcaa02883aebb2ec296d2`; user-provided untracked brief/walkthrough preserved.
+- Actual checkout verification: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests` discovers 85 tests: **79 pass, 6 skip** (optional ML dependencies absent), including 30 new stdlib synthetic B/F tests. Existing localhost tests pass after the sandbox permission grant. Before this change the same checkout ran 55 tests: 49 pass, 6 skip. `git diff --check` is clean.
+- This pulled checkout lacks the collaborator's downloaded medical data, weights, cached features and ML environment. No training, inference, patient evaluation or catalog state promotion was performed.
