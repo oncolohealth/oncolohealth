@@ -481,3 +481,9 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
   and specific medical execution scope remain task-specific next steps.
   Current report: `docs/reports/F-current-integration-review.md`. Earlier source,
   environment and test-count paragraphs above are historical checkpoints.
+
+## Sebastian: main status check (2026-10-24)
+
+- [x] `main`, `origin/main` and `codex/research-integration-followup` all point at `2e3f759`, so PR #5's head is now main (fast-forward; no merge commit). `research/overnight-integration`, `research/gemma-26b-coordinator` and `research/experiment-readiness` have no commits that main lacks. The PR #5 "no merge performed" entry above describes the earlier checkpoint.
+- [x] Rechecked on `2e3f759`: **305 discovered**; ML environment 301 pass with 4 opt-in actual-weight skips; plain Python 257 pass, 48 skips. Catalog: 16 models, 17 datasets valid.
+- [x] Finding: all six caches in `runs/features/` are legacy (no measured-input binding), so both baseline runs and the source-shift run are replay-only and live scoring refuses them. A new exploratory baseline run with bound features is under way (next section).
