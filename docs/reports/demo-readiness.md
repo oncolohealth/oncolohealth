@@ -44,9 +44,9 @@ observed-result metadata. Existing binary/multiclass saved-head round trips and
 learning tests continue to pass in the available ML environment.
 
 Full integrated suite including the hosted profile and development evaluation
-harness in the temporary NumPy/scikit-learn environment: **162 tests,
-160 passed, 2 skipped** (Torch preprocessing unavailable). Plain Python:
-**162 tests, 122 passed, 40 optional-ML skips**. The initial full run
+harness and experiment workspace in the temporary NumPy/scikit-learn environment:
+**178 tests, 176 passed, 2 skipped** (Torch preprocessing unavailable). Plain Python:
+**178 tests, 138 passed, 40 optional-ML skips**. The initial full run
 could not bind localhost sockets inside the sandbox. After the network grant,
 the full suite passed. These are software checks, not medical findings.
 
@@ -87,6 +87,13 @@ encoder caches by encoder plus variant. Both new source tests are included.
   a 180-second script, alternate opening/conclusion and a separate short fallback.
   All 35 slides were inspected, spacing corrected and numeric claims checked.
   Decks/scripts are separate chat outputs, not a completed product integration.
+- Connected the existing planner to a seventh local screen, Experiments:
+  preview/recompute/save drafts, a synthetic planning example, searchable saved
+  history, readable lineage/scope/blockers and expandable/downloadable JSON.
+  Sixteen new regressions cover persistence, changed input evidence and bounded
+  record handling. Desktop preview/save/search/reload/restart and the exported
+  synthetic JSON were verified. This is a completed planning/review component,
+  not a training dispatcher. See `B-experiment-workspace.md`.
 
 ## Remaining limitations
 
