@@ -17,6 +17,8 @@ from pathlib import Path
 from ..acquisition import budget
 from ..acquisition.download import hash_file
 from ..acquisition.fetch import plan, target_dir
+from ..acquisition.sources import AccessError
+from ..acquisition.subsets import summarize_units
 from ..adapters import SYNTHETIC_MODEL_RECORD, SyntheticThresholdAdapter
 from ..common.paths import CONFIG_DIR, DATA_DIR, MODELS_DIR, PROJECT_ROOT
 from ..coordinator import ProviderError, default_toolbox, load_profiles, make_provider, run_turn
@@ -53,7 +55,10 @@ def catalog() -> dict:
     for r in cat.all():
         rec = {k: v for k, v in r.items() if k not in _HIDDEN}
         rec["record_type"] = r["_kind"]
-        rec["local"] = (target_dir(r) / "PROVENANCE.json").exists()
+        prov = target_dir(r) / "PROVENANCE.json"
+        rec["local"] = prov.exists()
+        if rec["local"] and r.get("acquisition", {}).get("subset"):
+            rec["local_files"] = len(json.loads(prov.read_text()).get("files", []))
         out.append(rec)
     return {"records": out, "validation": cat.validate()}
 
@@ -85,26 +90,53 @@ def storage() -> dict:
 
 # ---------- downloads ----------
 
+def _subsets(body: dict, ids: list[str]) -> dict[str, dict]:
+    subsets = body.get("subsets") or {}
+    if not isinstance(subsets, dict) or not set(subsets) <= set(ids):
+        raise ApiError("subsets must map selected catalog ids to a selection.")
+    return subsets
+
+
+def _selection_brief(sel: dict | None) -> dict | None:
+    """The provenance summary minus the full unit list, which can run to thousands of ids."""
+    return None if sel is None else {k: v for k, v in sel.items() if k != "units"} | {"unit_count": len(sel["units"])}
+
+
 def fetch_plan(body: dict) -> dict:
     cat = load_catalog()
-    records = [cat.get(i) for i in body.get("ids", [])]
+    ids = list(body.get("ids", []))
+    records = [cat.get(i) for i in ids]
     if any(r is None for r in records):
         raise ApiError("Unknown catalog id in request.")
-    rows = plan(records)
+    rows = plan(records, _subsets(body, ids))
     total = sum(r["bytes"] for r in rows if not r["error"])
     fits, used, cap = budget.check(total)
     return {
-        "rows": [{"id": r["id"], "tier": r["tier"], "bytes": r["bytes"], "error": r["error"],
+        "rows": [{"id": r["id"], "tier": r["tier"], "bytes": r["bytes"], "error": r["error"], "selection": _selection_brief(r["selection"]),
                   "files": [{"path": p.relpath, "size": p.size, "integrity": p.integrity} for p in r["plans"]]} for r in rows],
         "total": total, "fits": fits, "used": used, "budget": cap,
     }
 
 
 def fetch_start(body: dict) -> dict:
+    ids = list(body.get("ids", []))
     try:
-        return JOBS.start(load_catalog(), list(body.get("ids", [])), allow_big=bool(body.get("allow_big")))
+        return JOBS.start(load_catalog(), ids, allow_big=bool(body.get("allow_big")), subsets=_subsets(body, ids))
     except (RuntimeError, KeyError, PermissionError) as e:
         raise ApiError(str(e).strip("'\""), 409)
+
+
+def fetch_units(body: dict) -> dict:
+    rec = load_catalog().get(body.get("id", ""))
+    if rec is None:
+        raise ApiError("Unknown catalog id.", 404)
+    query = body.get("query")
+    try:
+        return {"id": rec["id"], **summarize_units(rec["acquisition"], target_dir(rec), query if query else None)}
+    except (AccessError, ValueError) as e:
+        raise ApiError(str(e), 409)
+    except OSError as e:
+        raise ApiError(f"Could not reach the source: {e}", 502)
 
 
 def fetch_cancel(body: dict) -> dict:
@@ -632,6 +664,7 @@ GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory
                     "/api/annotation/": annotation, "/api/score/jobs/": score_job}
 POST_ROUTES = {
     "/api/route": route, "/api/fetch/plan": fetch_plan, "/api/fetch/start": fetch_start, "/api/fetch/cancel": fetch_cancel,
+    "/api/fetch/units": fetch_units,
     "/api/audit": audit, "/api/split": split,
     "/api/coordinator/profiles/save": save_profile, "/api/coordinator/profiles/delete": delete_profile,
     "/api/coordinator/ping": ping, "/api/coordinator/ask": ask,

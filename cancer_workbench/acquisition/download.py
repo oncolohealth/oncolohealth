@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
+import socket
 import sys
 import urllib.parse
 import urllib.request
@@ -29,7 +31,70 @@ class _StripAuthOnCrossHostRedirect(urllib.request.HTTPRedirectHandler):
         return new
 
 
-_opener = urllib.request.build_opener(_StripAuthOnCrossHostRedirect)
+CONNECT_TIMEOUT = 5.0  # per address; the read timeout stays as the caller set it
+_preferred_family: int | None = None  # set once one family has failed and the other connected
+
+
+def _interleave(infos: list[tuple]) -> list[tuple]:
+    """Alternate address families (RFC 8305 §4), putting the family that last worked first."""
+    by_family: dict[int, list[tuple]] = {}
+    for info in infos:
+        by_family.setdefault(info[0], []).append(info)
+    lists = [by_family[f] for f in sorted(by_family, key=lambda f: f != _preferred_family)]
+    return [i for row in itertools.zip_longest(*lists) for i in row if i is not None]
+
+
+def _create_connection(address, timeout=None, source_address=None, *args, **kwargs):
+    """socket.create_connection, but alternating IPv6/IPv4 with a short connect timeout per address.
+
+    Some networks resolve AAAA records but drop IPv6 traffic. Plain create_connection then waits the
+    full timeout on every IPv6 address before it tries IPv4: six zenodo.org addresses × 60 s. Once one
+    family fails and the other connects, the working family goes first for the rest of the process.
+    """
+    global _preferred_family
+    host, port = address
+    if timeout is not None and not isinstance(timeout, (int, float)):  # socket's "use the default" sentinel
+        timeout = socket.getdefaulttimeout()
+    attempt = CONNECT_TIMEOUT if timeout is None else min(timeout, CONNECT_TIMEOUT)
+    failed, last = set(), None
+    for family, kind, proto, _, addr in _interleave(socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)):
+        sock = socket.socket(family, kind, proto)
+        try:
+            sock.settimeout(attempt)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(addr)
+        except OSError as e:
+            sock.close()
+            failed.add(family)
+            last = e
+            continue
+        sock.settimeout(timeout)
+        if failed - {family}:
+            _preferred_family = family
+        return sock
+    raise last or OSError(f"getaddrinfo returned no addresses for {host}")
+
+
+def _with_fallback(conn_class):
+    def make(*args, **kwargs):
+        conn = conn_class(*args, **kwargs)
+        conn._create_connection = _create_connection  # http.client's hook for opening the socket
+        return conn
+    return make
+
+
+class _HTTPHandler(urllib.request.HTTPHandler):
+    def do_open(self, http_class, req, **kwargs):
+        return super().do_open(_with_fallback(http_class), req, **kwargs)
+
+
+class _HTTPSHandler(urllib.request.HTTPSHandler):
+    def do_open(self, http_class, req, **kwargs):
+        return super().do_open(_with_fallback(http_class), req, **kwargs)
+
+
+_opener = urllib.request.build_opener(_StripAuthOnCrossHostRedirect, _HTTPHandler, _HTTPSHandler)
 
 
 def open_url(url: str, headers: dict[str, str] | None = None, timeout: float = 60):

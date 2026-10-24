@@ -91,7 +91,8 @@ function updateActivity() {
 }
 
 /* ---------------- shared state ---------------- */
-const state = { records: [], byId: {}, storage: null, selected: new Set(), jobs: [], typeFilter: "" };
+const state = { records: [], byId: {}, storage: null, selected: new Set(), jobs: [], typeFilter: "",
+  subsets: {}, subsetPlan: {}, subsetDraft: {}, subsetUnits: {}, openSubset: null };
 
 async function loadCatalog() {
   const data = await api("/api/catalog");
@@ -178,6 +179,8 @@ function showDetail(id) {
     ["Inference", r.inference_permission ? `${r.inference_permission.replace("_", " ")}` : ""],
     ["Adapter", r.record_type === "model" ? (r.adapter || "none installed") : ""],
     ["Pinned at", acq.revision ? `${acq.repo}@${acq.revision.slice(0, 12)}` : acq.record ? `Zenodo ${acq.record}` : acq.article ? `figshare ${acq.article} v${acq.version}` : acq.collection ? `TCIA ${acq.collection}` : ""],
+    ["Fetched from", acq.fetcher === "isic" ? "ISIC API v2, live search" : acq.fetcher === "gdc" ? "GDC files API, live query" : acq.fetcher === "s3" ? `s3://${acq.bucket}/${acq.prefix}` : ""],
+    ["Subsets", acq.subset ? `By ${acq.subset.unit}: a seeded random sample or picked IDs${acq.subset.required ? " (required)" : ""}` : ""],
   ].filter(([, v]) => v);
   const warnings = [...(r.unresolved || []).map(u => `Open question: ${u}`), ...(r.known_overlap || []).map(o => `Overlaps with ${o}`)];
   const cite = String(r.citation || "");
@@ -191,15 +194,22 @@ function showDetail(id) {
     ${warnings.length ? `<h3>Before you rely on it</h3><ul class="warn-list">${warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
     ${acq.instructions ? `<h3>How to get it</h3><p>${esc(acq.instructions)}</p>` : ""}
     <div class="actions">
-      ${r.local ? `<button class="btn" data-act="prov">View provenance</button>` : acq.tier && acq.tier !== "manual" ? `<button class="btn primary" data-act="queue">Add to downloads</button>` : ""}
+      ${r.local ? `<button class="btn" data-act="prov">View provenance</button>` : ""}
+      ${(!r.local || acq.subset) && acq.tier && acq.tier !== "manual" ? `<button class="btn primary" data-act="queue">${acq.subset ? "Choose a subset" : "Add to downloads"}</button>` : ""}
     </div>
     <div id="detail-extra"></div>`;
   $$("#catalog-table tbody tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === id));
   box.querySelector('[data-act="prov"]')?.addEventListener("click", () => guard(async () => {
     const p = await api(`/api/provenance/${encodeURIComponent(id)}`);
-    $("#detail-extra").innerHTML = `<h3>Provenance</h3><p class="hint">Retrieved ${esc(p.retrieved_at)}. ${esc(p.note)}</p><pre class="prov">${esc(JSON.stringify(p.files.map(f => ({ path: f.path, bytes: f.bytes, sha256: f.sha256, integrity: f.integrity })), null, 2))}</pre>`;
+    const sels = p.selections?.length ? ` ${p.selections.length} fetch${p.selections.length === 1 ? "" : "es"} recorded with their selection.` : "";
+    $("#detail-extra").innerHTML = `<h3>Provenance</h3><p class="hint">Last retrieved ${esc(p.retrieved_at)}.${esc(sels)} ${esc(p.note)}</p><pre class="prov">${esc(JSON.stringify(p.files.map(f => ({ path: f.path, bytes: f.bytes, sha256: f.sha256, integrity: f.integrity })), null, 2))}</pre>`;
   }));
   box.querySelector('[data-act="queue"]')?.addEventListener("click", () => {
+    if (acq.subset) {
+      state.openSubset = id;
+      show("downloads");
+      return;
+    }
     state.selected.add(id);
     show("downloads");
     toast(`${r.name} added to the download selection.`);
@@ -256,27 +266,194 @@ function renderTiers() {
   $("#tiers").innerHTML = TIERS.map(([tier, title, desc]) => {
     const recs = state.records.filter(r => r.acquisition?.tier === tier);
     if (!recs.length) return "";
-    const selectable = recs.filter(r => !r.local && tier !== "manual" && !(tier === "gated" && !hf));
+    const selectable = recs.filter(r => !r.local && tier !== "manual" && !(tier === "gated" && !hf) && !r.acquisition.subset?.required);
     const rows = recs.map(r => {
       if (tier === "manual") return `<li class="manual"><div><strong>${esc(r.name)}</strong><div class="why">${esc(r.acquisition.instructions)}</div></div></li>`;
-      const disabled = r.local || (tier === "gated" && !hf);
-      const why = r.local ? "On disk" : tier === "gated" && !hf ? "Needs HF_TOKEN" : "";
+      const sub = r.acquisition.subset;
+      const disabled = (r.local && !sub) || (tier === "gated" && !hf);
+      const why = r.local && !sub ? "On disk" : tier === "gated" && !hf ? "Needs HF_TOKEN" : "";
       return `<li><input type="checkbox" data-id="${esc(r.id)}" aria-label="Select ${esc(r.name)}" ${state.selected.has(r.id) ? "checked" : ""} ${disabled ? "disabled" : ""}>
-        <div><strong>${esc(r.name)}</strong><div class="why">${esc(r.summary || "")}</div></div>
+        <div><strong>${esc(r.name)}</strong><div class="why">${esc(r.summary || "")}</div>${sub ? subsetLine(r) : ""}</div>
         <span>${licenseShort(r.license)}${r.access?.startsWith("gated") ? ' <span class="pill gated">gated</span>' : ""}</span>
-        <span class="num">${why ? `<span class="${r.local ? "local-yes" : "why"}">${esc(why)}</span>` : fmtBytes(r.acquisition.approx_bytes)}</span></li>`;
+        <span class="num">${why ? `<span class="${r.local ? "local-yes" : "why"}">${esc(why)}</span>` : sub ? subsetSize(r) : fmtBytes(r.acquisition.approx_bytes)}</span></li>
+        ${state.openSubset === r.id ? `<li class="subset-row">${subsetPanel(r)}</li>` : ""}`;
     }).join("");
     return `<section class="tier"><div class="tier-head"><div><h2>${esc(title)}</h2><p>${esc(desc)}</p></div>
       ${selectable.length ? `<button class="btn small" data-tier="${tier}">Select all ${selectable.length}</button>` : ""}</div>
       <ul class="tier-rows">${rows}</ul></section>`;
   }).join("");
 }
+/* Subsets: a record with acquisition.subset can be fetched in part, as whole groups (patients, slides)
+   drawn in a seeded order or as picked IDs. Sizes come from the server's plan, never from guesses. */
+const plural = unit => ({ patient: "patients", file: "files", image: "images", slide: "slides" }[unit] || `${unit}s`);
+function subsetText(sel, unit) {
+  if (!sel) return "";
+  const q = sel.query ? ` matching ${sel.query}` : "";
+  return sel.mode === "sample" ? `${sel.count} random ${plural(unit)} (seed ${sel.seed})${q}` : `${sel.ids.length} picked${q}`;
+}
+function subsetLine(r) {
+  const sub = r.acquisition.subset, sel = state.subsets[r.id];
+  const status = sel ? `Subset: ${subsetText(sel, sub.unit)}` : sub.required ? "Choose a subset to download" : "Default files, or choose a subset";
+  const disk = r.local_files ? ` · ${r.local_files} files on disk` : "";
+  return `<div class="subset-line"><span>${esc(status + disk)}</span>
+    <button class="btn small" data-subset="${esc(r.id)}" aria-expanded="${state.openSubset === r.id}">${sel ? "Edit subset" : "Choose subset"}</button></div>`;
+}
+function subsetSize(r) {
+  if (state.subsets[r.id]) return state.subsetPlan[r.id] ? fmtBytes(state.subsetPlan[r.id].bytes) : "…";
+  if (r.acquisition.subset.required) return `<span class="why">pick a subset</span>`;
+  return r.local ? `<span class="local-yes">On disk</span>` : fmtBytes(r.acquisition.approx_bytes);
+}
+function subsetDraft(r) {
+  const sub = r.acquisition.subset, sel = state.subsets[r.id];
+  if (!state.subsetDraft[r.id]) {
+    state.subsetDraft[r.id] = {
+      mode: sel?.mode || (sub.unit === "file" ? "ids" : "sample"), count: sel?.count || 5, seed: sel?.seed ?? 0,
+      picks: new Set(sel?.mode === "ids" ? sel.ids : []), query: sel?.query || "", filter: "", paste: "",
+    };
+  }
+  return state.subsetDraft[r.id];
+}
+function subsetPanel(r) {
+  const sub = r.acquisition.subset, d = subsetDraft(r), units = plural(sub.unit);
+  const planned = state.subsetPlan[r.id];
+  const modes = sub.unit === "file" ? "" : `<div class="seg" role="group" aria-label="How to choose">
+      <button type="button" data-mode="sample" class="${d.mode === "sample" ? "on" : ""}">Random ${esc(units)}</button>
+      <button type="button" data-mode="ids" class="${d.mode === "ids" ? "on" : ""}">Pick ${esc(units)}</button></div>`;
+  const query = sub.query ? `<label>Search (ISIC syntax; narrows the CC-0 / CC-BY images on offer)
+      <input data-f="query" value="${esc(d.query)}" placeholder='diagnosis_3:"Melanoma, NOS"' spellcheck="false"></label>` : "";
+  const body = d.mode === "sample" ? `<div class="field-row">
+        <label>Number of ${esc(units)}<input type="number" min="1" step="1" data-f="count" value="${esc(d.count)}"></label>
+        <label>Seed<input type="number" min="0" step="1" data-f="seed" value="${esc(d.seed)}"></label></div>
+      <p class="hint">All ${esc(units)} are shuffled with this seed and the first ones not already on disk are taken, so asking for more later continues the same order. The chosen IDs and seed go into PROVENANCE.json.</p>`
+    : `<div class="subset-tools">
+        <input type="search" data-f="filter" value="${esc(d.filter)}" placeholder="Filter the list" aria-label="Filter ${esc(units)}">
+        <button type="button" class="btn small" data-act="load">${state.subsetUnits[r.id] ? "Reload list" : "Load list"}</button>
+        <span class="hint" data-count>${d.picks.size} picked</span></div>
+      <ul class="subset-list" data-list>${subsetListHtml(r)}</ul>
+      <label>Or paste IDs<textarea rows="2" data-f="paste" placeholder="One per line or comma-separated" spellcheck="false">${esc(d.paste)}</textarea></label>`;
+  return `<div class="subset" data-for="${esc(r.id)}">
+    ${modes}${query}${body}
+    <div class="subset-actions">
+      <button type="button" class="btn small primary" data-act="apply">Check size and use</button>
+      ${state.subsets[r.id] ? `<button type="button" class="btn small" data-act="clear">Remove subset</button>` : ""}
+      <button type="button" class="btn small" data-act="close">Close</button>
+    </div>
+    <div class="subset-result" aria-live="polite">${planned ? subsetResultHtml(r, planned) : ""}</div></div>`;
+}
+function subsetListHtml(r) {
+  const info = state.subsetUnits[r.id], d = subsetDraft(r);
+  if (!info) return `<li class="empty">Load the list to see what this source offers.${r.acquisition.fetcher === "isic" ? " ISIC searches can take a minute or two." : ""}</li>`;
+  const f = d.filter.trim().toLowerCase();
+  const rows = info.groups.filter(g => !f || `${g.id} ${g.detail}`.toLowerCase().includes(f));
+  const shown = rows.slice(0, 400);
+  return shown.map(g => `<li><input type="checkbox" data-pick="${esc(g.id)}" aria-label="Pick ${esc(g.id)}" ${d.picks.has(g.id) ? "checked" : ""}>
+      <span class="mono">${esc(g.id)}</span><span class="why">${esc(g.detail)}</span>
+      <span class="num">${g.on_disk ? `<span class="local-yes">on disk</span>` : fmtBytes(g.bytes)}</span></li>`).join("")
+    + (rows.length > shown.length ? `<li class="empty">${rows.length - shown.length} more; filter to narrow the list.</li>` : "")
+    + (!rows.length ? `<li class="empty">Nothing matches.</li>` : "");
+}
+function subsetResultHtml(r, planned) {
+  const s = planned.selection, units = plural(r.acquisition.subset.unit);
+  const extra = [s.skipped_on_disk ? `${s.skipped_on_disk} already on disk skipped` : "", s.short_by ? `${s.short_by} fewer than asked: none left` : ""].filter(Boolean).join("; ");
+  return `<p><strong>${s.groups.length} of ${s.population_groups} ${esc(units)}</strong>, ${s.unit_count} item${s.unit_count === 1 ? "" : "s"}, ${planned.estimated ? `about ${fmtBytes(planned.bytes)} of disk space (estimated: the source does not publish every file's size)` : `${fmtBytes(planned.bytes)} to download`}.${extra ? ` ${esc(extra)}.` : ""}</p>`;
+}
+function readSubset(r) {
+  const sub = r.acquisition.subset, d = subsetDraft(r);
+  const sel = d.mode === "sample" ? { mode: "sample", count: Number(d.count), seed: Number(d.seed) }
+    : { mode: "ids", ids: [...new Set([...d.picks, ...d.paste.split(/[\s,]+/).filter(Boolean)])] };
+  if (sel.mode === "sample" && !(Number.isInteger(sel.count) && sel.count >= 1)) throw new Error("Enter a whole number of at least 1.");
+  if (sel.mode === "sample" && !(Number.isInteger(sel.seed) && sel.seed >= 0)) throw new Error("The seed must be a whole number, 0 or more.");
+  if (sel.mode === "ids" && !sel.ids.length) throw new Error(`Pick or paste at least one ${sub.unit}.`);
+  if (sub.query) {
+    if (!d.query.trim()) throw new Error("Enter a search first: the full archive is too large to list.");
+    sel.query = d.query.trim();
+  }
+  return sel;
+}
+function subsetFor(ids) {
+  return Object.fromEntries(ids.filter(id => state.subsets[id]).map(id => [id, state.subsets[id]]));
+}
+function missingSubsets(ids) {
+  return ids.filter(id => state.byId[id]?.acquisition?.subset?.required && !state.subsets[id]);
+}
+function dropSubset(id) {
+  delete state.subsets[id]; delete state.subsetPlan[id]; delete state.subsetDraft[id];
+}
+$("#tiers").addEventListener("input", e => {
+  const panel = e.target.closest(".subset");
+  const f = e.target.dataset.f;
+  if (!panel || !f) return;
+  const r = state.byId[panel.dataset.for], d = subsetDraft(r);
+  d[f] = e.target.value;
+  if (f === "filter") $("[data-list]", panel).innerHTML = subsetListHtml(r);
+});
+$("#tiers").addEventListener("change", e => {
+  const cb = e.target.closest("input[type=checkbox][data-pick]");
+  if (!cb) return;
+  const panel = cb.closest(".subset"), d = subsetDraft(state.byId[panel.dataset.for]);
+  cb.checked ? d.picks.add(cb.dataset.pick) : d.picks.delete(cb.dataset.pick);
+  $("[data-count]", panel).textContent = `${d.picks.size} picked`;
+});
+$("#tiers").addEventListener("click", e => {
+  const open = e.target.closest("[data-subset]");
+  if (open) {
+    state.openSubset = state.openSubset === open.dataset.subset ? null : open.dataset.subset;
+    renderTiers();
+    return;
+  }
+  const panel = e.target.closest(".subset");
+  if (!panel) return;
+  const r = state.byId[panel.dataset.for], d = subsetDraft(r);
+  const mode = e.target.closest("[data-mode]");
+  if (mode) { d.mode = mode.dataset.mode; renderTiers(); return; }
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "close") { state.openSubset = null; renderTiers(); }
+  if (act === "clear") {
+    dropSubset(r.id);
+    if (r.acquisition.subset.required) state.selected.delete(r.id);
+    renderTiers(); updateSelection();
+  }
+  if (act === "load") guard(async () => {
+    $("[data-list]", panel).innerHTML = `<li class="empty thinking">Listing ${esc(plural(r.acquisition.subset.unit))} from the source…</li>`;
+    const body = { id: r.id };
+    if (r.acquisition.subset.query) {
+      if (!d.query.trim()) { $("[data-list]", panel).innerHTML = `<li class="empty">Enter a search first.</li>`; return; }
+      body.query = d.query.trim();
+    }
+    try {
+      state.subsetUnits[r.id] = await api("/api/fetch/units", body);
+    } catch (err) {
+      $("[data-list]", panel).innerHTML = `<li class="empty subset-error">${esc(err.message)}</li>`;
+      return;
+    }
+    if (state.openSubset === r.id) renderTiers();
+  });
+  if (act === "apply") guard(async () => {
+    const sel = readSubset(r);
+    const out = $(".subset-result", panel);
+    out.innerHTML = `<p class="thinking">Asking the source for exact files and sizes…</p>`;
+    const p = await api("/api/fetch/plan", { ids: [r.id], subsets: { [r.id]: sel } });
+    const row = p.rows[0];
+    if (row.error) { out.innerHTML = `<p class="subset-error">${esc(row.error)}</p>`; return; }
+    state.subsets[r.id] = sel;
+    state.subsetPlan[r.id] = { bytes: row.bytes, selection: row.selection, estimated: row.files.some(f => f.size == null) };
+    state.selected.add(r.id);
+    renderTiers(); updateSelection();
+  });
+});
+
 function updateSelection() {
-  for (const id of [...state.selected]) if (state.byId[id]?.local) state.selected.delete(id);
+  for (const id of [...state.selected]) if (state.byId[id]?.local && !state.byId[id]?.acquisition?.subset) state.selected.delete(id);
   const ids = [...state.selected];
-  const bytes = ids.reduce((s, id) => s + (state.byId[id]?.acquisition?.approx_bytes || 0), 0);
-  $("#dl-selected").textContent = ids.length ? `${ids.length} selected, about ${fmtBytes(bytes)}` : "Nothing selected";
-  $("#dl-start").disabled = !ids.length;
+  const sizeOf = id => {
+    const r = state.byId[id];
+    if (state.subsets[id]) return state.subsetPlan[id]?.bytes || 0;
+    return r?.local ? 0 : r?.acquisition?.approx_bytes || 0;
+  };
+  const bytes = ids.reduce((s, id) => s + sizeOf(id), 0);
+  const missing = missingSubsets(ids);
+  $("#dl-selected").textContent = !ids.length ? "Nothing selected" : missing.length ? `${ids.length} selected; choose a subset for ${missing.length}` : `${ids.length} selected, about ${fmtBytes(bytes)}`;
+  $("#dl-start").disabled = !ids.length || missing.length > 0;
   $("#dl-plan").disabled = !ids.length;
   const s = state.storage;
   if (!s) return;
@@ -293,25 +470,41 @@ function updateSelection() {
 $("#tiers").addEventListener("change", e => {
   const cb = e.target.closest("input[type=checkbox][data-id]");
   if (!cb) return;
+  const r = state.byId[cb.dataset.id];
+  if (cb.checked && r.acquisition.subset?.required && !state.subsets[r.id]) {
+    cb.checked = false;
+    state.openSubset = r.id;
+    renderTiers();
+    toast(`Choose which ${plural(r.acquisition.subset.unit)} to fetch first.`);
+    return;
+  }
   cb.checked ? state.selected.add(cb.dataset.id) : state.selected.delete(cb.dataset.id);
   updateSelection();
 });
 $("#tiers").addEventListener("click", e => {
   const b = e.target.closest("[data-tier]");
   if (!b) return;
-  $$(`#tiers input[data-id]:not(:disabled)`).forEach(cb => { if (state.byId[cb.dataset.id].acquisition.tier === b.dataset.tier) { cb.checked = true; state.selected.add(cb.dataset.id); } });
+  $$(`#tiers input[data-id]:not(:disabled)`).forEach(cb => {
+    const r = state.byId[cb.dataset.id];
+    if (r.acquisition.tier === b.dataset.tier && !r.local && !(r.acquisition.subset?.required && !state.subsets[r.id])) { cb.checked = true; state.selected.add(r.id); }
+  });
   updateSelection();
 });
 $("#dl-plan").addEventListener("click", () => guard(async () => {
   $("#dl-plan-result").innerHTML = `<div class="plan-box thinking">Asking each source for exact file sizes and checksums…</div>`;
-  const p = await api("/api/fetch/plan", { ids: [...state.selected] });
+  const ids = [...state.selected];
+  const p = await api("/api/fetch/plan", { ids, subsets: subsetFor(ids) });
+  const sel = r => r.selection ? `, ${r.selection.groups.length} ${plural(state.byId[r.id]?.acquisition?.subset?.unit)}` : "";
   $("#dl-plan-result").innerHTML = `<div class="plan-box">
     <strong>${fmtBytes(p.total)} to download.</strong> ${p.fits ? "Fits the budget." : "Over budget: the download will be refused."}
-    <ul>${p.rows.map(r => `<li>${esc(state.byId[r.id]?.name || r.id)}: ${r.error ? `<span class="state blocked">blocked</span> ${esc(r.error)}` : `${r.files.length} files, ${fmtBytes(r.bytes)}${r.files.some(f => f.integrity === "trust_on_first_use") ? " (no publisher checksum; hashed on arrival)" : ""}`}</li>`).join("")}</ul></div>`;
+    <ul>${p.rows.map(r => `<li>${esc(state.byId[r.id]?.name || r.id)}: ${r.error ? `<span class="state blocked">blocked</span> ${esc(r.error)}` : `${r.files.length} files${esc(sel(r))}, ${fmtBytes(r.bytes)}${r.files.some(f => f.integrity === "trust_on_first_use") ? " (no publisher checksum; hashed on arrival)" : ""}`}</li>`).join("")}</ul></div>`;
 }));
 $("#dl-start").addEventListener("click", () => guard(async () => {
-  await api("/api/fetch/start", { ids: [...state.selected], allow_big: $("#allow-big").checked });
+  const ids = [...state.selected];
+  await api("/api/fetch/start", { ids, allow_big: $("#allow-big").checked, subsets: subsetFor(ids) });
+  ids.forEach(dropSubset);
   state.selected.clear();
+  state.openSubset = null;
   $("#dl-plan-result").innerHTML = "";
   toast("Download started.");
   renderTiers(); updateSelection();
