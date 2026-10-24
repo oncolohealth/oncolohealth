@@ -1,4 +1,4 @@
-"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|baseline|source-shift|near-duplicates> ..."""
+"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|btxrd-review|baseline|source-shift|near-duplicates> ..."""
 from __future__ import annotations
 
 import argparse
@@ -112,6 +112,12 @@ def _btxrd(argv: list[str]) -> int:
     return 0
 
 
+def _btxrd_review(argv: list[str]) -> int:
+    from .datasets.btxrd_review import main as review_main
+
+    return review_main(argv)
+
+
 def _baseline(argv: list[str]) -> int:
     from .experiments import btxrd_baseline as bb
 
@@ -173,13 +179,14 @@ def _app(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "baseline": _baseline,
+    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "btxrd-review": _btxrd_review, "baseline": _baseline,
                 "source-shift": _source_shift, "near-duplicates": _near_duplicates, "app": _app}
     if not argv or argv[0] not in commands:
         print(__doc__ + "\n  app          open the local researcher app in your browser\n"
               "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
               "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
               "  btxrd        describe the BTXRD release / build its manifest\n"
+              "  btxrd-review audit local ZIP / prepare or check evidence CSV (no network or training)\n"
               "  baseline     exploratory frozen-encoder baseline on BTXRD (needs the ml extra)\n"
               "  source-shift compare preprocessing variants under the BTXRD source hold-out (needs the ml extra)\n"
               "  near-duplicates  rank BTXRD image pairs by feature similarity for review (needs numpy)")
