@@ -1,6 +1,6 @@
 {
   "_comment": "Copy to configs/coordinator.json (gitignored) and edit. Every profile speaks the OpenAI chat-completions API, so any server works: vLLM, SGLang, llama.cpp, Ollama, LM Studio, TGI, or a hosted gateway. base_url_env lets a profile read its URL from an environment variable. Server-side tool-calling flags (e.g. vLLM --enable-auto-tool-choice --tool-call-parser ...) must match the model; follow the official recipe linked per profile rather than guessing.",
-  "default_profile": "gemma-31b-vllm",
+  "default_profile": "gemma-26b-local",
   "profiles": {
     "claude-research": {
       "type": "openai_compatible",
@@ -8,9 +8,13 @@
       "model": "claude-opus-5-5",
       "api_key_env": "ANTHROPIC_API_KEY",
       "require_api_key": true,
-      "extra_headers_env": {"anthropic-workspace-id": "ANTHROPIC_WORKSPACE_ID"},
+      "extra_headers_env": {
+        "anthropic-workspace-id": "ANTHROPIC_WORKSPACE_ID"
+      },
       "timeout_s": 60,
-      "default_params": {"max_tokens": 2048},
+      "default_params": {
+        "max_tokens": 2048
+      },
       "_notes": "Claude compatibility profile, not live-verified. API key stays in the server environment. Non-workspace-scoped keys may also need ANTHROPIC_WORKSPACE_ID. Current Claude 5 models reject some older temperature/top_p/tool_choice settings, so this example omits them. Local tool argument validation remains required. Publisher docs: https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk"
     },
     "qwen-bf16-vllm": {
@@ -97,7 +101,44 @@
         "max_tokens": 4096
       },
       "extra_body": {},
-      "_notes": "Proposed coordinator; serving, tool parser and runtime compatibility require a real smoke test. Follow the official Gemma recipe: https://docs.vllm.ai/projects/recipes/en/stable/Google/Gemma4.html"
+      "_notes": "Previous coordinator candidate retained for optional explicit comparison only. It is no longer the default or selected base. Retaining this profile does not authorize teacher use, distillation, acquisition or execution. See docs/gemma-coordinator.md."
+    },
+    "gemma-26b-local": {
+      "type": "openai_compatible",
+      "base_url": "http://127.0.0.1:8080/v1",
+      "base_url_env": "CW_GEMMA_LOCAL_BASE_URL",
+      "model": "gemma-4-26b-a4b-local",
+      "api_key_env": "CW_GEMMA_LOCAL_API_KEY",
+      "timeout_s": 300,
+      "default_params": {
+        "temperature": 0.3,
+        "max_tokens": 1024
+      },
+      "extra_body": {
+        "chat_template_kwargs": {
+          "enable_thinking": true
+        }
+      },
+      "_model_source": "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+      "_notes": "Selected desktop coordinator candidate for RTX 5070 Ti 16 GB / Ryzen 9 / 32 GB RAM. The model field is a required server alias, not a verified loaded checkpoint. Use an explicitly acquired and measured local GGUF; start with one request slot and 4096 context tokens, then measure GPU/RAM headroom and tool round trips. All 26B parameters need storage/memory despite 4B active. No automatic download, server start, fallback or training. See docs/gemma-coordinator.md."
+    },
+    "gemma-26b-vllm": {
+      "type": "openai_compatible",
+      "base_url": "http://127.0.0.1:8000/v1",
+      "base_url_env": "CW_GEMMA_BASE_URL",
+      "model": "google/gemma-4-26B-A4B-it",
+      "api_key_env": "CW_GEMMA_API_KEY",
+      "timeout_s": 300,
+      "default_params": {
+        "temperature": 0.3,
+        "max_tokens": 4096
+      },
+      "extra_body": {
+        "chat_template_kwargs": {
+          "enable_thinking": true
+        }
+      },
+      "_notes": "Same selected 26B A4B family for a separately approved large-memory runtime, not a 16 GB BF16 profile. vLLM requires the Gemma 4 tool/reasoning parsers, automatic tool choice and the official matching template. No endpoint is verified. https://docs.vllm.ai/projects/recipes/en/stable/Google/Gemma4.html"
     }
   }
 }

@@ -91,6 +91,9 @@ class DraftApiTests(unittest.TestCase):
         self.assertIn("dataset audit: missing_patient_id", second["plan"]["blockers"])
         self.assertNotEqual(first["manifest"]["sha256"], second["manifest"]["sha256"])
         self.assertEqual(second["manifest"]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(second["execution_review"]["manifest_sha256"], second["manifest"]["sha256"])
+        self.assertEqual(second["execution_review"]["draft_blockers"], second["plan"]["blockers"])
+        self.assertEqual(second["execution_review"]["basis"], "saved_snapshot")
 
     def test_manifest_outside_data_and_malformed_csv_do_not_produce_ready_drafts(self):
         path, rows, catalog = self._real_manifest()

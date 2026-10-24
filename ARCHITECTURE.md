@@ -220,6 +220,8 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 
 ## Candidate offline release/evidence review
 
+The existing experiment draft preview/save/detail flow also carries a pure `execution_review` summary. It never adds an execution state or accepts client approvals. Saved summaries are regenerated as snapshot views on read; current manifest binding is separate from medical source/reference authentication. See [execution review](docs/reports/B-execution-review.md).
+
 `datasets/release_audit.py` audits an already-local BTXRD ZIP and prepares an evidence template. `datasets/evidence.py` binds returned records to source bytes and reports declared evidence gaps without exporting supplied identity/reference values. `datasets/btxrd_review.py` owns the `btxrd-review audit|template|check` CLI. These are independent utilities; they do not replace the current manifest/audit path, alter training/evaluation, or create a cohort. See [the candidate contract and verification](docs/reports/A-offline-release-review.md).
 
 

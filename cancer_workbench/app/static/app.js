@@ -1065,6 +1065,14 @@ function invalidateExperiment() {
   $("#experiment-error").textContent = "";
   $("#experiment-preview").innerHTML = `<h2>Draft review</h2><p class="empty">Inputs changed. Preview the current draft to refresh its checks.</p>`;
 }
+function renderExecutionReview(review) {
+  if (!review) return "";
+  return `<h3>Before execution</h3><p>${esc(review.input_binding)}</p><p>${esc(review.evidence_scope)}</p>
+    <dl class="experiment-facts"><dt>Model revision</dt><dd class="mono">${esc(review.model_revision || "Not recorded")}</dd>
+      <dt>Execution</dt><dd>Not authorized. Job dispatch is unavailable in this workspace.</dd></dl>
+    <ul class="experiment-blockers">${review.required_review.map(r => `<li><strong>${esc(r.label)}:</strong> ${esc(r.detail)}</li>`).join("")}</ul>
+    <p class="hint">${esc(review.note)}</p>`;
+}
 function renderExperimentPreview(d) {
   experiments.preview = d;
   const p = d.plan;
@@ -1075,6 +1083,7 @@ function renderExperimentPreview(d) {
       <dt>Storage reservation</dt><dd>${fmtBytes(p.budget.planned_bytes)} additional · ${fmtBytes(p.budget.used_bytes)} used of ${fmtBytes(p.budget.limit_bytes)}</dd></dl>
     ${p.blockers.length ? `<h3>Blockers</h3><ul class="experiment-blockers">${p.blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
     <h3>Dataset audit</h3>${d.audit.findings.length ? `<ul class="experiment-blockers">${d.audit.findings.map(f => `<li>${esc(f.code)}: ${esc(f.detail)}</li>`).join("")}</ul>` : '<p>No findings in these declared-record checks.</p>'}
+    ${renderExecutionReview(d.execution_review)}
     <p class="hint">${esc(p.note)}</p><p class="hint">${esc(d.note)}</p>`;
   $("#experiment-save").disabled = false;
 }
@@ -1105,6 +1114,7 @@ async function openExperiment(key) {
     <p class="mono">${esc(d.file)}</p><p class="hint">${esc(d.note || r.note)}</p>
     <dl class="experiment-facts">${facts.map(([label, value]) => `<dt>${esc(label)}</dt><dd>${esc(value ?? "Not recorded")}</dd>`).join("")}</dl>
     ${blockers.length ? `<h3>Recorded blockers</h3><ul class="experiment-blockers">${blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+    ${draft ? renderExecutionReview(r.execution_review) : ""}
     <details><summary>Full record JSON</summary><pre tabindex="0" aria-label="Saved record JSON">${esc(JSON.stringify(r, null, 2))}</pre></details>`;
   $("#experiment-export").hidden = false;
 }

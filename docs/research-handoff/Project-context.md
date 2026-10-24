@@ -1,5 +1,7 @@
 # Project context and next steps
 
+The user now selects **Gemma 4 26B A4B** for quantized desktop deployment; see [current profiles and acceptance checks](../gemma-coordinator.md). The earlier 31B choice below is historical.
+
 ## Current continuation checkpoint
 
 The team merged PR #1 after the rebase handoff; fetched remote main is `e22234c8cf1356a4845e8f60da76fc2f8434d627`. The research branch now adds the [identity formatting guard](../reports/F-identity-formatting.md) for separate review. Current independent software verification: 253 discovered, 213 pass, 40 optional ML skips; all ten new regressions pass. Catalog: 16 models / 14 datasets. Available NumPy/Pillow checks do not verify the complete pinned ML runtime or real model loading. Patient/lesion mapping, per-row reference evidence, protocol and execution review remain open. Earlier status and counts below are historical checkpoints.

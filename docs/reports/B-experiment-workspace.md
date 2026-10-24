@@ -1,11 +1,11 @@
 # Experiment workspace and recorded run history
 
-Inam Qasimi · October 24, 2026
-
 The **Experiments** screen connects the existing side-effect-free planner to the
 local app and adds durable draft records plus a read-only view of existing
 `ExperimentRecord` files. It is a planning and review workflow. It does not
 implement training dispatch, a general job queue or model promotion.
+
+The [execution-review follow-up](B-execution-review.md) adds a derived review summary to preview/save/reopen, explicitly distinguishing current manifest checks from a saved snapshot and keeping job dispatch unavailable. Earlier counts below describe the original workspace checkpoint.
 
 ## Researcher workflow
 
