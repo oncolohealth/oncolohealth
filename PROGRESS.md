@@ -28,7 +28,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 
 - [x] Project layout, `pyproject.toml` (stdlib core; `ml`/`imaging`/`clip` extras pinned to exact versions checked 2026-10-23)
 - [x] Shared types: `ResultEnvelope`, `EvidenceState`, `Permission`, `ResultStatus`
-- [x] Catalog: 16 model and 14 dataset records, with revisions, sizes, gating and licenses checked against HF, Zenodo, figshare and TCIA APIs
+- [x] Catalog: 16 model and 14 dataset records, with revisions, sizes, gating and licenses checked against HF, Zenodo, figshare and TCIA APIs (17 dataset records since the 2026-10-24 subset work below)
 - [x] Catalog validation (`catalog validate`)
 - [x] Acquisition: resumable downloads verified against publisher checksums, 40 GB budget guard, cross-host token stripping, zip-slip-safe extraction, PROVENANCE.json per artifact
 - [x] Router: task/modality/anatomy/channels/dims checks; separate `runnable` verdict; never auto-selects
@@ -123,7 +123,7 @@ Run `python3 -m cancer_workbench fetch list` for live status. Budget: 40 GB (`CW
 | Tier | Status |
 |---|---|
 | default (~5.3 GB) | ✅ fetched 2026-10-23 |
-| optional (~9.1 GB) | not fetched: two items are non-commercial; MSD is 7.6 GB. `fetch get --tier optional` |
+| optional (~9.1 GB) | not fetched: two items are non-commercial; MSD is 7.6 GB. `fetch get --tier optional`. Subset-only records in this tier (ISIC, CAMELYON16, TCGA-SARC slides, Soft-tissue-Sarcoma, CBIS-DDSM) are skipped by `--tier` and need a chosen subset |
 | gated (~22 GB) | 🔒 needs you to accept HF terms per model + `HF_TOKEN` |
 | big_machine | GPU machine only |
 | manual | registration / size; see each record's `instructions` |
@@ -357,3 +357,14 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
 - [x] Measured tiny extraction, `scripts/extraction_smoke.py`: 16 label-free BTXRD images, both encoders × three variants on MPS, each variant timed separately in two runs. All six caches validate against their bindings. RAD-DINO runs at 2.2–2.6 images/s (about 24–28 min for all 3,746 images per variant); ResNet-50 at 31–43 images/s (about 2 min). Runtime measurement only; no fitting or scoring. Details: `docs/reports/E-model-runtime-check.md`.
 - [x] `tests/test_model_loading.py` adds four opt-in real-weight checks (`CW_MODEL_TESTS=1`, synthetic images only), and three synthetic regressions were added (processor binding ×2, draft use per variant). Suite: **250 discovered**. In the ML environment, 246 pass with the 4 opt-in tests skipped; with `CW_MODEL_TESTS=1`, all 250 pass. Plain Python: 205 pass, 45 skips. Catalog: 16 models, 14 datasets.
 - [ ] Independent review of the binding, rounding and full-resolution decode changes. Any new full extraction needs an explicitly authorized, reviewed run.
+
+## Subset downloads (2026-10-24)
+
+- [x] Catalog records can declare `acquisition.subset`; the user fetches whole groups (patients, cases or slides) as a seeded random sample or by ID. Sampling shuffles every group with the seed and skips groups already on disk, so asking for more continues the same order. `PROVENANCE.json` now accumulates files across fetches and records each selection (mode, seed or IDs, chosen groups, a hash of the source listing).
+- [x] Listers: TCIA (series grouped by patient, optional modality filter and patient regex), Zenodo/figshare (file picker), ISIC API v2 (search that can only narrow a CC-0/CC-BY filter; 5,000-image listing cap), GDC (open-access files only, grouped by case, publisher MD5), public S3 with `checksums.md5` (CAMELYON16 slides plus their annotations).
+- [x] Catalog (16 models, 17 datasets valid): `lidc-idri-sample` can add patients (1,010 patients, 1,018 CT series in the collection); the four MedMNIST records can pick resolutions; `isic-archive` and `camelyon16` moved from manual to subset-only optional records; new `soft-tissue-sarcoma` (51 patients, 9.9 GB), `cbis-ddsm` (1,566 patient groups, 163.5 GB) and `tcga-sarc-slides` (890 open slides, 261 cases, 1,095 GB). Counts come from the publisher APIs on 2026-10-24. CAMELYON16's bucket `license.txt` says CC0. None of these are bone-tumor data, and all records stay `cataloged`.
+- [x] CLI `fetch units <id>` and `fetch plan|get <id> --sample N [--seed S] | --pick ID… [--query Q]`; app Downloads screen subset panel (random or pick, checklist with filter, pasted IDs, exact size check before use); `/api/fetch/units`; schema checks for subset blocks.
+- [x] 17 synthetic tests in `tests/test_subsets.py`. Suite: **267 discovered**; ML environment 263 pass with 4 opt-in skips; plain Python 222 pass, 45 skips. Live checks: planning against every new source, a real tiny fetch (2 + 1 ISIC patients, one Soft-tissue-Sarcoma RTSTRUCT series) into a scratch directory, and the Downloads screen in headless Chromium (desktop, phone width, light theme; no console errors). No subset was downloaded into `data/`.
+- [x] Finding: ISIC's reported file size can differ from the served image (ISIC_0911264: 358,612 vs 361,785 bytes), so ISIC images are hashed on arrival (trust on first use) and sizes are estimates.
+- [ ] Network note: on this machine IPv6 to zenodo.org times out, and Python tries six IPv6 addresses (60 s each) before IPv4, so Zenodo requests can stall for minutes. Affects ordinary Zenodo downloads too; not fixed.
+- [ ] Next: fetch the CBIS-DDSM and Soft-tissue-Sarcoma label/clinical files that the series API does not serve; verify CBIS-DDSM's `P_xxxxx` patient grouping; review the TCGA/GDC open-access terms; review RTSTRUCT ROI names.

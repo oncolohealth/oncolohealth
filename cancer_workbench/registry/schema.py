@@ -10,6 +10,8 @@ from ..common.types import EvidenceState, Permission
 ACCESS = {"open", "gated_auto", "gated_manual", "registration", "hosted_only", "unknown"}
 TIERS = {"default", "optional", "gated", "big_machine", "manual"}
 MODEL_KINDS = {"specialist", "encoder", "coordinator", "retrieval", "vlm"}
+SUBSET_UNITS = {"patient", "file", "image", "slide"}
+SUBSET_FETCHERS = {"tcia", "zenodo", "figshare", "isic", "gdc", "s3"}
 
 _COMMON = ("id", "name", "license", "access", "evidence_state", "acquisition", "citation")
 _MODEL = ("kind", "tasks", "modality", "anatomy", "input", "outputs", "inference_permission")
@@ -27,6 +29,25 @@ def _common(rec: dict) -> list[str]:
         errs.append(f"acquisition.tier {acq.get('tier')!r} not in {sorted(TIERS)}")
     if acq.get("tier") == "manual" and not acq.get("instructions"):
         errs.append("manual-tier records need acquisition.instructions")
+    return errs + _subset(acq)
+
+
+def _subset(acq: dict) -> list[str]:
+    errs = []
+    sub = acq.get("subset")
+    if sub is not None:
+        if not isinstance(sub, dict) or sub.get("unit") not in SUBSET_UNITS:
+            return [f"acquisition.subset.unit must be one of {sorted(SUBSET_UNITS)}"]
+        if acq.get("fetcher") not in SUBSET_FETCHERS:
+            errs.append(f"fetcher {acq.get('fetcher')!r} has no subset listing")
+        if sub.get("required") and acq.get("tier") == "default":
+            errs.append("default-tier records must be downloadable without choosing a subset")
+    if acq.get("fetcher") in {"isic", "gdc", "s3"} and not (sub or {}).get("required"):
+        errs.append(f"{acq['fetcher']} records are subset-only; set acquisition.subset.required")
+    if acq.get("fetcher") == "gdc":
+        content = acq.get("filters", {}).get("content", [])
+        if not any(c.get("op") == "=" and c.get("content") == {"field": "access", "value": "open"} for c in content):
+            errs.append("gdc filters must include access = open")
     return errs
 
 

@@ -33,6 +33,10 @@ python3 -m cancer_workbench catalog validate
 python3 -m cancer_workbench fetch list           # catalog, tiers, sizes, local status
 python3 -m cancer_workbench fetch plan --tier default
 python3 -m cancer_workbench fetch get --tier default
+python3 -m cancer_workbench fetch units soft-tissue-sarcoma            # patients/slides/files a record offers
+python3 -m cancer_workbench fetch plan soft-tissue-sarcoma --sample 5 --seed 0   # 5 whole patients, seeded
+python3 -m cancer_workbench fetch plan camelyon16 --pick tumor_001 normal_001
+python3 -m cancer_workbench fetch plan isic-archive --sample 20 --query 'diagnosis_3:"Melanoma, NOS"'
 python3 -m cancer_workbench route --task feature_extraction --modality xray --anatomy bone
 python3 -m cancer_workbench coordinator profiles
 python3 scripts/demo_observed_results.py       # offline SYNTHETIC software demo; no live LLM

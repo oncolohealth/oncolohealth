@@ -1,5 +1,5 @@
 {
-  "_comment": "Dataset catalog. Counts are SOURCE-REPORTED unless marked 'audited'. Do not sum counts across records: several overlap (noted in known_overlap). Acquisition metadata checked against publisher APIs on 2026-10-23.",
+  "_comment": "Dataset catalog. Counts are SOURCE-REPORTED unless marked 'audited'. Do not sum counts across records: several overlap (noted in known_overlap). Acquisition metadata checked against publisher APIs on 2026-10-23; subset-capable records (acquisition.subset) and their counts checked on 2026-10-24.",
   "records": [
     {
       "id": "btxrd",
@@ -29,7 +29,7 @@
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Yang et al., MedMNIST v2, Scientific Data 2023; data doi:10.5281/zenodo.10519652; source: Al-Dhabyani et al. 2020",
-      "acquisition": {"tier": "default", "fetcher": "zenodo", "record": 10519652, "include": ["breastmnist.npz", "breastmnist_224.npz"], "approx_bytes": 31463144}
+      "acquisition": {"tier": "default", "fetcher": "zenodo", "record": 10519652, "subset": {"unit": "file", "candidates": ["breastmnist*.npz"]}, "include": ["breastmnist.npz", "breastmnist_224.npz"], "approx_bytes": 31463144}
     },
     {
       "id": "pathmnist",
@@ -44,7 +44,7 @@
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Yang et al., MedMNIST v2; Kather et al. 2019 (NCT-CRC-HE)",
-      "acquisition": {"tier": "default", "fetcher": "zenodo", "record": 10519652, "include": ["pathmnist.npz", "pathmnist_64.npz"], "approx_bytes": 1275037608}
+      "acquisition": {"tier": "default", "fetcher": "zenodo", "record": 10519652, "subset": {"unit": "file", "candidates": ["pathmnist*.npz"]}, "include": ["pathmnist.npz", "pathmnist_64.npz"], "approx_bytes": 1275037608}
     },
     {
       "id": "nodulemnist3d",
@@ -59,22 +59,22 @@
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Yang et al., MedMNIST v2; Armato et al. 2011 (LIDC-IDRI)",
-      "acquisition": {"tier": "default", "fetcher": "zenodo", "record": 10519652, "include": ["nodulemnist3d.npz", "nodulemnist3d_64.npz"], "approx_bytes": 319065095}
+      "acquisition": {"tier": "default", "fetcher": "zenodo", "record": 10519652, "subset": {"unit": "file", "candidates": ["nodulemnist3d*.npz"]}, "include": ["nodulemnist3d.npz", "nodulemnist3d_64.npz"], "approx_bytes": 319065095}
     },
     {
       "id": "lidc-idri-sample",
-      "name": "LIDC-IDRI sample (3 CT series)",
-      "summary": "Three pinned CT series for adapter smoke tests and DICOM ingestion. Not an evaluation set: LIDC is in the MONAI lung bundle's training data.",
+      "name": "LIDC-IDRI sample (3 CT series, more patients on request)",
+      "summary": "Three pinned CT series for adapter smoke tests and DICOM ingestion; add whole patients' CT series as a seeded sample or by patient ID. Not an evaluation set: LIDC is in the MONAI lung bundle's training data.",
       "modality": ["ct"],
       "anatomy": ["chest"],
-      "counts": {"patients": 3, "series": 3, "images": 406, "status": "from TCIA API metadata"},
+      "counts": {"patients": 3, "series": 3, "images": 406, "collection_patients": 1010, "collection_ct_series": 1018, "status": "from TCIA API metadata; collection counts 2026-10-24"},
       "labels": {"note": "Radiologist XML annotations are distributed separately on TCIA and are not included."},
       "known_overlap": ["monai-lung-nodule-ct-detection (training data)", "nodulemnist3d"],
       "license": {"id": "cc-by-3.0", "url": "http://creativecommons.org/licenses/by/3.0/"},
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Armato et al. 2011; doi:10.7937/K9/TCIA.2015.LO9QL9SX",
-      "acquisition": {"tier": "default", "fetcher": "tcia", "collection": "LIDC-IDRI", "extract": true, "series": ["1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192", "1.3.6.1.4.1.14519.5.2.1.6279.6001.170706757615202213033480003264", "1.3.6.1.4.1.14519.5.2.1.6279.6001.129007566048223160327836686225"], "approx_bytes": 213743628}
+      "acquisition": {"tier": "default", "fetcher": "tcia", "collection": "LIDC-IDRI", "extract": true, "subset": {"unit": "patient", "modalities": ["CT"]}, "series": ["1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192", "1.3.6.1.4.1.14519.5.2.1.6279.6001.170706757615202213033480003264", "1.3.6.1.4.1.14519.5.2.1.6279.6001.129007566048223160327836686225"], "approx_bytes": 213743628}
     },
     {
       "id": "dermamnist",
@@ -89,7 +89,7 @@
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Yang et al., MedMNIST v2; Tschandl et al. 2018 (HAM10000)",
-      "acquisition": {"tier": "optional", "fetcher": "zenodo", "record": 10519652, "include": ["dermamnist.npz", "dermamnist_224.npz"], "approx_bytes": 1110837580}
+      "acquisition": {"tier": "optional", "fetcher": "zenodo", "record": 10519652, "subset": {"unit": "file", "candidates": ["dermamnist*.npz"]}, "include": ["dermamnist.npz", "dermamnist_224.npz"], "approx_bytes": 1110837580}
     },
     {
       "id": "msd-brain-tumour",
@@ -132,7 +132,7 @@
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "doi:10.7937/K9/TCIA.2015.LO9QL9SX",
-      "acquisition": {"tier": "manual", "fetcher": "manual", "instructions": "Too large for the local budget. Add more pinned series to lidc-idri-sample, or use the NBIA Data Retriever on the big machine.", "approx_bytes": 133000000000}
+      "acquisition": {"tier": "manual", "fetcher": "manual", "instructions": "Too large to fetch whole here (about 128 GB of CT series alone). Fetch a subset of patients through lidc-idri-sample, or use the NBIA Data Retriever on the big machine.", "approx_bytes": 133000000000}
     },
     {
       "id": "brats-2021",
@@ -165,30 +165,33 @@
     {
       "id": "camelyon16",
       "name": "CAMELYON16",
-      "summary": "Lymph-node whole-slide images for metastasis research. Check encoder pretraining overlap.",
+      "summary": "Lymph-node whole-slide images for metastasis research, fetched slide by slide from the public AWS bucket (about 1.9 GB per slide on average). Check encoder pretraining overlap.",
       "modality": ["pathology"],
       "anatomy": ["lymph_node"],
-      "counts": {"status": "see source"},
-      "labels": {"slide_level": ["normal", "tumor"], "region_level": "tumor annotations"},
-      "license": {"id": "cc0-1.0", "notes": "verify on source page"},
+      "counts": {"slides": 399, "normal_slides": 159, "tumor_slides": 111, "test_slides": 129, "annotation_files": 160, "status": "bucket listing and checksums.md5, 2026-10-24"},
+      "labels": {"slide_level": ["normal", "tumor"], "region_level": "tumor annotations (ASAP XML) for tumor and some test slides", "note": "Test-slide labels are in evaluation/reference.csv, fetched with every subset"},
+      "unresolved": ["patient linkage between slides is not published; each slide is treated as its own group", "the README lists 20 tumor slides whose annotations are not exhaustive"],
+      "license": {"id": "cc0-1.0", "url": "https://creativecommons.org/publicdomain/zero/1.0/", "notes": "license.txt in the bucket (read 2026-10-24) says CC0; some challenge pages cite CC BY-NC-ND 4.0"},
       "access": "open",
       "evidence_state": "cataloged",
-      "citation": "https://camelyon16.grand-challenge.org/Data/",
-      "acquisition": {"tier": "manual", "fetcher": "manual", "instructions": "Hundreds of GB of WSIs; big machine only. PathMNIST covers local pathology prototyping.", "approx_bytes": 0}
+      "citation": "Ehteshami Bejnordi et al., JAMA 2017; https://camelyon16.grand-challenge.org/Data/",
+      "acquisition": {"tier": "optional", "fetcher": "s3", "bucket": "camelyon-dataset", "region": "us-west-2", "prefix": "CAMELYON16/", "units_prefix": "images/", "checksums": "checksums.md5", "companions": ["annotations/{stem}.xml"], "shared": ["README.md", "license.txt", "checksums.md5", "evaluation/reference.csv"], "subset": {"unit": "slide", "required": true}, "approx_bytes": 752587907392}
     },
     {
       "id": "isic-archive",
       "name": "ISIC Archive",
-      "summary": "Skin lesion images across many collections; per-image licenses differ.",
+      "summary": "Skin lesion images across many collections, fetched through the ISIC API v2 for a search you narrow (e.g. diagnosis_3:\"Melanoma, NOS\"). Only CC-0 and CC-BY images are offered; each image comes with its API metadata record.",
       "modality": ["dermoscopy"],
       "anatomy": ["skin"],
-      "counts": {"status": "release-specific"},
-      "labels": {"image_level": "diagnosis metadata varies by collection"},
-      "license": {"id": "per-image (CC-0 / CC-BY / CC-BY-NC)"},
+      "counts": {"public_images": 553019, "cc0_or_ccby_images": 307731, "status": "ISIC API facets, 2026-10-24; release-specific"},
+      "labels": {"image_level": "diagnosis_1..5 hierarchy plus diagnosis_confirm_type; varies by collection"},
+      "unresolved": ["patient_id/lesion_id are missing for many images; those images are treated as their own group, so same-patient images can still be split apart", "images recur across ISIC challenge releases and HAM10000 (DermaMNIST)", "the API's file sizes can lag the served image (ISIC_0911264, 2026-10-24) and there is no published checksum, so images are hashed on arrival (trust on first use)"],
+      "known_overlap": ["dermamnist"],
+      "license": {"id": "per-image (CC-0 / CC-BY; CC-BY-NC excluded by the fetcher)", "notes": "CC-BY attribution is in each image's metadata record"},
       "access": "open",
       "evidence_state": "cataloged",
-      "citation": "https://challenge.isic-archive.com/data/",
-      "acquisition": {"tier": "manual", "fetcher": "manual", "instructions": "Use the ISIC API with license filters for a small subset; dedupe lesions across releases. DermaMNIST covers quick local tests.", "approx_bytes": 0}
+      "citation": "https://api.isic-archive.com/api/docs/swagger/",
+      "acquisition": {"tier": "optional", "fetcher": "isic", "licenses": ["CC-0", "CC-BY"], "variant": "full", "subset": {"unit": "patient", "required": true, "query": true, "max_listing": 5000}, "approx_bytes": 0}
     },
     {
       "id": "tcga",
@@ -202,7 +205,53 @@
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "https://gdc.cancer.gov/access-data/data-access-processes-and-tools",
-      "acquisition": {"tier": "manual", "fetcher": "manual", "instructions": "Query the GDC API for open-access processed files for one project; never request controlled data without approval.", "approx_bytes": 0}
+      "acquisition": {"tier": "manual", "fetcher": "manual", "instructions": "Query the GDC API for open-access processed files for one project; never request controlled data without approval. TCGA-SARC slides are fetchable as a subset through tcga-sarc-slides.", "approx_bytes": 0}
+    },
+    {
+      "id": "tcga-sarc-slides",
+      "name": "TCGA-SARC whole-slide images (GDC open access)",
+      "summary": "Sarcoma H&E slides (SVS) from the GDC, fetched case by case with publisher MD5s. Soft-tissue sarcoma, not primary bone tumors. About 1.2 GB per slide on average.",
+      "modality": ["pathology"],
+      "anatomy": ["soft_tissue"],
+      "counts": {"slides": 890, "diagnostic_slides": 600, "tissue_slides": 290, "cases": 261, "status": "GDC files API, 2026-10-24"},
+      "labels": {"note": "Slides only. Histologic type and clinical data are separate GDC records and are not fetched."},
+      "unresolved": ["Diagnostic (FFPE) and Tissue (frozen) slides are mixed; pick by file name to restrict", "many pathology foundation models were pretrained on TCGA slides; check encoder overlap before evaluating"],
+      "known_overlap": ["tcga"],
+      "license": {"id": "gdc-open-access", "url": "https://gdc.cancer.gov/access-data/data-access-processes-and-tools", "notes": "open tier only; terms not reviewed yet"},
+      "access": "open",
+      "evidence_state": "cataloged",
+      "citation": "TCGA Research Network, Cell 2017 (adult soft tissue sarcomas); https://portal.gdc.cancer.gov/projects/TCGA-SARC",
+      "acquisition": {"tier": "optional", "fetcher": "gdc", "filters": {"op": "and", "content": [{"op": "=", "content": {"field": "cases.project.project_id", "value": "TCGA-SARC"}}, {"op": "=", "content": {"field": "data_type", "value": "Slide Image"}}, {"op": "=", "content": {"field": "access", "value": "open"}}]}, "subset": {"unit": "patient", "required": true}, "approx_bytes": 1095331264344}
+    },
+    {
+      "id": "soft-tissue-sarcoma",
+      "name": "Soft-tissue-Sarcoma (TCIA): FDG-PET/CT and MRI",
+      "summary": "Extremity soft-tissue sarcoma patients with CT, MR, PET and RT structure sets; fetch whole patients as a seeded sample or by ID (about 190 MB per patient, uncompressed). Not primary bone tumors.",
+      "modality": ["ct", "mri", "pet"],
+      "anatomy": ["soft_tissue"],
+      "counts": {"patients": 51, "series": 612, "ct_series": 51, "mr_series": 204, "pet_series": 51, "rtstruct_series": 306, "status": "from TCIA API metadata, 2026-10-24"},
+      "labels": {"region_level": "RTSTRUCT tumor contours", "note": "Clinical data, if any, is on the collection page and is not fetched by the series API."},
+      "unresolved": ["ROI names inside the RTSTRUCT series have not been reviewed", "outcome labels and their reference standard not reviewed"],
+      "license": {"id": "cc-by-3.0", "url": "http://creativecommons.org/licenses/by/3.0/"},
+      "access": "open",
+      "evidence_state": "cataloged",
+      "citation": "Vallières et al. 2015; doi:10.7937/K9/TCIA.2015.7GO2GSKS",
+      "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "Soft-tissue-Sarcoma", "extract": true, "subset": {"unit": "patient", "required": true}, "approx_bytes": 9870434084}
+    },
+    {
+      "id": "cbis-ddsm",
+      "name": "CBIS-DDSM mammography (TCIA)",
+      "summary": "Curated DDSM screening mammograms with ROI crops and masks; fetch whole patients as a seeded sample or by ID. 163 GB in total, so only subsets fit here.",
+      "modality": ["mammography"],
+      "anatomy": ["breast"],
+      "counts": {"series": 6775, "tcia_patient_ids": 6671, "patient_groups": 1566, "status": "from TCIA API metadata, 2026-10-24"},
+      "labels": {"note": "Pathology (benign/malignant) and BI-RADS descriptors are CSV files on the collection page; the series API does not fetch them."},
+      "unresolved": ["patient grouping: TCIA PatientIDs encode case, side and view (e.g. Calc-Test_P_00038_LEFT_CC); the P_xxxxx case number is used as the patient group, not verified against the release documentation", "CSV label files not fetched yet"],
+      "license": {"id": "cc-by-3.0", "url": "http://creativecommons.org/licenses/by/3.0/"},
+      "access": "open",
+      "evidence_state": "cataloged",
+      "citation": "Lee et al. 2017; doi:10.7937/K9/TCIA.2016.7O02S9CY",
+      "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "CBIS-DDSM", "extract": true, "subset": {"unit": "patient", "required": true, "group_regex": "P_\\d{5}"}, "approx_bytes": 163512966728}
     }
   ]
 }

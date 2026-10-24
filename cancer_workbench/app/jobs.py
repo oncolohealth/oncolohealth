@@ -33,7 +33,7 @@ class JobManager:
         job["_cancel"] = True
         return True
 
-    def start(self, catalog: Catalog, ids: list[str], allow_big: bool = False) -> dict:
+    def start(self, catalog: Catalog, ids: list[str], allow_big: bool = False, subsets: dict[str, dict] | None = None) -> dict:
         with self._lock:
             if self.active():
                 raise RuntimeError("A download is already running. Wait for it or cancel it first.")
@@ -50,15 +50,15 @@ class JobManager:
                 "log": [], "_cancel": False,
             }
             self.jobs[job["id"]] = job
-        threading.Thread(target=self._run, args=(job, records), daemon=True).start()
+        threading.Thread(target=self._run, args=(job, records, subsets), daemon=True).start()
         return {"id": job["id"]}
 
-    def _run(self, job: dict, records: list[dict]) -> None:
+    def _run(self, job: dict, records: list[dict], subsets: dict[str, dict] | None = None) -> None:
         def log(msg: str):
             job["log"].append(f"{time.strftime('%H:%M:%S')} {msg}")
 
         try:
-            rows = plan(records)
+            rows = plan(records, subsets)
             planned = sum(r["bytes"] for r in rows if not r["error"])
             fits, used, cap = budget.check(planned)
             if not fits:
@@ -75,7 +75,7 @@ class JobManager:
                     log(f"{rec['id']}: blocked. {row['error']}")
                     continue
                 item["state"] = "downloading"
-                item["total"] = sum(p.size or 0 for p in row["plans"]) or None
+                item["total"] = sum(p.size or p.approx_size or 0 for p in row["plans"]) or None
                 finished_bytes = {"sum": 0, "rel": None, "last": 0}
 
                 def on_progress(rel, done, total, item=item, acc=finished_bytes):
@@ -88,7 +88,7 @@ class JobManager:
                     item["file"], item["done"] = rel, acc["sum"] + done
 
                 try:
-                    fetch(rec, row["plans"], quiet=True, on_progress=on_progress)
+                    fetch(rec, row["plans"], quiet=True, on_progress=on_progress, selection=row["selection"])
                     item["state"], item["done"] = "done", item["total"] or item["done"]
                     log(f"{rec['id']}: fetched and verified")
                 except Cancelled:

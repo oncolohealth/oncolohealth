@@ -34,7 +34,8 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `adapters/base.py` | `Adapter` protocol + `execute_specialist`, the only way a model runs | done |
 | `adapters/synthetic.py` | `SyntheticThresholdAdapter` + `SYNTHETIC_MODEL_RECORD`, test-only fakes | done |
 | `adapters/encoder.py` | `FrozenEncoderAdapter` (RAD-DINO, ResNet-50): shared pad-to-square preprocessing by default, plus `VARIANTS` `pad_pstretch` (per-image 1st–99th percentile stretch) and `native_crop` (shortest-edge resize + center crop) for the source-shift check; safetensors-only loading; `ml` extra, import explicitly | done |
-| `acquisition/sources.py` | Per-publisher resolvers (Hugging Face, Zenodo, figshare, TCIA, plain URL) → `FilePlan`s | done |
+| `acquisition/sources.py` | Per-publisher resolvers (Hugging Face, Zenodo, figshare, TCIA, plain URL) → `FilePlan`s; subset listers (TCIA, Zenodo, figshare, ISIC, GDC, S3) → `Unit`s | done |
+| `acquisition/subsets.py` | Choose part of a source: whole groups by seeded sample (skipping groups on disk) or by ID; cached listings; checklist summaries | done |
 | `acquisition/download.py` | Resumable download, checksum verification, safe zip extraction, cross-host auth stripping | done |
 | `acquisition/fetch.py` | Plan/fetch catalog records, write `PROVENANCE.json`; `fetch` CLI | done |
 | `acquisition/budget.py` | Storage budget (40 GB default, `CW_STORAGE_BUDGET_GB`) | done |
@@ -99,7 +100,7 @@ Common fields: `id`, `name`, `license`, `access`, `evidence_state`, `acquisition
 Models add `kind`, `tasks`, `modality`, `anatomy`, `input`, `outputs`, `inference_permission`, and optionally `adapter`.
 Datasets add `modality`, `anatomy`, `counts`, `labels`, and optionally `unresolved`.
 
-`acquisition.tier` is one of `default`, `optional`, `gated`, `big_machine`, `manual`. `acquisition.fetcher` selects a resolver in `acquisition/sources.py`. Manual-tier records must have `instructions`.
+`acquisition.tier` is one of `default`, `optional`, `gated`, `big_machine`, `manual`. `acquisition.fetcher` selects a resolver in `acquisition/sources.py`. Manual-tier records must have `instructions`. An optional `acquisition.subset` block (`unit`, `required`, plus per-fetcher `modalities`, `group_regex`, `candidates`, `query`, `max_listing`) makes a record fetchable in part; its format is documented in `acquisition/subsets.py`. `isic`, `gdc` and `s3` records are subset-only, and `gdc` filters must include `access = open`.
 
 ### Evidence ladder (`common.types.EvidenceState`)
 
@@ -125,6 +126,7 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 
 **Fetch** (`fetch get` CLI or the Downloads screen):
 `select` records → `sources.resolve` queries the publisher API for files, sizes and checksums → `budget.check` → `download` resumes `.part` files and verifies them → optional `safe_extract_zip` → `write_provenance` writes `<root>/<id>/PROVENANCE.json`. In the app, `JobManager` runs this in a background thread with progress callbacks and cancellation.
+With a subset (`fetch plan|get <id> --sample N --seed S` or `--pick ID…`, or the Downloads screen's subset panel), `subsets.resolve_subset` replaces `sources.resolve`: the record's lister returns every `Unit` with its group (patient, case, slide), the selection picks whole groups, and `write_provenance` merges the new files into the existing `PROVENANCE.json` and appends the selection (mode, seed or IDs, chosen groups, a hash of the listing).
 
 **Route and run a specialist:**
 `route_models(request, models)` → `{compatible: [{id, runnable, blockers}], rejected: [{id, reasons}]}`.
