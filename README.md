@@ -16,6 +16,11 @@ The [experiment workspace](docs/reports/B-experiment-workspace.md) includes a
 synthetic planning example. Saving a draft does not start training or grant
 execution permission. Existing run records retain their stated limitations.
 
+[Measured feature provenance](docs/reports/E-feature-provenance.md) binds new
+exploratory caches and heads to measured inputs. Existing unbound runs retain
+stored-prediction replay; live scoring/refitting requires a newly generated bound
+run. Regeneration is an explicit reviewed ML operation, not an automatic migration.
+
 Command-line equivalents:
 
 ```fish

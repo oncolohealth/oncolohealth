@@ -589,10 +589,12 @@ $("#img-clear").addEventListener("click", () => { img.sel.clear(); renderImages(
 function scoringActive() { return img.scoring?.state === "running"; }
 function updateImgSelection() {
   const n = img.sel.size, max = img.meta?.max_score ?? 24, sr = selectedResult(), busy = scoringActive();
+  const selectedMetadata = sr && img.runs.find(r => r.id === sr.run)?.results.find(r => r.id === sr.result);
+  const bound = selectedMetadata?.has_binding === true;
   const shown = (img.pageItems || []).filter(it => img.sel.has(it.key)).length;
   $("#img-selected").textContent = n ? `${n} of ${max} images selected` : "No images selected";
   const b = $("#img-score");
-  const why = busy ? "Scoring this batch. You can keep browsing images." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Choose a baseline run and result first." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
+  const why = busy ? "Scoring this batch. You can keep browsing images." : !sr ? "Choose a baseline run and result first." : !bound ? "Replay only: this legacy run needs measured feature/head bindings before live scoring." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
   $("#img-ready").textContent = why || `Ready to score${n > shown ? ` · ${n - shown} selected outside this page` : ""}`;
   b.disabled = !!why; b.title = why;
   b.textContent = busy ? "Scoring…" : n ? `Score ${n} image${n === 1 ? "" : "s"} live` : "Score selected live";
@@ -604,7 +606,7 @@ function updateImgSelection() {
   $("#img-tools").result.disabled = busy || !sr;
   $$("[data-pick]", $("#img-grid")).forEach(cb => { cb.disabled = busy; });
   if ($("#img-delete")) $("#img-delete").disabled = busy;
-  $("#img-run-context").textContent = img.review ? `Stored predictions are available for validation and test images. Live scoring uses ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} with the selected ${img.review.endpoint.replaceAll("_", " ")} head. Training images will be refused.` : "Choose a baseline run to review predictions or score images live.";
+  $("#img-run-context").textContent = img.review ? `Stored predictions are available for validation and test images. ${bound ? `Live scoring checks the measured identity of ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} and the selected ${img.review.endpoint.replaceAll("_", " ")} head. Recorded training IDs will be refused.` : "This legacy run remains available for replay. Regenerate a bound exploratory run before live scoring."}` : "Choose a baseline run to review predictions or score images live.";
 }
 
 function probBars(probs, classes, pred, threshold) {

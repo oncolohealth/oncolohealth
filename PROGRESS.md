@@ -285,3 +285,26 @@ Historical verification from the incoming branch's source checkout:
   code/protocol review and scientific eligibility remain open. This screen is a
   completed planning/review component; it does not turn unresolved data or model
   permissions into approval. No cloud or hosted-model call was made.
+
+### Measured input/cache/head repair (2026-10-24)
+
+- [x] Independently reproduced custom model-root revision and stale source-cache
+  defects at `96f2fb2` using synthetic files and mocked fitting boundaries. No
+  medical inference, actual fitting, model weights or historical score changes.
+- [x] Bound new feature caches to measured image bytes, actual model/config files,
+  processor/source/version context and ordered feature payloads. Atomic writes,
+  later-arm source hashes and per-variant result references preserve consistency.
+- [x] Baseline/source-shift, near-duplicate ranking and head rebuilding check the
+  binding before downstream work. Review-only ranking never extracts a cache.
+  Fitted head fingerprints and identity-aware memory caches guard live scoring.
+- [x] Legacy stored predictions remain replayable; unbound live scoring/refitting
+  refuses until an explicitly reviewed new run is generated. Browser verified the
+  replay-only explanation/disabled live button using an isolated synthetic fixture.
+- [x] Current integrated suite: **218 discovered, 216 pass, two Torch skips** in
+  the available ML environment. System Python: **218 discovered, 178 pass, 40
+  optional-ML skips**. This adds 40 regressions to the 178-test workspace checkpoint.
+  Catalog remains 16 model / 14 dataset records. JavaScript/whitespace checks pass.
+- [ ] Independent review and full Torch/model-loading regression remain open.
+  Hashing overhead is unbenchmarked; before/after checks are not file locks. Local
+  hashes do not establish rights, authentic labels/patients, publisher trust or
+  clinical validity. Migration/limits: `docs/reports/E-feature-provenance.md`.

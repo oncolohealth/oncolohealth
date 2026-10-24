@@ -53,10 +53,12 @@ def head_inputs(er: list[dict], f: dict, index: dict[str, int], endpoint: str) -
 
     idx = [index[r["sample_id"]] for r in er]
     col = lambda k: np.array([r[k] for r in er])
+    identity = {"encoder_id": str(f["encoder_id"]), "revision": f["revision"], "preprocessing_hash": f["preprocessing_hash"]}
+    identity.update({k: f[k] for k in ("model_fingerprint", "feature_binding_sha256") if k in f})
     return {"features": f["features"][idx], "labels": col("label"), "partitions": col("partition"), "sample_ids": col("sample_id"),
             "patient_ids": col("patient_id"), "group_ids": col("duplicate_group"), "classes": CLASSES[endpoint],
             "image_hashes": np.array([r.get("sha256", "") for r in er]),
-            "encoder": {"encoder_id": str(f["encoder_id"]), "revision": f["revision"], "preprocessing_hash": f["preprocessing_hash"]}}
+            "encoder": identity}
 
 
 def rel(path: Path) -> str:
@@ -106,7 +108,8 @@ def record(record_id: str, endpoint: str, enc: str, f: dict, split: str, seed: s
     rec = ExperimentRecord(
         id=record_id, path="transfer_learning", task=f"btxrd_{endpoint}_image",
         cohort=f"btxrd {RELEASE}; manifest sha256 {manifest_sha}", split=split, model=f"{enc}@{f['revision']}",
-        source_revision=source_rev, environment=_environment(str(f["device"])), preprocessing=preprocessing,
+        source_revision=source_rev, environment=_environment(str(f["device"])),
+        preprocessing={**preprocessing, **{k: f[k] for k in ("model_fingerprint", "feature_binding_sha256") if k in f}},
         objective="logistic regression on standardized frozen features, balanced class weights; C and threshold chosen on val",
         metrics=["roc_auc", "pr_auc", "sensitivity", "specificity", "calibration"] if len(CLASSES[endpoint]) == 2
         else ["macro_roc_auc", "balanced_accuracy", "per_class_recall"],
@@ -121,27 +124,23 @@ def record(record_id: str, endpoint: str, enc: str, f: dict, split: str, seed: s
 
 def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out_dir: Path | None = None,
         seed: str = "0", n_boot: int = 1000, features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
-    from ..adapters.encoder import preprocessing, preprocessing_hash, revision
-    from ..learning.features import cache_path, extract_features, load_features
-    from ..learning.heads import save_head, train_feature_head
+    from ..adapters.encoder import preprocessing
+    from ..learning.features import bound_source_rows, ensure_features
+    from ..learning.provenance import manifest_snapshot
+    from ..learning.heads import head_fingerprint, save_head, train_feature_head
 
     if not MANIFEST_PATH.exists():
         raise FileNotFoundError(f"{MANIFEST_PATH} missing; run `python -m cancer_workbench btxrd manifest` first")
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(out_dir or PROJECT_ROOT / "runs" / f"btxrd-baseline-{stamp}")
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = read_manifest(MANIFEST_PATH)
-    manifest_sha = hash_file(MANIFEST_PATH)["sha256"]
+    rows, manifest_sha = manifest_snapshot(MANIFEST_PATH)
     source_rev = _git_revision()
 
     feats = {}
     for enc in encoders:
-        path = cache_path(enc, "btxrd", features_dir)
-        if not path.exists():
-            extract_features(enc, rows, RAW_DIR, path)
-        f = load_features(path)
-        if f["preprocessing_hash"] != preprocessing_hash(enc) or f["revision"] != str(revision(enc)):
-            raise ValueError(f"{path} was made with different preprocessing or weights")
+        f, path = ensure_features(enc, rows, RAW_DIR, features_dir)
+        rows = bound_source_rows(rows, f)
         feats[enc] = (f, {sid: i for i, sid in enumerate(f["sample_ids"].tolist())}, path)
 
     results, records = [], []
@@ -160,6 +159,8 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
                 val, test, report = evaluate(head, data, endpoint, n_boot)
                 run_id = f"{protocol}.{endpoint}.{enc}"
                 results.append({"id": run_id, "protocol": protocol, "endpoint": endpoint, "encoder": enc, "label": LABEL,
+                                "feature_cache": fpath.name, "feature_binding_sha256": f["feature_binding_sha256"],
+                                "head_fingerprint": head_fingerprint(head),
                                 "C": head.C, "val_macro_roc_auc": head.val_score,
                                 "counts": {p: sum(1 for r in er if r["partition"] == p) for p in ("train", "val", "test")},
                                 "test": report})

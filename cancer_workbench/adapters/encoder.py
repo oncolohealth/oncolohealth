@@ -23,6 +23,10 @@ from typing import Any
 
 from ..common.paths import MODELS_DIR
 
+# Identity of the implementation actually loaded into this process. Editing the
+# source file does not change already loaded Python code; restart after updates.
+IMPLEMENTATION_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
 IMAGENET = {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
 ENCODERS: dict[str, dict[str, Any]] = {
     "rad-dino": {"arch": "dinov2", "size": 518, "mean": [0.5307] * 3, "std": [0.2583] * 3, "dim": 768,
@@ -58,9 +62,23 @@ def preprocessing_hash(encoder_id: str, variant: str = "pad") -> str:
     return hashlib.sha256(json.dumps(preprocessing(encoder_id, variant), sort_keys=True).encode()).hexdigest()[:12]
 
 
-def revision(encoder_id: str) -> str | None:
-    prov = MODELS_DIR / encoder_id / "PROVENANCE.json"
-    return json.loads(prov.read_text())["source"].get("revision") if prov.exists() else None
+def revision(encoder_id: str, models_dir: Path | None = None) -> str | None:
+    """Read the declared revision from the actual model folder, never a fallback.
+
+    This metadata is not authentication of the weight bytes. Feature provenance
+    separately measures the files used by the encoder.
+    """
+    prov = Path(MODELS_DIR if models_dir is None else models_dir) / encoder_id / "PROVENANCE.json"
+    if not prov.exists():
+        return None
+    value = json.loads(prov.read_text())
+    source = value.get("source") if isinstance(value, dict) else None
+    if not isinstance(source, dict):
+        raise ValueError(f"Malformed source provenance in {prov}")
+    result = source.get("revision")
+    if result is not None and (not isinstance(result, str) or not result.strip()):
+        raise ValueError(f"Malformed revision in {prov}")
+    return result
 
 
 def load_image(path: Path, size: int, variant: str = "pad"):
@@ -118,25 +136,31 @@ class FrozenEncoderAdapter:
 
     synthetic = False
 
-    def __init__(self, encoder_id: str, device: str | None = None, models_dir: Path = MODELS_DIR, variant: str = "pad"):
+    def __init__(self, encoder_id: str, device: str | None = None, models_dir: Path | None = None, variant: str = "pad"):
         if encoder_id not in ENCODERS:
             raise KeyError(f"no encoder spec for {encoder_id!r}; known: {sorted(ENCODERS)}")
         self.encoder_id = encoder_id
         self.variant = _variant(variant)
         self.id = f"frozen-encoder:{encoder_id}"
         self.spec = ENCODERS[encoder_id]
-        self.root = Path(models_dir) / encoder_id
+        self.root = Path(MODELS_DIR if models_dir is None else models_dir) / encoder_id
         self.device = device
         self._model = None
+        self._loaded_identity = None
 
     def _ensure(self):
         if self._model is None:
             import torch
+            from ..learning.provenance import model_identity
 
             if not (self.root / "model.safetensors").exists():
                 raise FileNotFoundError(f"{self.root}/model.safetensors missing; fetch {self.encoder_id} first")
+            identity = model_identity(self.encoder_id, self.variant, self.root.parent)
             self.device = self.device or default_device()
-            self._model = _load_model(self.encoder_id, self.root).eval().to(self.device)
+            model = _load_model(self.encoder_id, self.root).eval().to(self.device)
+            if model_identity(self.encoder_id, self.variant, self.root.parent) != identity:
+                raise ValueError("Model files changed while loading. Create a new encoder after reviewing the files.")
+            self._model, self._loaded_identity = model, identity
             self._mean = torch.tensor(self.spec["mean"]).view(1, 3, 1, 1).to(self.device)
             self._std = torch.tensor(self.spec["std"]).view(1, 3, 1, 1).to(self.device)
         return self._model
@@ -173,7 +197,16 @@ class FrozenEncoderAdapter:
         return np.concatenate(chunks).astype(np.float32) if chunks else np.zeros((0, self.spec["dim"]), np.float32)
 
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from ..learning.provenance import model_identity
+
+        identity = model_identity(self.encoder_id, self.variant, self.root.parent)
+        if self._model is not None and self._loaded_identity != identity:
+            raise ValueError("Loaded encoder identity differs from its configured files. Create a new encoder.")
         emb = self.embed([Path(inputs["image_path"])], batch_size=1)[0]
+        if (model_identity(self.encoder_id, self.variant, self.root.parent) != identity
+                or self._loaded_identity is not None and self._loaded_identity != identity):
+            raise ValueError("Model identity changed during embedding. No result was published.")
         return {"type": "embedding", "dim": int(emb.shape[0]), "embedding": emb.tolist(), "encoder": self.encoder_id,
-                "revision": revision(self.encoder_id), "preprocessing": preprocessing(self.encoder_id, self.variant),
+                "revision": identity["revision"], "model_fingerprint": identity["sha256"],
+                "preprocessing": preprocessing(self.encoder_id, self.variant),
                 "note": "Frozen-encoder features, not a diagnosis."}

@@ -206,6 +206,24 @@ def save_head(model: HeadModel, path) -> None:
              train_ids=np.array(sorted(model.train_ids)), train_patients=np.array(sorted(model.train_patients)))
 
 
+def head_fingerprint(model: HeadModel) -> str:
+    """Identity of fitted arrays and their context, independent of NPZ timestamps."""
+    import hashlib
+    import json
+    import numpy as np
+
+    metadata = {"schema_version": 1, "encoder": model.encoder, "classes": model.classes, "C": float(model.C), "val_score": float(model.val_score),
+                "train_ids": sorted(model.train_ids), "train_patients": sorted(model.train_patients)}
+    sha = hashlib.sha256(json.dumps(metadata, sort_keys=True, allow_nan=False).encode())
+    for name, value in (("mean", model.mean), ("scale", model.scale), ("coef", model.clf.coef_), ("intercept", model.clf.intercept_)):
+        array = np.asarray(value)
+        if array.dtype.kind not in "fi" or not np.isfinite(array).all():
+            raise ValueError("Head fingerprint requires finite numeric fitted arrays.")
+        sha.update(json.dumps({"name": name, "shape": list(array.shape), "dtype": array.dtype.str}, sort_keys=True).encode())
+        sha.update(array.tobytes(order="C"))
+    return sha.hexdigest()
+
+
 def load_head(path) -> HeadModel:
     import json
 

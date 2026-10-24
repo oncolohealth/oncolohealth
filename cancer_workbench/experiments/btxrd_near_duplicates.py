@@ -16,8 +16,7 @@ import json
 from pathlib import Path
 
 from ..common.paths import PROJECT_ROOT
-from ..datasets import read_manifest
-from ..datasets.btxrd import MANIFEST_PATH
+from ..datasets.btxrd import MANIFEST_PATH, RAW_DIR
 from .btxrd_baseline import ENCODERS, PROTOCOLS, make_split
 
 CUTOFFS = (0.99, 0.98, 0.95, 0.90)
@@ -37,6 +36,9 @@ def pair_scores(feature_sets: list, top: int):
     """The `top` highest-scoring pairs (i < j) as (i, j, score, per-encoder cosines), best first."""
     import numpy as np
 
+    n = len(feature_sets[0]) if feature_sets else 0
+    if type(top) is not int or not 1 <= top <= n * (n - 1) // 2:
+        raise ValueError("top must be an integer between one and the number of distinct image pairs")
     sims = [(u @ u.T).astype(np.float32) for u in map(_unit, feature_sets)]
     score = np.minimum.reduce(sims)
     score[np.tril_indices(len(score))] = -np.inf
@@ -50,16 +52,18 @@ def run(*, top: int = 300, out_dir: Path | None = None, seed: str = "0",
         features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
     import numpy as np
 
-    from ..learning.features import cache_path, load_features
+    from ..learning.features import bound_source_rows, existing_features
+    from ..learning.provenance import manifest_snapshot
 
-    rows = read_manifest(MANIFEST_PATH)
+    rows, manifest_sha256 = manifest_snapshot(MANIFEST_PATH)
     by_id = {r["sample_id"]: r for r in rows}
     feats = []
+    references = []
     for enc in ENCODERS:
-        path = cache_path(enc, "btxrd", features_dir)
-        if not path.exists():
-            raise FileNotFoundError(f"{path.name} missing; run the baseline first to extract features")
-        feats.append(load_features(path))
+        f, path = existing_features(enc, rows, RAW_DIR, features_dir)
+        rows = bound_source_rows(rows, f)
+        feats.append(f)
+        references.append({"encoder": enc, "feature_cache": path.name, "feature_binding_sha256": f["feature_binding_sha256"]})
     ids = feats[0]["sample_ids"].tolist()
     if any(f["sample_ids"].tolist() != ids for f in feats) or set(ids) != set(by_id):
         raise ValueError("feature files and manifest do not list the same images in the same order")
@@ -89,6 +93,7 @@ def run(*, top: int = 300, out_dir: Path | None = None, seed: str = "0",
         w.writerows(out)
     new = [o for o in out if not o["known_duplicate"]]
     stats = {"label": "Candidates for review, not confirmed duplicates. Splits and duplicate groups are unchanged.",
+             "manifest_sha256": manifest_sha256, "feature_inputs": references,
              "encoders": list(ENCODERS), "n_images": len(ids), "top": top, "pairs_at_or_above": counts,
              "known_duplicate_pairs_in_top": len(known),
              "new_in_top": {"total": len(new), "cross_center": sum(o["cross_center"] for o in new),

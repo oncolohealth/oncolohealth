@@ -1,6 +1,8 @@
 """SYNTHETIC checks for asynchronous scoring and observed per-image progress."""
 import copy
+import hashlib
 import importlib.util
+import tempfile
 import threading
 import time
 import unittest
@@ -119,24 +121,32 @@ class ScoringApiTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("numpy"), "Optional ML extra is not installed")
 class ScoringProgressTests(unittest.TestCase):
+    def image_fixture(self):
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        path = Path(temp.name) / "synthetic.bin"
+        path.write_bytes(b"SYNTHETIC bytes, not an image")
+        return path, hashlib.sha256(path.read_bytes()).hexdigest()
+
     def test_each_success_refusal_and_error_advances_progress(self):
         import numpy as np
         from cancer_workbench.adapters import encoder
+        from cancer_workbench.learning import provenance
+        path, source_sha = self.image_fixture()
 
         view = {"run": "synthetic", "result": "head", "encoder": "rad-dino", "variant": "pad", "classes": ["normal", "tumor"],
                 "threshold": 0.6, "positive_class": "tumor", "label": "SYNTHETIC", "rows": {
                     "train": {"partition": "train", "label": "tumor"},
-                    "val": {"partition": "val", "label": "tumor"}}}
-        head = SimpleNamespace(encoder={"encoder_id": "rad-dino", "revision": "synthetic", "preprocessing_hash": "synthetic"},
+                    "val": {"partition": "val", "label": "tumor", "sha256": source_sha}}}
+        head = SimpleNamespace(encoder={"encoder_id": "rad-dino", "revision": "synthetic", "preprocessing_hash": "synthetic",
+                                        "model_fingerprint": "a" * 64, "feature_binding_sha256": "b" * 64}, classes=["normal", "tumor"],
                                train_ids={"train"}, mean=np.array([0.]), scale=np.array([1.]),
                                clf=SimpleNamespace(predict_proba=lambda features: np.array([[0.3, 0.7]])))
         adapter = SimpleNamespace(device="synthetic", embed=mock.Mock(side_effect=[np.array([[1.]]), ValueError("Bad synthetic image")]))
-        items = [{"key": key, "sample_id": key, "path": Path("synthetic.png")} for key in ("train", "val", "broken")]
+        items = [{"key": key, "sample_id": key, "path": path} for key in ("train", "val", "broken")]
         events = []
         with mock.patch.object(explore, "review", return_value=view), mock.patch.object(explore, "head_for", return_value=head), \
-                mock.patch.dict(explore._ENCODERS, {("rad-dino", "pad"): adapter}), \
-                mock.patch.object(encoder, "revision", return_value="synthetic"), \
-                mock.patch.object(encoder, "preprocessing_hash", return_value="synthetic"):
+                mock.patch.dict(explore._ENCODERS, {("rad-dino", "pad", "a" * 64): adapter}, clear=True), \
+                mock.patch.object(provenance, "model_identity", return_value={"revision":"synthetic", "preprocessing_hash":"synthetic", "sha256":"a" * 64}):
             result = explore.score("synthetic", "head", items, progress=lambda event: events.append(copy.deepcopy(event)))
         self.assertEqual([e["stage"] for e in events[:2]], ["preparing", "head"])
         self.assertEqual([e["done"] for e in events if e["stage"] == "scoring"], [0, 1, 1, 2, 2, 3])
@@ -151,20 +161,22 @@ class ScoringProgressTests(unittest.TestCase):
     def test_variant_heads_score_with_their_own_preprocessing(self):
         import numpy as np
         from cancer_workbench.adapters import encoder
+        from cancer_workbench.learning import provenance
+        path, _ = self.image_fixture()
 
         view = {"run": "synthetic", "result": "head", "encoder": "rad-dino", "variant": "native_crop", "classes": ["normal", "tumor"],
                 "threshold": 0.5, "positive_class": "tumor", "label": "SYNTHETIC", "rows": {}}
         head = lambda variant: SimpleNamespace(
-            encoder={"encoder_id": "rad-dino", "revision": "synthetic", "preprocessing_hash": f"hash-{variant}"},
+            encoder={"encoder_id": "rad-dino", "revision": "synthetic", "preprocessing_hash": f"hash-{variant}",
+                     "model_fingerprint": "a" * 64, "feature_binding_sha256": "b" * 64}, classes=["normal", "tumor"],
             train_ids=set(), mean=np.array([0.]), scale=np.array([1.]),
             clf=SimpleNamespace(predict_proba=lambda features: np.array([[0.2, 0.8]])))
         crop = SimpleNamespace(device="synthetic", embed=mock.Mock(return_value=np.array([[1.]])))
         pad = SimpleNamespace(device="synthetic", embed=mock.Mock(return_value=np.array([[1.]])))
-        items = [{"key": "upload", "sample_id": None, "path": Path("synthetic.png")}]
+        items = [{"key": "upload", "sample_id": None, "path": path}]
         with mock.patch.object(explore, "review", return_value=view), \
-                mock.patch.dict(explore._ENCODERS, {("rad-dino", "native_crop"): crop, ("rad-dino", "pad"): pad}), \
-                mock.patch.object(encoder, "revision", return_value="synthetic"), \
-                mock.patch.object(encoder, "preprocessing_hash", side_effect=lambda enc, variant="pad": f"hash-{variant}"):
+                mock.patch.dict(explore._ENCODERS, {("rad-dino", "native_crop", "a" * 64): crop, ("rad-dino", "pad", "a" * 64): pad}, clear=True), \
+                mock.patch.object(provenance, "model_identity", side_effect=lambda enc, variant="pad": {"revision":"synthetic", "preprocessing_hash":f"hash-{variant}", "sha256":"a" * 64}):
             with mock.patch.object(explore, "head_for", return_value=head("native_crop")):
                 result = explore.score("synthetic", "head", items)
             with mock.patch.object(explore, "head_for", return_value=head("pad")), self.assertRaises(ValueError):
@@ -192,3 +204,77 @@ class RunListTests(unittest.TestCase):
         self.assertEqual([(r["variant"], r["selected"]) for r in runs["synthetic-shift"]["results"]],
                          [("pad", False), ("native_crop", True)])
         self.assertIsNone(runs["synthetic-baseline"]["results"][0]["variant"])
+        self.assertFalse(runs["synthetic-baseline"]["results"][0]["has_binding"])
+
+
+@unittest.skipUnless(importlib.util.find_spec("numpy"), "needs numpy for synthetic scoring fixtures")
+class ScoringIdentityTests(unittest.TestCase):
+    def setUp(self):
+        import numpy as np
+        self.np = np
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "synthetic.bin"
+        self.path.write_bytes(b"SYNTHETIC bytes, no pixels")
+        self.model = {"revision":"synthetic", "preprocessing_hash":"synthetic", "sha256":"c" * 64}
+        self.head = SimpleNamespace(encoder={"encoder_id":"rad-dino","revision":"synthetic","preprocessing_hash":"synthetic",
+                                            "model_fingerprint":"c" * 64,"feature_binding_sha256":"b" * 64},
+                                    classes=["normal","tumor"],train_ids=set(),mean=np.array([0.]),scale=np.array([1.]),
+                                    clf=SimpleNamespace(predict_proba=lambda x: np.array([[.2,.8]])))
+        self.view = {"run":"synthetic","result":"head","encoder":"rad-dino","variant":"pad","classes":["normal","tumor"],
+                     "threshold":.5,"positive_class":"tumor","label":"SYNTHETIC","rows":{}}
+        self.adapter = SimpleNamespace(device="SYNTHETIC",embed=mock.Mock(return_value=np.array([[1.]])))
+        self.items = [{"key":"upload","sample_id":None,"path":self.path}]
+        from cancer_workbench.adapters import encoder
+        from cancer_workbench.learning import provenance
+        patches = [mock.patch.object(explore,"review",return_value=self.view),mock.patch.object(explore,"head_for",return_value=self.head),
+                   mock.patch.object(provenance,"model_identity",return_value=self.model),
+                   mock.patch.dict(explore._ENCODERS,{},clear=True),mock.patch.object(encoder,"FrozenEncoderAdapter",return_value=self.adapter)]
+        self.patches = []
+        for patch in patches:
+            self.patches.append(patch.start()); self.addCleanup(patch.stop)
+
+    def test_legacy_head_stops_before_model_loading_or_embedding(self):
+        del self.head.encoder["model_fingerprint"]
+        with self.assertRaisesRegex(ValueError,"Legacy head"):
+            explore.score("synthetic","head",self.items)
+        self.patches[2].assert_not_called()
+        self.adapter.embed.assert_not_called()
+
+    def test_class_order_mismatch_stops_before_embedding(self):
+        self.head.classes.reverse()
+        with self.assertRaises(ValueError):
+            explore.score("synthetic","head",self.items)
+        self.adapter.embed.assert_not_called()
+
+    def test_replacement_model_cannot_reuse_the_previous_loaded_adapter(self):
+        old = SimpleNamespace(embed=mock.Mock())
+        explore._ENCODERS[("rad-dino","pad","a"*64)] = old
+        result = explore.score("synthetic","head",self.items)
+        old.embed.assert_not_called()
+        self.adapter.embed.assert_called_once()
+        self.assertNotIn(("rad-dino","pad","a"*64),explore._ENCODERS)
+        self.assertEqual(result["model_fingerprint"],"c"*64)
+
+    def test_unmeasured_or_changed_run_image_is_refused_before_embedding(self):
+        self.items[0]["sample_id"]="S0"
+        for sha in (None,"f"*64):
+            self.view["rows"]["S0"]={"partition":"test","label":"tumor","sha256":sha}
+            result=explore.score("synthetic","head",self.items)
+            self.assertIn("refused",result["items"][0])
+            self.assertNotIn("probs",result["items"][0])
+            self.assertEqual(result["items"][0]["source_sha256"],hashlib.sha256(self.path.read_bytes()).hexdigest())
+        self.adapter.embed.assert_not_called()
+
+    def test_image_change_during_embedding_preserves_an_error_instead_of_scores(self):
+        def embed(*a,**kw):
+            self.path.write_bytes(b"SYNTHETIC replacement while embedding")
+            return self.np.array([[1.]])
+        self.adapter.embed.side_effect=embed
+        result=explore.score("synthetic","head",self.items)
+        self.assertIn("changed during scoring",result["items"][0]["error"])
+        self.assertNotIn("probs",result["items"][0])
+
+    def test_model_change_during_batch_prevents_completed_response(self):
+        self.patches[2].side_effect=[self.model,dict(self.model,sha256="d"*64)]
+        with self.assertRaisesRegex(ValueError,"Model inputs changed"):
+            explore.score("synthetic","head",self.items)
