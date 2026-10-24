@@ -92,7 +92,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .crumb-sep { color: var(--text-3); }
 .crumb { color: var(--text-2); }
 .titlebar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.ro-badge { font-size: 11px; color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 3px; padding: 1px 6px; }
 .icon-btn { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 4px; background: none; color: var(--text-2); cursor: pointer; }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
 .icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
@@ -570,7 +569,7 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
   body { overflow: auto; }
   .app { display: block; height: auto; }
   .titlebar { position: sticky; top: 0; z-index: 5; height: 40px; padding: 0 8px 0 16px; }
-  .brand-name, .crumb-sep, .ro-badge { display: none; }
+  .brand-name, .crumb-sep { display: none; }
   .activitybar { position: sticky; top: 40px; z-index: 5; flex-direction: row; justify-content: space-around; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .nav-btn { flex: 1; height: 42px; }
   .nav-btn::after { display: none; }
