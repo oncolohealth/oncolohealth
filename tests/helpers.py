@@ -1,4 +1,4 @@
-"""Test helpers: a throwaway local HTTP server. All fixtures here are SYNTHETIC."""
+"""Test helpers: a throwaway local HTTP server and synthetic model files. All fixtures here are SYNTHETIC."""
 from __future__ import annotations
 
 import http.server
@@ -55,3 +55,21 @@ class LocalServer:
     def close(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+
+
+def write_processor_config(folder, encoder_id: str) -> None:
+    """Write a SYNTHETIC publisher processor file matching the encoder constants (no real model)."""
+    from pathlib import Path
+
+    from cancer_workbench.adapters.encoder import ENCODERS
+
+    spec = ENCODERS[encoder_id]
+    if spec["arch"] == "dinov2":
+        value = {"size": {"shortest_edge": spec["size"]}, "crop_size": {"height": spec["size"], "width": spec["size"]},
+                 "do_resize": True, "do_center_crop": True, "do_rescale": True, "do_normalize": True,
+                 "rescale_factor": 1 / 255, "resample": 3, "image_mean": spec["mean"], "image_std": spec["std"]}
+    else:
+        value = {"architecture": spec["arch"], "pretrained_cfg": {
+            "test_input_size": [3, spec["size"], spec["size"]], "test_crop_pct": 1.0, "crop_mode": "center",
+            "interpolation": "bicubic", "mean": spec["mean"], "std": spec["std"]}}
+    Path(folder, spec["processor_config"]).write_text(json.dumps(value))

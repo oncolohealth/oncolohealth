@@ -77,8 +77,8 @@ confirmed that legacy stored predictions replay while live scoring is disabled.
 Its displayed probabilities are explicitly synthetic. See `PROGRESS.md` for the
 current integrated suite counts; earlier checkpoints remain separately dated.
 
-Full Torch preprocessing/model loading and real medical reruns remain unverified
-in this environment. Hashing images and weights adds disk I/O; its cost has not
+Real-weight loading, processor agreement and a measured tiny extraction are now
+recorded in `E-model-runtime-check.md`; real medical reruns remain unperformed. Hashing images and weights adds disk I/O; its cost has not
 been benchmarked. Version/source identity is intentionally strict and can require
 new features after software changes. Installed package versions are metadata,
 not process attestation; hot-updating dependencies is unsupported.

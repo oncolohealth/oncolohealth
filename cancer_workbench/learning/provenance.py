@@ -72,15 +72,22 @@ def model_identity(encoder_id: str, variant: str = "pad", models_dir: Path | Non
     base = Path(encoder.MODELS_DIR if models_dir is None else models_dir)
     declared_revision = encoder.revision(encoder_id, base)
     root = (base / encoder_id).resolve()
+    processor = encoder.ENCODERS[encoder_id]["processor_config"]
     names = ["model.safetensors"]
     if encoder.ENCODERS[encoder_id]["arch"] == "dinov2":
         names.append("config.json")  # actually consumed by Dinov2Model.from_pretrained
+    if processor not in names:
+        names.append(processor)
     files = {}
     for name in names:
         path = (root / name).resolve()
         if not path.is_relative_to(root):
             raise ValueError(f"Model file {name!r} leaves its configured root.")
         files[name] = measured_file(path)
+    raw = (root / processor).read_bytes()  # small; check these bytes are the ones just measured
+    if hashlib.sha256(raw).hexdigest() != files[processor]["sha256"]:
+        raise ValueError(f"Input file changed while hashing: {processor}")
+    publisher = encoder.publisher_preprocessing(encoder_id, raw)
     versions = {}
     for package in ("numpy", "Pillow", "torch", "timm", "transformers", "safetensors"):
         try:
@@ -91,6 +98,7 @@ def model_identity(encoder_id: str, variant: str = "pad", models_dir: Path | Non
             "architecture": encoder.ENCODERS[encoder_id]["arch"], "feature_dim": encoder.ENCODERS[encoder_id]["dim"],
             "variant": variant, "preprocessing": encoder.preprocessing(encoder_id, variant),
             "preprocessing_hash": encoder.preprocessing_hash(encoder_id, variant),
+            "processor_config": processor, "publisher_preprocessing": publisher,
             "implementation_sha256": encoder.IMPLEMENTATION_SHA256, "library_versions": versions}
     return {**body, "sha256": digest(body)}
 

@@ -12,6 +12,7 @@ from unittest import mock
 
 from cancer_workbench.adapters import encoder
 from cancer_workbench.learning import provenance
+from helpers import write_processor_config
 
 ENC = "resnet50-a1-in1k"
 
@@ -24,6 +25,7 @@ class FileFixtures(unittest.TestCase):
         self.images = self.root / "images"; self.images.mkdir()
         self.models = self.root / "models"; model = self.models / ENC; model.mkdir(parents=True)
         (model / "model.safetensors").write_bytes(b"SYNTHETIC weight bytes, not a model")
+        write_processor_config(model, ENC)
         (model / "PROVENANCE.json").write_text(json.dumps({"source": {"revision": "a" * 40}}))
         self.rows = []
         for i in range(6):
@@ -93,9 +95,42 @@ class MeasuredIdentityTests(FileFixtures):
         with self.assertRaises(FileNotFoundError):
             provenance.model_identity("rad-dino")
         (folder / "config.json").write_text('{"synthetic":1}')
+        with self.assertRaises(FileNotFoundError):
+            provenance.model_identity("rad-dino")
+        write_processor_config(folder, "rad-dino")
         a = provenance.model_identity("rad-dino")
         (folder / "config.json").write_text('{"synthetic":2}')
         self.assertNotEqual(a["sha256"], provenance.model_identity("rad-dino")["sha256"])
+
+    def test_publisher_processor_file_is_bound_and_must_match_the_constants(self):
+        path = self.models / ENC / "config.json"
+        a = provenance.model_identity(ENC)
+        self.assertEqual(a["publisher_preprocessing"]["size"], encoder.ENCODERS[ENC]["size"])
+        value = json.loads(path.read_text()); value["SYNTHETIC_note"] = "same values, new bytes"
+        path.write_text(json.dumps(value))
+        self.assertNotEqual(a["sha256"], provenance.model_identity(ENC)["sha256"])
+        for key, bad in (("mean", [0.5, 0.5, 0.5]), ("test_input_size", [3, 224, 224]), ("interpolation", "bilinear"),
+                         ("test_crop_pct", 0.95)):
+            changed = copy.deepcopy(value); changed["pretrained_cfg"][key] = bad
+            path.write_text(json.dumps(changed))
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "disagrees"):
+                provenance.model_identity(ENC)
+        for raw in ("{not json", "{}", '{"architecture": "resnet50", "pretrained_cfg": []}'):
+            path.write_text(raw)
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, "Malformed publisher processor"):
+                provenance.model_identity(ENC)
+
+    def test_dino_processor_resample_and_crop_are_checked(self):
+        folder = self.models / "rad-dino"; folder.mkdir()
+        (folder / "model.safetensors").write_bytes(b"SYNTHETIC"); (folder / "config.json").write_text('{"synthetic":1}')
+        write_processor_config(folder, "rad-dino")
+        path = folder / "preprocessor_config.json"
+        value = json.loads(path.read_text())
+        self.assertEqual(provenance.model_identity("rad-dino")["publisher_preprocessing"]["mean"], value["image_mean"])
+        for key, bad in (("resample", 2), ("crop_size", {"height": 518, "width": 512}), ("do_normalize", False)):
+            path.write_text(json.dumps(dict(value, **{key: bad})))
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "disagrees"):
+                provenance.model_identity("rad-dino")
 
     def test_model_file_external_symlink_is_refused(self):
         weight = self.models / ENC / "model.safetensors"

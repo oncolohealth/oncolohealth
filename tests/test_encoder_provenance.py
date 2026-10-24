@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from cancer_workbench.adapters import encoder
+from helpers import write_processor_config
 
 
 class _Vector:
@@ -30,6 +31,7 @@ class EncoderProvenanceTests(unittest.TestCase):
         (folder / "PROVENANCE.json").write_text(json.dumps(value))
         (folder / "model.safetensors").write_bytes(b"SYNTHETIC bytes, not real model weights")
         (folder / "config.json").write_text('{"synthetic":true}')
+        write_processor_config(folder, "rad-dino")
 
     def test_old_helper_call_and_explicit_custom_folder_are_distinct(self):
         with mock.patch.object(encoder, "MODELS_DIR", self.default):
