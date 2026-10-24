@@ -2,7 +2,7 @@
 
 A researcher-focused workspace: **question → evidence → eligible data → compatible model → reproducible experiment → measured result**. Background and scientific ground rules: [Cancer-AI-Research-Context.md](Cancer-AI-Research-Context.md). Status and task checklist: [PROGRESS.md](PROGRESS.md).
 
-> No trained cancer model, clinical validation or medical-performance claim exists here. Synthetic fixtures test software only.
+> Research prototype. The team has reported exploratory frozen-encoder/head experiments on BTXRD. No clinical validation or patient-independent performance is established. Synthetic fixtures test software only.
 
 ## Quick start (no installs needed for the core)
 
