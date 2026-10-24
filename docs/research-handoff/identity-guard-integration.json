@@ -1,0 +1,169 @@
+{
+  "source_base_commit": "e22234c8cf1356a4845e8f60da76fc2f8434d627",
+  "implementation": "reviewed_candidate_applied_to_shared_checkout",
+  "files": [
+    {
+      "path": "cancer_workbench/datasets/audit.py",
+      "sha256": "02c498c66ddbb07578ba9271357b4753d36ad0c5858409d460e8c64bef547ffd"
+    },
+    {
+      "path": "cancer_workbench/learning/heads.py",
+      "sha256": "ba83771ec5fd27c40a68751039cb6c86c21e9ee25cb78c6870fb0234e170752d"
+    },
+    {
+      "path": "tests/test_identity_whitespace.py",
+      "sha256": "2e7ea0a72b9ccf3fe2a125c07a9a4cdd43b6ed6b7542fcac2822370f060e18d5"
+    }
+  ],
+  "candidate_file_hashes_match": true,
+  "patch_applied_without_conflicts": true,
+  "targeted_tests": {
+    "discovered": 10,
+    "passed": 10,
+    "skipped": 0,
+    "failed": 0
+  },
+  "combined_suite": {
+    "discovered": 253,
+    "passed": 213,
+    "skipped": 40,
+    "failed": 0
+  },
+  "test_runtime": "bundled-numpy-imaging",
+  "catalog": {
+    "models": 16,
+    "datasets": 14,
+    "valid": true
+  },
+  "whitespace_check_passed": true,
+  "runtime_inventory": {
+    "system": {
+      "python_version": "3.13.14",
+      "packages": {
+        "numpy": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "pillow": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "scikit-learn": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "torch": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "torchvision": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "transformers": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "timm": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "safetensors": {
+          "discoverable": false,
+          "installed_version": null
+        }
+      }
+    },
+    "research-imaging": {
+      "python_version": "3.13.14",
+      "packages": {
+        "numpy": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "pillow": {
+          "discoverable": true,
+          "installed_version": "13.0.0"
+        },
+        "scikit-learn": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "torch": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "torchvision": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "transformers": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "timm": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "safetensors": {
+          "discoverable": false,
+          "installed_version": null
+        }
+      }
+    },
+    "bundled-numpy-imaging": {
+      "python_version": "3.12.14",
+      "packages": {
+        "numpy": {
+          "discoverable": true,
+          "installed_version": "2.3.5"
+        },
+        "pillow": {
+          "discoverable": true,
+          "installed_version": "12.3.0"
+        },
+        "scikit-learn": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "torch": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "torchvision": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "transformers": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "timm": {
+          "discoverable": false,
+          "installed_version": null
+        },
+        "safetensors": {
+          "discoverable": false,
+          "installed_version": null
+        }
+      }
+    }
+  },
+  "pinned_full_ml_runtime_verified": false,
+  "real_model_loading_verified": false,
+  "medical_data_or_weights_used": false,
+  "actual_model_inference_training_or_cluster_run_performed": false,
+  "packages_installed_or_downloaded": false,
+  "external_team_change": {
+    "pull_request": 1,
+    "state_observed": "merged",
+    "actor_observed": "reverset",
+    "fetched_main_commit": "e22234c8cf1356a4845e8f60da76fc2f8434d627"
+  },
+  "verification_limits": [
+    "Package discovery and installed versions do not verify imports or binary operators.",
+    "The bundled NumPy/Pillow environment does not match the complete pinned ml extra.",
+    "Unknown patient/lesion identity and diagnostic references remain unresolved.",
+    "Original candidate patch and verification are preserved as historical records."
+  ]
+}
