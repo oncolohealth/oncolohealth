@@ -426,6 +426,7 @@ const img = { src: "btxrd", meta: null, rows: [], byId: {}, uploads: [], upById:
 const keyOf = (set, id) => `${set}:${id}`;
 const media = (set, file) => `/media/${encodeURIComponent(set)}/${file.split("/").map(encodeURIComponent).join("/")}?t=${encodeURIComponent(TOKEN)}`;
 const fmtP = p => (p == null ? "" : p.toFixed(2));
+const humanize = s => ({ image_stratified: "image split", source_holdout: "source hold-out", three_class: "3-class" }[s] ?? String(s).replaceAll("_", " "));
 const variantTag = (variant, selected) => (variant && variant !== "pad" ? ` · ${variant}${selected ? " (selected)" : ""}` : variant ? " · pad" : "");
 function setWidths(root) { $$("[data-w]", root).forEach(el => { el.style.width = `${Math.max(0, Math.min(100, Number(el.dataset.w)))}%`; }); }
 function selectedResult() {
@@ -435,7 +436,7 @@ function selectedResult() {
 
 function setRunResults() {
   const t = $("#img-tools"), run = img.runs.find(r => r.id === t.run.value);
-  t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${r.protocol} · ${r.endpoint} · ${r.encoder}${variantTag(r.variant, r.selected)}`)} (${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
+  t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${humanize(r.protocol)} · ${humanize(r.endpoint)} · ${r.encoder}${variantTag(r.variant, r.selected)}`)} (test ${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
   t.result.disabled = !run;
 }
 async function loadImages() {
@@ -446,7 +447,7 @@ async function loadImages() {
     img.runs = runs;
     if (set) { img.rows = set.rows; img.byId = Object.fromEntries(set.rows.map(r => [r.sample_id, r])); }
     const t = $("#img-tools");
-    t.run.innerHTML = `<option value="">None: browse only</option>` + runs.map(r => `<option value="${esc(r.id)}">${esc(r.id)}</option>`).join("");
+    t.run.innerHTML = `<option value="">None (browse images only)</option>` + runs.map(r => `<option value="${esc(r.id)}">${esc(r.id)}</option>`).join("");
     const miss = img.meta.ml_missing;
     $("#img-ml").textContent = miss.length ? `Live scoring is off in this app process: ${miss.join(", ")} not installed. Start it with .venv/bin/python -m cancer_workbench app.` : "";
   }
@@ -560,7 +561,7 @@ function visibleItems() {
 
 function predTag(v) {
   if (!v || v.probs == null) return "";
-  return `<span class="tag ${v.correct ? "ok" : "bad"}" title="Stored ${esc(v.partition)} prediction">${v.correct ? "" : "✗ "}${esc(v.pred)} ${fmtP(Math.max(...v.probs))}</span>`;
+  return `<span class="tag ${v.correct ? "ok" : "bad"}" title="Prediction saved by the run for this ${esc(v.partition)} image, checked against its label">${v.correct ? "" : "✗ "}${esc(v.pred)} ${fmtP(Math.max(...v.probs))}</span>`;
 }
 function renderImages() {
   const items = visibleItems(), rv = img.review;
@@ -572,9 +573,9 @@ function renderImages() {
   } else if (rv) {
     const scored = items.filter(i => i.rv?.probs);
     const wrong = scored.filter(i => !i.rv.correct).length;
-    $("#img-summary").textContent = `${items.length} images in this view. ${scored.length ? `${wrong} of the ${scored.length} with stored predictions are wrong` : "None has a stored prediction (the run only predicts val and test images)"}${rv.threshold != null ? `; ${rv.positive_class} when P ≥ ${fmtP(rv.threshold)} (val threshold)` : "; argmax over classes"}. Counts in a filtered view are for finding patterns, not performance: the run's summary.md has the test-set results. ${rv.label}`;
+    $("#img-summary").textContent = `${items.length} images in this view. ${scored.length ? `${wrong} of the ${scored.length} saved predictions disagree with the label` : "None has a saved prediction (the run only predicts val and test images)"}${rv.threshold != null ? `; ${rv.positive_class} when P ≥ ${fmtP(rv.threshold)} (val threshold)` : "; argmax over classes"}. Counts in a filtered view are for finding patterns, not performance: the run's summary.md has the test-set results. ${rv.label}`;
   } else {
-    $("#img-summary").textContent = img.src === "uploads" ? `${items.length} uploaded image${items.length === 1 ? "" : "s"}.` : `${items.length} of ${img.rows.length} images. Pick a baseline run to see its stored predictions.`;
+    $("#img-summary").textContent = img.src === "uploads" ? `${items.length} uploaded image${items.length === 1 ? "" : "s"}.` : `${items.length} of ${img.rows.length} images. Pick a trained model to compare its predictions with these labels.`;
   }
   $("#img-grid").innerHTML = img.pageItems.map(it => {
     const r = it.row, live = img.live[it.key];
@@ -624,7 +625,7 @@ function updateImgSelection() {
   const shown = (img.pageItems || []).filter(it => img.sel.has(it.key)).length;
   $("#img-selected").textContent = n ? `${n} of ${max} images selected` : "No images selected";
   const b = $("#img-score");
-  const why = busy ? "Scoring this batch. You can keep browsing images." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Choose a baseline run and result first." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
+  const why = busy ? "Scoring this batch. You can keep browsing images." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Choose a training run and trained model first." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
   $("#img-ready").textContent = why || `Ready to score${n > shown ? ` · ${n - shown} selected outside this page` : ""}`;
   b.disabled = !!why; b.title = why;
   b.textContent = busy ? "Scoring…" : n ? `Score ${n} image${n === 1 ? "" : "s"} live` : "Score selected live";
@@ -636,7 +637,7 @@ function updateImgSelection() {
   $("#img-tools").result.disabled = busy || !sr;
   $$("[data-pick]", $("#img-grid")).forEach(cb => { cb.disabled = busy; });
   if ($("#img-delete")) $("#img-delete").disabled = busy;
-  $("#img-run-context").textContent = img.review ? `Stored predictions are available for validation and test images. Live scoring uses ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} with the selected ${img.review.endpoint.replaceAll("_", " ")} head. Training images will be refused.` : "Choose a baseline run to review predictions or score images live.";
+  $("#img-run-context").textContent = img.review ? `Predictions are checked against each image's dataset label: green tags match it, red ✗ tags disagree. Saved predictions cover validation and test images. Live scoring runs ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} with this ${humanize(img.review.endpoint)} classifier and refuses the images it was trained on.` : "Pick a training run, then one of the models it trained. Its predictions are checked against each image's label from the dataset.";
 }
 
 function probBars(probs, classes, pred, threshold) {
@@ -657,7 +658,7 @@ async function openImage(key) {
     ${Number(r?.annotation_shapes) > 0 ? `<label class="check"><input type="checkbox" id="img-overlay" ${img.overlay ? "checked" : ""}> Show tumor annotations (${esc(r.annotation_shapes)})</label>` : ""}
     <div class="stage"><img id="img-full" src="${esc(it.url)}" alt="${esc(it.title)}"><svg id="img-svg" aria-hidden="true"></svg></div>
     <ul class="shape-list" id="img-shapes"></ul>
-    ${rv ? `<h3>Stored prediction</h3>${v?.probs ? `<p class="hint">${esc(v.partition)} image in ${esc(rv.result)}. Reference: <strong>${esc(v.label)}</strong>. Predicted: <strong class="${v.correct ? "ok-text" : "err-text"}">${esc(v.pred)}</strong>${v.correct ? "" : " (wrong)"}.</p>${probBars(v.probs, rv.classes, v.pred, rv.threshold)}`
+    ${rv ? `<h3>Saved prediction vs label</h3>${v?.probs ? `<p class="hint">In this model's ${esc(v.partition)} set. Label: <strong>${esc(v.label)}</strong>. Predicted: <strong class="${v.correct ? "ok-text" : "err-text"}">${esc(v.pred)}</strong>${v.correct ? "" : " (wrong)"}.</p>${probBars(v.probs, rv.classes, v.pred, rv.threshold)}`
       : `<p class="hint">${v ? (v.partition === "excluded" ? `Not in this run's cohort: ${esc(v.why)}.` : `A ${esc(v.partition)} image: the run stores predictions for val and test images only.`) : "Not in this run."}</p>`}` : ""}
     ${live ? `<h3>Live score</h3>${liveDetail(live)}` : ""}
     <h3>Details</h3>
@@ -697,9 +698,9 @@ function liveDetail(e) {
   const m = img.liveRun;
   if (e.refused) return `<p class="err-text">${esc(e.refused)}</p>`;
   if (e.error) return `<p class="err-text">Could not score: ${esc(e.error)}</p>`;
-  return `<p class="hint">${esc(m.result)} on ${esc(m.device)}.${e.label ? ` Reference: <strong>${esc(e.label)}</strong>.` : ""} Predicted: <strong>${esc(e.pred)}</strong>.</p>
+  return `<p class="hint">${esc(m.result)} on ${esc(m.device)}.${e.label ? ` Label: <strong>${esc(e.label)}</strong>.` : " No label to check against."} Predicted: <strong>${esc(e.pred)}</strong>.</p>
     ${probBars(e.probs, m.classes, e.pred, m.threshold)}
-    ${e.stored_probs ? `<p class="hint">Stored prediction from the run: ${m.classes.map((c, i) => `${esc(c)} ${fmtP(e.stored_probs[i])}`).join(", ")}. Largest difference ${Math.max(...e.stored_probs.map((p, i) => Math.abs(p - e.probs[i]))).toFixed(4)}.</p>` : ""}
+    ${e.stored_probs ? `<p class="hint">Prediction saved by the run: ${m.classes.map((c, i) => `${esc(c)} ${fmtP(e.stored_probs[i])}`).join(", ")}. Largest difference ${Math.max(...e.stored_probs.map((p, i) => Math.abs(p - e.probs[i]))).toFixed(4)}.</p>` : ""}
     ${e.notes.map(n => `<p class="hint warn-text">${esc(n)}</p>`).join("")}`;
 }
 
@@ -733,11 +734,11 @@ function renderScoring() {
   const j = img.scoring;
   if (!j) return;
   $("#img-scoring").hidden = false;
-  const titles = { preparing: "Checking the selected run", head: "Preparing the classifier", scoring: "Scoring images", done: "Batch complete", failed: "Scoring stopped" };
+  const titles = { preparing: "Checking the selected model", head: "Loading the classifier", scoring: "Scoring images", done: "Batch complete", failed: "Scoring stopped" };
   $("#img-scoring-title").textContent = titles[j.state === "failed" ? "failed" : j.stage];
   $("#img-scoring-context").textContent = `${j.run} / ${j.result}`;
   const step = j.state === "done" ? 3 : ({ preparing: 0, head: 1, scoring: 2 }[j.stage] ?? -1);
-  $("#img-scoring-steps").innerHTML = ["Check run", "Prepare head", "Score images", "Review results"].map((label, i) => `<li class="${i < step ? "complete" : i === step ? "current" : ""}" ${i === step ? 'aria-current="step"' : ""}><span>${i < step ? "✓" : i + 1}</span>${label}</li>`).join("");
+  $("#img-scoring-steps").innerHTML = ["Check model", "Load classifier", "Score images", "Review results"].map((label, i) => `<li class="${i < step ? "complete" : i === step ? "current" : ""}" ${i === step ? 'aria-current="step"' : ""}><span>${i < step ? "✓" : i + 1}</span>${label}</li>`).join("");
   $("#img-score-count").textContent = `${j.done} of ${j.total} images processed`;
   const scored = j.items.filter(e => e.probs).length, refused = j.items.filter(e => e.refused).length, failed = j.items.filter(e => e.error).length;
   $("#img-score-outcomes").textContent = `${scored} scored · ${refused} refused · ${failed} failed`;
@@ -800,8 +801,8 @@ function renderLive(res) {
   $("#img-live").innerHTML = `<div class="live">
     <div class="audit-head"><h2>${scoringActive() ? "Results so far" : "Live scores"}</h2><span class="badge synthetic">Exploratory</span></div>
     <p class="hint">${esc(res.run)} / ${esc(res.result)}, encoder ${esc(res.encoder)}${res.variant && res.variant !== "pad" ? ` (${esc(res.variant)} preprocessing)` : ""} on ${esc(res.device)}, ${res.seconds} s. ${res.threshold != null ? `${esc(res.positive_class)} when P ≥ ${fmtP(res.threshold)}.` : "Argmax over classes."}
-      ${labeled.length ? `${right} of ${labeled.length} labeled images match the reference label${labeled.some(e => e.partition === "val") ? ", including val images, which are optimistic" : ""}.` : ""} ${esc(res.note)}</p>
-    <div class="table-scroll" tabindex="0" role="region" aria-label="Live score results"><table><thead><tr><th aria-label="Preview"></th><th>Image</th><th>In run</th><th>Reference</th><th>Live</th><th>Stored</th><th>Notes</th></tr></thead><tbody>
+      ${labeled.length ? `${right} of ${labeled.length} labeled images match their dataset label${labeled.some(e => e.partition === "val") ? ", including val images, which are optimistic" : ""}.` : ""} ${esc(res.note)}</p>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Live score results"><table><thead><tr><th aria-label="Preview"></th><th>Image</th><th>Split</th><th>Label</th><th>Live</th><th>Saved by run</th><th>Notes</th></tr></thead><tbody>
     ${res.items.map(e => {
       const it = itemFromKey(e.key);
       const probs = p => res.classes.map((c, i) => `${esc(c)} ${fmtP(p[i])}`).join("<br>");

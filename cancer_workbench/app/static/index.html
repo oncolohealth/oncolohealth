@@ -179,17 +179,17 @@
           <div class="pane-head"><span>Images</span></div>
           <div class="pane-body flush">
             <details class="section" open>
-              <summary>Source &amp; run</summary>
+              <summary>Source &amp; model</summary>
               <div class="section-body">
                 <form class="img-tools" id="img-tools">
                   <div class="seg block" id="img-source" role="group" aria-label="Image source">
                     <button type="button" data-src="btxrd" class="on">BTXRD</button>
                     <button type="button" data-src="uploads">Uploads</button>
                   </div>
-                  <label>Baseline run<select name="run"></select></label>
-                  <label>Protocol · endpoint · encoder<select name="result" disabled></select></label>
+                  <label>Training run<select name="run"></select></label>
+                  <label><span>Trained model <span class="opt">split · labels · encoder</span></span><select name="result" disabled></select></label>
                 </form>
-                <p class="hint run-context" id="img-run-context">Choose a baseline run to review predictions or score images live.</p>
+                <p class="hint run-context" id="img-run-context">Pick a training run, then one of the models it trained. Its predictions are checked against each image's label from the dataset.</p>
                 <div class="upload-zone" id="upload-zone" hidden>
                   <label class="btn primary upload-btn">Upload JPEG or PNG<input type="file" id="upload-input" accept="image/jpeg,image/png" multiple></label>
                   <p class="hint">Or drop files here. Upload de-identified images only. Files stay in <code>data/uploads/</code> on this machine, unchanged, including any embedded metadata. They have no reference label, so a score on them can't be checked.</p>
@@ -205,9 +205,9 @@
         <div class="pane center">
           <div class="toolbar">
             <h1>Review &amp; score</h1>
-            <span class="toolbar-desc">Choose a baseline, select images, and follow live scoring from preparation to results.</span>
+            <span class="toolbar-desc">Pick a trained model, select images, and compare its predictions with the dataset labels.</span>
           </div>
-          <p class="banner warn explore-banner">Exploratory software output from image-level baselines without patient grouping. Nothing on this screen is a diagnosis or a validated model.</p>
+          <p class="banner warn explore-banner">Exploratory software output from simple models trained without patient grouping. Nothing on this screen is a diagnosis or a validated model.</p>
           <div class="action-bar" id="img-actions">
             <div class="selection-info"><strong id="img-selected">No images selected</strong><span id="img-ready" class="hint">Select images to start.</span></div>
             <button class="btn" id="img-select-page" type="button">Select up to 24</button>
