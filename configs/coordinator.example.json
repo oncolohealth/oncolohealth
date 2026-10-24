@@ -2,6 +2,17 @@
   "_comment": "Copy to configs/coordinator.json (gitignored) and edit. Every profile speaks the OpenAI chat-completions API, so any server works: vLLM, SGLang, llama.cpp, Ollama, LM Studio, TGI, or a hosted gateway. base_url_env lets a profile read its URL from an environment variable. Server-side tool-calling flags (e.g. vLLM --enable-auto-tool-choice --tool-call-parser ...) must match the model; follow the official recipe linked per profile rather than guessing.",
   "default_profile": "qwen-fp8-vllm",
   "profiles": {
+    "claude-research": {
+      "type": "openai_compatible",
+      "base_url": "https://api.anthropic.com/v1",
+      "model": "claude-opus-5-5",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "require_api_key": true,
+      "extra_headers_env": {"anthropic-workspace-id": "ANTHROPIC_WORKSPACE_ID"},
+      "timeout_s": 60,
+      "default_params": {"max_tokens": 2048},
+      "_notes": "Claude compatibility profile, not live-verified. API key stays in the server environment. Non-workspace-scoped keys may also need ANTHROPIC_WORKSPACE_ID. Current Claude 5 models reject some older temperature/top_p/tool_choice settings, so this example omits them. Local tool argument validation remains required. Publisher docs: https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk"
+    },
     "qwen-bf16-vllm": {
       "type": "openai_compatible",
       "base_url": "http://localhost:8000/v1",

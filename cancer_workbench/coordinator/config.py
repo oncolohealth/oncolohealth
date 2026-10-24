@@ -13,7 +13,8 @@ from pathlib import Path
 from ..common.paths import CONFIG_DIR
 from .providers import OpenAICompatibleProvider
 
-_PROVIDER_FIELDS = {"base_url", "model", "api_key_env", "timeout_s", "default_params", "extra_body", "supports_tools"}
+_PROVIDER_FIELDS = {"base_url", "model", "api_key_env", "timeout_s", "default_params", "extra_body", "supports_tools",
+                    "require_api_key", "extra_headers_env"}
 
 
 def config_path(path: Path | None = None) -> Path:

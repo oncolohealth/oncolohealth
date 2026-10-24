@@ -407,7 +407,8 @@ def save_profile(body: dict) -> dict:
         raise ApiError("A profile needs a server URL and a model name.")
     if "api_key" in p:
         raise ApiError("Don't store keys in the profile. Put the key in an environment variable and enter its name instead.")
-    allowed = {"type", "base_url", "base_url_env", "model", "api_key_env", "timeout_s", "default_params", "extra_body", "supports_tools", "_notes"}
+    allowed = {"type", "base_url", "base_url_env", "model", "api_key_env", "timeout_s", "default_params", "extra_body",
+               "supports_tools", "require_api_key", "extra_headers_env", "_notes"}
     clean = {k: v for k, v in p.items() if k in allowed and v not in ("", None)}
     clean.setdefault("type", "openai_compatible")
     local, cfg = _local_config()
