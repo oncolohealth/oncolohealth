@@ -4,7 +4,7 @@ Start with [the integration plan](Team-integration-plan.md), [research context](
 
 ## What is here
 
-The active branch is rebased onto main `79c51d5ac9d508b602193fd0e457a8a5eecec3c5`, including Inam's demo-readiness integration and Sebastian's desktop UI/Experiments reconciliation. The newer upstream model, processor, source-image, feature-payload and fitted-head provenance implementation is preserved. The older overlapping folder/cache repairs are superseded, with the current upstream regression coverage retained. The offline release/evidence review and its 25 tests are added to that receiving source. Gemma 4 31B remains the example coordinator default; no live endpoint is established.
+The active branch is rebased onto main `79c51d5ac9d508b602193fd0e457a8a5eecec3c5`, including Inam's demo-readiness integration and Sebastian's desktop UI/Experiments reconciliation. The newer upstream model, processor, source-image, feature-payload and fitted-head provenance implementation is preserved. The older overlapping folder/cache repairs are superseded, with the current upstream regression coverage retained. The offline release/evidence review and its 25 tests are added to that receiving source. The user now selects Gemma 4 26B A4B; see [the current desktop and large-memory profiles](../gemma-coordinator.md). No live endpoint is established.
 
 The team subsequently merged PR #1, advancing remote main to `e22234c8cf1356a4845e8f60da76fc2f8434d627`. New work remains on `research/overnight-integration` for separate review; this continuation does not merge it into main.
 

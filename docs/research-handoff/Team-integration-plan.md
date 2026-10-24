@@ -1,6 +1,8 @@
 # Integration and first-training plan
 
-The target is a runnable researcher workbench and one bounded bone-X-ray baseline by noon–2 PM Pacific on October 24. This is a planning target, not a measured runtime promise or a claim that a medically validated model can be finished by that time. A frozen-encoder classifier is the first training target. Gemma 4 31B remains the reasoning coordinator candidate; coordinator fine-tuning follows measured workflow failures rather than being a prerequisite for the first image experiment.
+The target is a runnable researcher workbench and one bounded bone-X-ray baseline by noon–2 PM Pacific on October 24. This is a planning target, not a measured runtime promise or a claim that a medically validated model can be finished by that time. A frozen-encoder classifier is the first training target. Gemma 4 26B A4B is now the selected reasoning coordinator candidate; coordinator fine-tuning follows measured workflow failures rather than being a prerequisite for the first image experiment.
+
+The [current coordinator plan](../gemma-coordinator.md) targets quantized deployment on the user's 16 GB RTX 5070 Ti / Ryzen 9 / 32 GB RAM desktop, with separate larger-memory serving. It does not authorize downloads, actual loading or training.
 
 ## Immediate shared-source handoff
 

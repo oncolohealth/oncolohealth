@@ -50,6 +50,10 @@ no real hosted call has been verified.
 
 ML work needs the pinned extras: `uv venv; uv pip install -e ".[ml]"` (add `imaging`, `clip` as needed).
 
+## Selected coordinator
+
+The example default is now **Gemma 4 26B A4B** through a quantized local server profile, targeting an RTX 5070 Ti with 16 GB VRAM and 32 GB system RAM. [Setup and verification](docs/gemma-coordinator.md) distinguish memory estimates, CPU offload, a separate large-memory profile and actual execution. No weights or endpoint are established by this configuration; existing local settings retain precedence.
+
 ## Automated tests
 
 [GitHub Actions](.github/workflows/tests.yml) runs `python -m unittest discover -s tests -v` on every push and pull request using Ubuntu and Python 3.11, 3.12, 3.13 and 3.14. CI installs no optional dependencies; ML tests skip when their packages are absent. No datasets, model weights or secrets are needed.
