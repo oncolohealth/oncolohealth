@@ -1,0 +1,101 @@
+{
+  "_comment": "Researcher workflows the coordinator retrieves with get_workflow. Each step names a real tool or command in this repository. Written 2026-10-24 by Sebastian with Claude Code; review_status pending. They describe procedure, not results.",
+  "review_status": "pending",
+  "workflows": [
+    {
+      "id": "choose-specialist-type",
+      "title": "Pick the right kind of specialist: encoder, detector, segmenter or risk model",
+      "when": "A researcher asks which model to use, or treats different model kinds as interchangeable.",
+      "steps": [
+        "Name the question's output first: a feature vector to train on (encoder), locations of findings (detector), region outlines (segmenter) or a calibrated probability of an outcome for a defined population (risk model).",
+        "route_models with the real task, modality and anatomy. Read compatible, blocked and rejected lists; never pick one silently.",
+        "get_record on each candidate and compare outputs.type: embedding, boxes_3d and mask_3d are different native outputs.",
+        "An encoder's embedding is not a probability; it needs a separately fitted and evaluated head. A detector's confidence is not a malignancy probability. A segmenter's mask is not a diagnosis.",
+        "This catalog has no risk model. Say so instead of offering an encoder or detector as one."
+      ],
+      "tools": ["route_models", "get_record", "search_catalog"],
+      "must_not": ["Convert an embedding, detection score or mask into a cancer probability", "Claim a risk model exists"],
+      "sources": ["catalog/models.json", "catalog/cards.json", "cancer_workbench/common/types.py (ResultEnvelope)"]
+    },
+    {
+      "id": "audit-dataset-before-training",
+      "title": "Audit a dataset and find the evidence needed before training",
+      "when": "Before any split, training run or performance claim on a dataset.",
+      "steps": [
+        "get_record on the dataset; read counts, labels.reference_standard, unresolved and known_overlap.",
+        "Establish the true units: images, studies, lesions and patients are different counts. If patients are unknown, say unknown.",
+        "Run the local audit (python -m cancer_workbench btxrd manifest, then the audit in the Datasets screen) and read every error finding.",
+        "Check exact and near duplicates (python -m cancer_workbench near-duplicates) and keep confirmed same-image pairs in one duplicate_group.",
+        "Never infer patient groups from filenames, row order, age/gender or center. Without a real mapping, any result is image-level and exploratory.",
+        "List the exact evidence still needed: a pseudonymous patient/lesion map, the per-row reference standard, adjudication of conflicting labels, and an untouched evaluation source."
+      ],
+      "tools": ["get_record", "search_catalog"],
+      "commands": ["python -m cancer_workbench btxrd manifest", "python -m cancer_workbench btxrd-review audit", "python -m cancer_workbench near-duplicates"],
+      "must_not": ["Invent patient IDs or groups", "Call an image-level result patient-independent"],
+      "sources": ["docs/research-handoff/BTXRD-readiness.md", "docs/reports/E-btxrd-source-shift.md", "Team Hub decision D04"]
+    },
+    {
+      "id": "plan-frozen-encoder-baseline",
+      "title": "Plan a frozen-encoder training recipe",
+      "when": "A researcher wants to train a classifier on top of an existing encoder.",
+      "steps": [
+        "Freeze the endpoint and ordered labels before looking at results (BTXRD supports three_class, tumor_vs_normal and benign_vs_malignant; none is decided).",
+        "Fix preprocessing per encoder from its processor config and keep it identical across arms; choose any variant on validation data only.",
+        "Partition by patient when IDs exist (grouped split); otherwise label the run exploratory and keep duplicate groups together. Hold a whole source out if you want a shift estimate, and do not reuse a source you have already examined as a final test.",
+        "Handle class imbalance in the metric (per-class recall, balanced accuracy, AP for the rare class) and with class weights, not by dropping data silently.",
+        "Bind features to measured image hashes and model identity; the extraction refuses changed inputs and legacy caches.",
+        "Budget: measure a tiny extraction first (RAD-DINO about 2.3 images/s on the 8 GB MPS laptop, ResNet-50 about 30-40/s) and check the 40 GB storage budget.",
+        "Checkpoint and resume: feature caches are written atomically and reused when their binding matches, so an interrupted run restarts without recomputing finished encoders.",
+        "Failure recovery: a refused fit (misaligned features, missing class, group spanning partitions) is reported, not retried with relaxed checks."
+      ],
+      "tools": ["get_record", "route_models"],
+      "commands": ["python -m cancer_workbench baseline --encoder rad-dino --endpoint three_class --protocol image_stratified"],
+      "must_not": ["Tune on test data", "Report image-level CIs as patient-level"],
+      "sources": ["docs/reports/E-btxrd-exploratory-baseline.md", "docs/reports/F-evaluation-protocol.md", "docs/reports/E-model-runtime-check.md"]
+    },
+    {
+      "id": "handle-unavailable-or-rejected",
+      "title": "Handle empty searches, wrong categories, unavailable models and rejected runs",
+      "when": "A tool returns nothing, an error, or a rejected/failed envelope.",
+      "steps": [
+        "Report the observed result verbatim: status, errors and which check failed.",
+        "Empty search: say nothing matched and suggest the nearest real query or record type, without inventing a record.",
+        "Wrong category (for example a dataset id passed as a model): name the mismatch.",
+        "Catalog-only or gated model: give the blocker (evidence_state, inference_permission, missing adapter, gated terms) and who must act.",
+        "Rejected specialist run: quote the rejection reasons; do not describe what the model 'would have' found."
+      ],
+      "tools": ["search_catalog", "get_record", "run_specialist"],
+      "must_not": ["Fabricate outputs after a rejection", "Retry with altered inputs to force success without saying so"],
+      "sources": ["cancer_workbench/adapters/base.py (execute_specialist)", "cancer_workbench/coordinator/loop.py (system prompt)"]
+    },
+    {
+      "id": "read-research-claims",
+      "title": "Read retrieved research without overstating it",
+      "when": "Summarizing a paper, model card or dataset paper for a researcher.",
+      "steps": [
+        "Keep the source identity: DOI, URL or pinned revision, and the section the claim comes from.",
+        "Separate what the source claims from what was reproduced here; a catalog evidence_state of cataloged means nothing was reproduced.",
+        "A citation that resolves is not support for the claim: check that the cited passage says it.",
+        "Flag population, modality and label-reference differences between the source study and the researcher's data."
+      ],
+      "tools": ["get_record", "search_catalog"],
+      "must_not": ["Present a source's reported metric as locally reproduced", "Treat a matching citation ID as claim support"],
+      "sources": ["Cancer-AI-Research-Context.md", "docs/reports/research-evidence-review.md"]
+    },
+    {
+      "id": "choose-reuse-path",
+      "title": "Choose direct use, feature transfer, limited adaptation or distillation",
+      "when": "Deciding how to reuse an existing model for a new task.",
+      "steps": [
+        "Direct use: only when the model's task, modality, anatomy and output already match and it is runnable here (route_models).",
+        "Feature transfer: freeze an encoder and fit a small head when labels exist but no specialist matches; needs inference permission and an audited dataset.",
+        "Limited adaptation (fine-tuning): only after a frozen baseline exists and the terms_review adaptation entry is allowed with evidence.",
+        "Distillation: only with an evaluated teacher and an allowed distillation entry; teacher outputs are their own data product with their own rights.",
+        "The experiment planner returns blocked or ready_for_review drafts; neither authorizes execution."
+      ],
+      "tools": ["route_models", "get_record"],
+      "must_not": ["Treat unreviewed adaptation or distillation terms as allowed"],
+      "sources": ["cancer_workbench/experiments/plan.py", "docs/reports/B-plan-contract.md", "catalog/models.json terms_review"]
+    }
+  ]
+}

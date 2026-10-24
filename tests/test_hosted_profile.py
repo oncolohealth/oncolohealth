@@ -44,7 +44,7 @@ class HostedProfileTests(unittest.TestCase):
         self.assertNotIn("temperature", seen[0][1])
         observed = json.loads(seen[1][1]["messages"][-1]["content"])
         self.assertEqual(observed["result"]["id"], "rad-dino")
-        self.assertEqual(observed["result"]["evidence_state"], "cataloged")
+        self.assertEqual(observed["result"]["evidence_state"], load_catalog().get("rad-dino")["evidence_state"])
 
     def test_missing_required_key_stops_before_network(self):
         provider = OpenAICompatibleProvider("fixture", "http://127.0.0.1:9/v1", "synthetic",

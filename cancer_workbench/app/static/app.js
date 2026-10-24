@@ -197,8 +197,19 @@ function showDetail(id) {
       ${r.local ? `<button class="btn" data-act="prov">View provenance</button>` : ""}
       ${(!r.local || acq.subset) && acq.tier && acq.tier !== "manual" ? `<button class="btn primary" data-act="queue">${acq.subset ? "Choose a subset" : "Add to downloads"}</button>` : ""}
     </div>
-    <div id="detail-extra"></div>`;
+    <div id="detail-extra"></div>
+    ${r.record_type === "model" && r.adapter ? specialistPanel(r) : ""}`;
   $$("#catalog-table tbody tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.id === id));
+  box.querySelector(".specialist-form")?.addEventListener("submit", e => {
+    e.preventDefault();
+    const f = e.target, out = box.querySelector(".specialist-result"), btn = f.querySelector("button");
+    btn.disabled = true;
+    out.innerHTML = '<p class="hint">Running…</p>';
+    guard(async () => {
+      const res = await api("/api/specialist/run", { model_id: id, task: f.task.value, modality: f.modality.value, anatomy: f.anatomy.value, inputs: { image: f.image.value.trim() } });
+      out.innerHTML = specialistResult(res);
+    }).finally(() => { btn.disabled = false; if (out.textContent === "Running…") out.innerHTML = ""; });
+  });
   box.querySelector('[data-act="prov"]')?.addEventListener("click", () => guard(async () => {
     const p = await api(`/api/provenance/${encodeURIComponent(id)}`);
     const sels = p.selections?.length ? ` ${p.selections.length} fetch${p.selections.length === 1 ? "" : "es"} recorded with their selection.` : "";
@@ -214,6 +225,48 @@ function showDetail(id) {
     show("downloads");
     toast(`${r.name} added to the download selection.`);
   });
+}
+// Runs through /api/specialist/run, which calls the assistant's own run_specialist tool.
+function specialistPanel(r) {
+  const st = r.adapter_status;
+  const opt = v => `<option>${esc(v)}</option>`;
+  return `
+    <h3>Run specialist</h3>
+    <p class="hint">Calls <code>run_specialist</code>, the tool the assistant uses. ${r.outputs?.type === "embedding" ? "The output is a feature vector, not a probability or diagnosis." : ""}</p>
+    ${st && !st.installed ? `<p class="warn-text">Adapter not installed in this app process: ${esc(st.reasons.join("; "))}. A run returns the rejection.</p>` : ""}
+    <form class="specialist-form">
+      <label>Image<input name="image" value="btxrd:IMG000001" placeholder="btxrd:<sample_id> or uploads:<id>" required></label>
+      <div class="field-row">
+        <label>Task<select name="task">${(r.tasks || []).map(opt).join("")}</select></label>
+        <label>Modality<select name="modality">${(r.modality || []).map(opt).join("")}</select></label>
+      </div>
+      <label>Anatomy<input name="anatomy" value="bone" required></label>
+      <button type="submit" class="btn primary">Run on this image</button>
+    </form>
+    <div class="specialist-result" aria-live="polite"></div>`;
+}
+function specialistResult(res) {
+  if (res.error) return `<p class="err-text">Tool call refused: ${esc(res.error)}</p>`;
+  const env = res.result, o = env.outputs || {};
+  const badge = env.status === "ok" ? '<span class="badge ready">ok</span>' : `<span class="badge not">${esc(env.status)}</span>`;
+  const raw = `<details class="call${env.status === "ok" ? "" : " bad"}"><summary>Result envelope ${esc(env.run_id)}</summary><pre>${esc(JSON.stringify(env, null, 2))}</pre></details>`;
+  if (env.status !== "ok") return `<p>${badge}</p><ul class="warn-list">${env.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>${raw}`;
+  const enc = o.encoder || {}, inp = o.input || {};
+  const rows = [
+    ["Output", `${o.type}, ${o.dim} × ${o.dtype}, L2 norm ${o.l2_norm}`],
+    ["Meaning", o.semantics],
+    ["Vector SHA-256", o.embedding_sha256],
+    ["First values", (o.embedding_preview || []).join(", ")],
+    ["Image", `${inp.file} (${inp.width}×${inp.height} ${inp.mode}), sha256 ${inp.sha256}`],
+    ["Revision", enc.revision],
+    ["Weights", `${enc.weights?.sha256} (${fmtBytes(enc.weights?.bytes)})`],
+    ["Processor", `${enc.processor_config?.file} ${enc.processor_config?.sha256}`],
+    ["Preprocessing", `${enc.variant}: ${enc.preprocessing?.policy}`],
+    ["Device", `${enc.device}, ${o.seconds} s`],
+    ["Terms", o.terms?.scope],
+  ].filter(([, v]) => v);
+  return `<p>${badge}${env.synthetic ? ' <span class="badge synthetic">synthetic</span>' : ""}</p>
+    <dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>${raw}`;
 }
 $("#catalog-table").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });
 $("#catalog-table").addEventListener("keydown", e => { const tr = e.target.closest("tr[data-id]"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); showDetail(tr.dataset.id); } });

@@ -20,6 +20,7 @@ from ..acquisition.fetch import plan, target_dir
 from ..acquisition.sources import AccessError
 from ..acquisition.subsets import summarize_units
 from ..adapters import SYNTHETIC_MODEL_RECORD, SyntheticThresholdAdapter
+from ..adapters.installed import adapter_status, installed_adapters
 from ..common.paths import CONFIG_DIR, DATA_DIR, MODELS_DIR, PROJECT_ROOT
 from ..coordinator import ProviderError, default_toolbox, load_profiles, make_provider, run_turn
 from ..coordinator.config import config_path
@@ -51,12 +52,15 @@ class ApiError(Exception):
 
 def catalog() -> dict:
     cat = load_catalog()
+    status = adapter_status(cat.models)
     out = []
     for r in cat.all():
         rec = {k: v for k, v in r.items() if k not in _HIDDEN}
         rec["record_type"] = r["_kind"]
         prov = target_dir(r) / "PROVENANCE.json"
         rec["local"] = prov.exists()
+        if r["_kind"] == "model" and r.get("adapter") in status:
+            rec["adapter_status"] = status[r["adapter"]]
         if rec["local"] and r.get("acquisition", {}).get("subset"):
             rec["local_files"] = len(json.loads(prov.read_text()).get("files", []))
         out.append(rec)
@@ -79,7 +83,34 @@ def route_options() -> dict:
 def route(body: dict) -> dict:
     inp = {k: int(body[k]) for k in ("channels", "spatial_dims") if body.get(k) not in (None, "")}
     req = {"task": body.get("task"), "modality": body.get("modality"), "anatomy": body.get("anatomy"), "input": inp}
-    return route_models(req, load_catalog().models)
+    models = load_catalog().models
+    return route_models(req, models, installed=set(installed_adapters(models)))
+
+
+# ---------- specialists ----------
+
+SPECIALIST_LOG = PROJECT_ROOT / "runs" / "specialist-calls"
+
+
+def specialist_run(body: dict) -> dict:
+    """Run one specialist through the coordinator's own run_specialist tool, so the UI and the assistant share one path.
+
+    The envelope, including rejections and failures, is also written to runs/specialist-calls/ for review.
+    """
+    allowed = {"model_id", "task", "modality", "anatomy", "inputs", "input_refs"}
+    if not isinstance(body, dict) or set(body) - allowed:
+        raise ApiError(f"Specialist requests take only {sorted(allowed)}.")
+    cat = load_catalog()
+    box = default_toolbox(cat, installed_adapters(cat.models))
+    args = json.dumps(body)
+    answer = box.call("run_specialist", args)
+    record = {"tool": "run_specialist", "arguments": body, **answer}
+    env = answer.get("result")
+    if isinstance(env, dict) and env.get("run_id"):
+        SPECIALIST_LOG.mkdir(parents=True, exist_ok=True)
+        (SPECIALIST_LOG / f"{env['created_at'].replace(':', '')}-{env['run_id']}.json").write_text(
+            json.dumps(record, indent=2, default=str) + "\n")
+    return record
 
 
 def storage() -> dict:
@@ -614,8 +645,10 @@ def ask(body: dict) -> dict:
     cat = load_catalog()
 
     def one(name):
-        box = default_toolbox(cat, {"synthetic-threshold": SyntheticThresholdAdapter()} if synthetic else {},
-                              extra_models=[SYNTHETIC_MODEL_RECORD] if synthetic else None)
+        adapters = installed_adapters(cat.models)
+        if synthetic:
+            adapters["synthetic-threshold"] = SyntheticThresholdAdapter()
+        box = default_toolbox(cat, adapters, extra_models=[SYNTHETIC_MODEL_RECORD] if synthetic else None)
         try:
             prov = make_provider(name)
             rec = run_turn(prov, box, question, history=histories.get(prov.profile) or None)
@@ -663,7 +696,7 @@ GET_ROUTES = {
 GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory, "/api/images/": image_set,
                     "/api/annotation/": annotation, "/api/score/jobs/": score_job}
 POST_ROUTES = {
-    "/api/route": route, "/api/fetch/plan": fetch_plan, "/api/fetch/start": fetch_start, "/api/fetch/cancel": fetch_cancel,
+    "/api/route": route, "/api/specialist/run": specialist_run, "/api/fetch/plan": fetch_plan, "/api/fetch/start": fetch_start, "/api/fetch/cancel": fetch_cancel,
     "/api/fetch/units": fetch_units,
     "/api/audit": audit, "/api/split": split,
     "/api/coordinator/profiles/save": save_profile, "/api/coordinator/profiles/delete": delete_profile,

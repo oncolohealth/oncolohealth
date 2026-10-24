@@ -10,11 +10,14 @@ class CatalogTests(unittest.TestCase):
     def test_shipped_catalog_is_valid(self):
         self.assertEqual(load_catalog().validate(), [])
 
-    def test_nothing_shipped_is_runnable(self):
-        # catalog-only models must never be reported runnable
+    def test_only_reviewed_models_are_runnable(self):
+        # catalog-only models must never be reported runnable; the two reviewed encoders
+        # (see test_specialist_adapters) are runnable only where their adapter is installed
         cat = load_catalog()
         res = route_models({"task": "feature_extraction", "modality": "xray", "anatomy": "bone"}, cat.models)
         self.assertTrue(res["compatible"])
+        self.assertEqual({c["id"] for c in res["compatible"] if c["runnable"]}, {"rad-dino", "resnet50-a1-in1k"})
+        res = route_models({"task": "feature_extraction", "modality": "xray", "anatomy": "bone"}, cat.models, installed=set())
         self.assertFalse(any(c["runnable"] for c in res["compatible"]))
 
     def test_runnable_state_requires_adapter(self):

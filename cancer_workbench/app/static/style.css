@@ -615,3 +615,8 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* Run specialist panel in the catalog inspector */
+.specialist-form { display: grid; gap: 8px; }
+.specialist-form .btn { justify-self: start; }
+.specialist-result:not(:empty) { margin-top: 10px; }

@@ -11,12 +11,13 @@ import math
 from typing import Any, Callable
 
 from ..adapters.base import Adapter, execute_specialist
+from ..common.paths import CATALOG_DIR
 from ..registry.store import Catalog
 from ..routing.router import route_models
 
 _PUBLIC_FIELDS = ("id", "name", "kind", "summary", "tasks", "modality", "anatomy", "input", "outputs",
                   "license", "access", "evidence_state", "inference_permission", "counts", "labels",
-                  "unresolved", "known_overlap", "citation")
+                  "unresolved", "known_overlap", "citation", "adapter", "terms_review", "reuse_permissions", "card")
 
 
 @dataclasses.dataclass
@@ -150,7 +151,7 @@ def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None
 
     def route(task: str, modality: str, anatomy: str, channels: int | None = None, spatial_dims: int | None = None) -> dict:
         inp = {k: v for k, v in (("channels", channels), ("spatial_dims", spatial_dims)) if v is not None}
-        return route_models({"task": task, "modality": modality, "anatomy": anatomy, "input": inp}, models)
+        return route_models({"task": task, "modality": modality, "anatomy": anatomy, "input": inp}, models, installed=set(adapters))
 
     def run_specialist(model_id: str, task: str, modality: str, anatomy: str, inputs: dict, input_refs: list | None = None) -> dict:
         model = next((m for m in models if m["id"] == model_id), None)
@@ -158,6 +159,16 @@ def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None
             raise KeyError(f"no model {model_id!r}")
         req = {"task": task, "modality": modality, "anatomy": anatomy, "inputs": inputs, "input_refs": input_refs or []}
         return execute_specialist(model, req, adapters).to_dict()
+
+    def get_workflow(id: str | None = None) -> dict:
+        path = CATALOG_DIR / "workflows.json"
+        flows = json.loads(path.read_text())["workflows"] if path.exists() else []
+        if id is None:
+            return {"workflows": [{"id": w["id"], "title": w["title"], "when": w["when"]} for w in flows]}
+        found = next((w for w in flows if w["id"] == id), None)
+        if found is None:
+            raise KeyError(f"no workflow {id!r}; available: {[w['id'] for w in flows]}")
+        return found
 
     s = {"type": "string"}
     return ToolBox([
@@ -168,8 +179,12 @@ def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None
         Tool("route_models", "List models compatible/incompatible with a task. Does not run anything.",
              {"type": "object", "properties": {"task": s, "modality": s, "anatomy": s, "channels": {"type": "integer"}, "spatial_dims": {"type": "integer"}},
               "required": ["task", "modality", "anatomy"]}, route),
-        Tool("run_specialist", "Run an installed, eligible specialist. Returns an observed result envelope or the rejection/failure.",
+        Tool("run_specialist", "Run an installed, eligible specialist. Returns an observed result envelope or the rejection/failure. "
+             "Frozen encoders (task feature_extraction) take inputs {\"image\": \"btxrd:<sample_id>\" or \"uploads:<id>\"} and "
+             "return a feature vector with its provenance: an embedding, not a probability or diagnosis.",
              {"type": "object", "properties": {"model_id": s, "task": s, "modality": s, "anatomy": s, "inputs": {"type": "object"},
                                                "input_refs": {"type": "array", "items": s}},
               "required": ["model_id", "task", "modality", "anatomy", "inputs"]}, run_specialist),
+        Tool("get_workflow", "Researcher workflows (procedures, not results): omit id to list them, or pass an id for its steps, tools and limits.",
+             {"type": "object", "properties": {"id": s}}, get_workflow),
     ])

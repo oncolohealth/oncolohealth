@@ -44,10 +44,12 @@ def runnable_blockers(model: dict) -> list[str]:
     return blockers
 
 
-def route_models(request: dict, models: list[dict]) -> dict:
+def route_models(request: dict, models: list[dict], installed: set[str] | None = None) -> dict:
     """Return {"compatible": [...], "rejected": [...]} or {"error": ...} for an incomplete request.
 
     Each compatible entry carries `runnable` and `blockers`; the caller decides what to do.
+    `installed` is the set of adapter ids this process can run; when given, a
+    named but uninstalled adapter is a blocker too.
     """
     missing = [f for f in REQUIRED_REQUEST_FIELDS if not request.get(f)]
     if missing:
@@ -59,5 +61,7 @@ def route_models(request: dict, models: list[dict]) -> dict:
             rejected.append({"id": m["id"], "reasons": reasons})
         else:
             blockers = runnable_blockers(m)
+            if installed is not None and m.get("adapter") and m["adapter"] not in installed:
+                blockers.append(f"adapter {m['adapter']!r} is not installed in this process")
             compatible.append({"id": m["id"], "runnable": not blockers, "blockers": blockers})
     return {"compatible": compatible, "rejected": rejected}

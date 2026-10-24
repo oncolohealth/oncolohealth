@@ -1,0 +1,464 @@
+{
+  "_comment": "Knowledge cards attached to catalog records by load_catalog and returned by get_record. Written 2026-10-24 by Sebastian with Claude Code from local files, catalog records and the cited sources; review_status pending. Local hashes are copied from each PROVENANCE.json.",
+  "review_status": "pending",
+  "cards": {
+    "rad-dino": {
+      "card_type": "model",
+      "exact_id": "microsoft/rad-dino@110cbc18d5133582e320b43d53bf5c44e410c936",
+      "role": "frozen image encoder (feature extractor)",
+      "task_modality_anatomy": "feature_extraction; X-ray; pretrained on chest radiographs only, used here on bone radiographs as a transfer experiment",
+      "input": "3 channels (grayscale replicated), 518 x 518, mean 0.5307 / std 0.2583 per preprocessor_config.json. The workbench default 'pad' pads the whole radiograph to a square; 'native_crop' reproduces the publisher's shortest-edge resize and center crop.",
+      "official_processor": "preprocessor_config.json (transformers BitImageProcessor), parsed and checked against the code's constants on every load",
+      "native_output": "768-dim CLS token after the final layer norm (pooler_output). A feature vector: no labels, probabilities or findings.",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:39:00+00:00",
+        "files": [
+          {
+            "path": "model.safetensors",
+            "bytes": 346345912,
+            "sha256": "dbfb9f54459c38773505de64a6ab7807bdcb392610fe1e697166342e43fb91ae",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "config.json",
+            "bytes": 879,
+            "sha256": "89daf9751d9576d586dedf9543c1083211611fa3a36908db7a799b3ce7c68ede",
+            "integrity": "size_only"
+          },
+          {
+            "path": "preprocessor_config.json",
+            "bytes": 756,
+            "sha256": "c537fc995c30e2353f07253899618d60e9eae3d5f82473778602c007c6523b56",
+            "integrity": "size_only"
+          },
+          {
+            "path": "LICENSE",
+            "bytes": 1072,
+            "sha256": "18d3bb3458bb9dabcdf5e74dacf256a339b8a6486338ab09a97ba865d3214928",
+            "integrity": "size_only"
+          },
+          {
+            "path": "README.md",
+            "bytes": 9258,
+            "sha256": "b2e30be71810db49214d14994ee83ba49e47ec5b9fede2ede12589e9f252ccda",
+            "integrity": "size_only"
+          }
+        ]
+      },
+      "adapter_status": "installed as frozen-encoder:rad-dino when the ml extra is importable; reachable through run_specialist (catalog: locally_reproduced, inference allowed for research use)",
+      "evidence": [
+        "Weights match the publisher checksum; loads with no missing or unexpected keys (docs/reports/E-model-runtime-check.md)",
+        "native_crop matches the publisher processor on 16 real JPEGs to within two gray levels, embedding cosine >= 0.99999 (same report)",
+        "Exploratory image-level BTXRD linear probe only (docs/reports/E-btxrd-exploratory-baseline.md); not medical performance"
+      ],
+      "training_overlap": "Five public chest X-ray sets per the model card (MIMIC-CXR, CheXpert, NIH-CXR, PadChest, BRAX; 882,775 images). No bone set listed. training_images.csv not downloaded, so overlap with BTXRD is unlikely but not checked.",
+      "terms": {
+        "inference": "allowed for research use: model card says 'shared for research purposes only' and 'not meant to be used for clinical practice'; LICENSE is MIT (Microsoft)",
+        "adaptation": "unreviewed (MIT permits modification; research-only statement still applies)",
+        "redistribution": "unreviewed: do not share weights or derived heads",
+        "distillation": "unreviewed"
+      },
+      "unknowns": [
+        "Whether chest pretraining transfers to bone tumors",
+        "Overlap with BTXRD sources (training_images.csv not checked)"
+      ],
+      "sources": [
+        "https://huggingface.co/microsoft/rad-dino/tree/110cbc18d5133582e320b43d53bf5c44e410c936",
+        "models/rad-dino/README.md",
+        "docs/reports/E-model-runtime-check.md"
+      ]
+    },
+    "resnet50-a1-in1k": {
+      "card_type": "model",
+      "exact_id": "timm/resnet50.a1_in1k@767268603ca0cb0bfe326fa87277f19c419566ef",
+      "role": "frozen image encoder (conventional ImageNet baseline)",
+      "task_modality_anatomy": "feature_extraction; natural-image pretraining, used on X-rays as the non-medical arm of a matched comparison",
+      "input": "3 channels, 288 x 288 (timm test_input_size; train size 224), ImageNet mean/std, bicubic. Workbench default 'pad' keeps the whole radiograph; 'native_crop' matches timm's transform exactly.",
+      "official_processor": "pretrained_cfg in config.json (timm), parsed and checked on every load",
+      "native_output": "2048-dim global average pool before the classifier (fc dropped on purpose). A feature vector, not ImageNet class scores and not a medical prediction.",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:38:30+00:00",
+        "files": [
+          {
+            "path": "model.safetensors",
+            "bytes": 102469840,
+            "sha256": "773525d5821de224f8f30c33377b7a795d7863e08522698200d3217d3f2a41bb",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "config.json",
+            "bytes": 756,
+            "sha256": "ff00d936f02c3b5f9f80a169d651ed28f9b6dc9cb1fd0464f92da4761caaac50",
+            "integrity": "size_only"
+          },
+          {
+            "path": "README.md",
+            "bytes": 38435,
+            "sha256": "1bf90a24888cff1da80e2e7b2e341fad1e4e448c19d92eb5bc08468393251721",
+            "integrity": "size_only"
+          }
+        ]
+      },
+      "adapter_status": "installed as frozen-encoder:resnet50-a1-in1k when the ml extra is importable; reachable through run_specialist (catalog: locally_reproduced, inference allowed for research use)",
+      "evidence": [
+        "Weights match the publisher checksum; strict load apart from the dropped fc layer (docs/reports/E-model-runtime-check.md)",
+        "native_crop matches timm exactly on 16 real JPEGs (cosine 1.0)",
+        "Specialist-path embedding for btxrd:IMG000001 equals the stored pad-variant feature cache bit for bit (2026-10-24)"
+      ],
+      "training_overlap": "ImageNet-1k natural images; no medical images expected.",
+      "terms": {
+        "inference": "allowed for research use: model card license Apache-2.0",
+        "adaptation": "unreviewed (Apache-2.0 permits it; ImageNet-1k's own non-commercial research terms may matter for derived weights)",
+        "redistribution": "unreviewed",
+        "distillation": "unreviewed"
+      },
+      "unknowns": [
+        "Whether ImageNet terms reach the weights or derived heads"
+      ],
+      "sources": [
+        "https://huggingface.co/timm/resnet50.a1_in1k/tree/767268603ca0cb0bfe326fa87277f19c419566ef",
+        "models/resnet50-a1-in1k/README.md",
+        "docs/reports/E-model-runtime-check.md"
+      ]
+    },
+    "monai-lung-nodule-ct-detection": {
+      "card_type": "model",
+      "exact_id": "MONAI/lung_nodule_ct_detection@9d6622fda0e52be0a4155fed2e0afb9c17bcd80b (bundle version 0.6.10)",
+      "role": "detector (3D RetinaNet)",
+      "task_modality_anatomy": "lung_nodule_detection; CT; chest",
+      "input": "1 channel CT patches, spatial shape multiples of 16 x 16 x 8, float16 in [0, 1] after the bundle's resampling and intensity windowing (configs/metadata.json, configs/inference.json)",
+      "official_processor": "configs/inference.json transforms in the bundle",
+      "native_output": "Per-volume dict of 3D boxes, the single label 'nodule' and detection-confidence scores. Says where nodule candidates are, not whether they are malignant.",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:40:47+00:00",
+        "files": [
+          {
+            "path": "models/model.ts",
+            "bytes": 83784539,
+            "sha256": "68afd1ed4be8d01196d575d13931dab24cc50d46a74528a47d54496ba29e2583",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "models/model.pt",
+            "bytes": 83709381,
+            "sha256": "b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "configs/metadata.json",
+            "bytes": 4455,
+            "sha256": "bf621efe2b921a77f753ba58c2e562eb6d9afd3852ae2e4240b7a0e2bb278820",
+            "integrity": "size_only"
+          }
+        ]
+      },
+      "adapter_status": "no adapter; catalog_only (evidence cataloged, inference unreviewed). run_specialist returns a rejection.",
+      "evidence": [
+        "Files hash-verified against the publisher at download; never loaded or run here"
+      ],
+      "training_overlap": "Trained on LUNA16, which is derived from LIDC-IDRI, so lidc-idri-sample and nodulemnist3d are not independent test data for it.",
+      "terms": {
+        "inference": "unreviewed (bundle Apache-2.0; LUNA16 CC BY 4.0, LIDC-IDRI CC BY 3.0)",
+        "adaptation": "unreviewed",
+        "redistribution": "unreviewed",
+        "distillation": "unreviewed"
+      },
+      "unknowns": [
+        "models/model.pt is a pickle: load only model.ts or with weights_only=True",
+        "Behaviour on CT outside LUNA16's acquisition range"
+      ],
+      "sources": [
+        "https://huggingface.co/MONAI/lung_nodule_ct_detection",
+        "models/monai-lung-nodule-ct-detection/configs/metadata.json"
+      ]
+    },
+    "monai-brats-mri-segmentation": {
+      "card_type": "model",
+      "exact_id": "MONAI/brats_mri_segmentation@370f7f9d062745fbac445e7fe6d6616d35df04ec (bundle version 0.5.4)",
+      "role": "segmenter (3D SegResNet)",
+      "task_modality_anatomy": "brain_tumor_segmentation; MRI; brain",
+      "input": "4 co-registered channels in order T1c, T1, T2, FLAIR; spatial shape multiples of 8 (configs/metadata.json)",
+      "official_processor": "configs/inference.json transforms in the bundle",
+      "native_output": "3-channel mask in [0, 1]: tumor core, whole tumor, enhancing tumor. Outlines regions; not a histologic diagnosis or grade.",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:40:55+00:00",
+        "files": [
+          {
+            "path": "models/model.ts",
+            "bytes": 18911784,
+            "sha256": "729980a0bd9347bf2397701eb329e12517918dc282a2d09c40458e95b24ceed9",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "models/model.pt",
+            "bytes": 18840620,
+            "sha256": "860ccb3f1c21c99d0410ad8a1ac4ef6b8fab60cec0a503b0ba42675741a750ae",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "configs/metadata.json",
+            "bytes": 4625,
+            "sha256": "65322a60a2a3cd49ae773a20f6b3a1bfc25baa906e5bfe784f5fb4557503dc96",
+            "integrity": "size_only"
+          }
+        ]
+      },
+      "adapter_status": "no adapter; catalog_only. run_specialist returns a rejection.",
+      "evidence": [
+        "Files hash-verified against the publisher at download; never loaded or run here"
+      ],
+      "training_overlap": "BraTS 2018 with the bundle authors' own split; msd-brain-tumour overlaps BraTS and cannot serve as independent evaluation.",
+      "terms": {
+        "inference": "unreviewed (bundle Apache-2.0; BraTS use requires citing the BraTS manuscripts)",
+        "adaptation": "unreviewed",
+        "redistribution": "unreviewed",
+        "distillation": "unreviewed"
+      },
+      "unknowns": [
+        "models/model.pt is a pickle",
+        "Needs all four sequences co-registered; a single sequence is not a valid input"
+      ],
+      "sources": [
+        "https://huggingface.co/MONAI/brats_mri_segmentation",
+        "models/monai-brats-mri-segmentation/configs/metadata.json"
+      ]
+    },
+    "medsiglip-448": {
+      "card_type": "model",
+      "exact_id": "google/medsiglip-448@9cea28a1a1195f665105faa6e8544c112fd960a4 (pinned in the catalog, not downloaded)",
+      "role": "image-text encoder (embeddings and zero-shot similarity)",
+      "task_modality_anatomy": "feature_extraction / zero_shot_classification; several medical modalities per the publisher",
+      "input": "448 x 448 per the publisher; exact processor not inspected here",
+      "official_processor": "preprocessor_config.json in the gated repository (not acquired)",
+      "native_output": "Embeddings and image-text similarities. Neither is a validated bone-tumor classifier.",
+      "local_artifact": null,
+      "adapter_status": "not acquired; no adapter. Gated: HAI-DEF terms must be accepted by a named person first.",
+      "evidence": [
+        "Publisher documentation only, as summarized in the Team Hub T02 tab; nothing run here"
+      ],
+      "training_overlap": "Not reviewed. Check against BTXRD's Radiopaedia and MedPix sources before any evaluation.",
+      "terms": {
+        "inference": "unreviewed: Health AI Developer Foundations terms (https://developers.google.com/health-ai-developer-foundations/terms)",
+        "adaptation": "unreviewed (HAI-DEF has its own derivative provisions)",
+        "redistribution": "unreviewed (HAI-DEF has distribution and hosted-service provisions)",
+        "distillation": "unreviewed"
+      },
+      "unknowns": [
+        "Who on the team accepts the HAI-DEF terms",
+        "Exact processor and output dimension",
+        "Pretraining overlap with BTXRD sources"
+      ],
+      "sources": [
+        "https://developers.google.com/health-ai-developer-foundations/medsiglip",
+        "https://huggingface.co/google/medsiglip-448"
+      ]
+    },
+    "btxrd": {
+      "card_type": "dataset",
+      "release": "figshare doi:10.6084/m9.figshare.27865398.v1, CC BY 4.0; paper Yao et al., Scientific Data 12, 88 (2025), doi:10.1038/s41597-024-04311-y",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:42:16+00:00",
+        "files": [
+          {
+            "path": "BTXRD.zip",
+            "bytes": 840474929,
+            "sha256": "e7c800c3b4e090262b160525a0765f9d93bcc53d639c03806a3ac47b0ded3373",
+            "integrity": "publisher_checksum"
+          }
+        ]
+      },
+      "units": "3,746 radiograph images (3,719 .jpeg + 27 .jpg) and 1,867 LabelMe annotation files. Patients and lesions: unknown, because dataset.xlsx has no patient, case or lesion column and the paper says several views can show the same lesion.",
+      "labels": "Image-level normal 1,879 / benign 1,525 / malignant 342 from clean flag triples; tumor boxes and polygons; subtype, site, center, age, gender, view.",
+      "reference_standard": "Histology or two radiology experts per the paper; which applies to each row is not recorded.",
+      "grouping": "None in the release. The workbench refuses to infer patients from filenames, order, age/gender or center (Hub D04).",
+      "duplicates_and_overlap": "21 byte-identical pairs (2 with conflicting benign/normal labels, all 4 images unlabeled). Feature-similarity search found more near duplicates and likely same-patient pairs, many crossing an image-stratified split. Center 1 is three hospitals; centers 2 and 3 are Radiopaedia and MedPix, already examined as test data.",
+      "privacy": "Some source JPEGs keep EXIF GPS, author and date tags; review before sharing derivatives.",
+      "compatible_models": [
+        "rad-dino (embeddings)",
+        "resnet50-a1-in1k (embeddings)",
+        "medsiglip-448 once acquired"
+      ],
+      "can_teach": "Exploratory image-level classification, source-shift sensitivity, box/polygon handling and why missing patient IDs block patient-independent claims.",
+      "cannot_teach": "Patient-independent or clinical accuracy.",
+      "data_products": {
+        "medical_images_labels": "images, flags and annotations under CC BY 4.0 (attribution and change notices required)",
+        "literature": "the Scientific Data paper",
+        "tool_workflows": "audit, manifest, baseline, source-shift and near-duplicate commands in this repository",
+        "teacher_outputs": "None. No teacher outputs exist or are permitted for this record yet."
+      },
+      "unknowns": [
+        "patient/lesion mapping",
+        "per-row reference standard",
+        "overlap with other public bone X-ray sets"
+      ],
+      "sources": [
+        "https://doi.org/10.6084/m9.figshare.27865398.v1",
+        "https://doi.org/10.1038/s41597-024-04311-y",
+        "docs/reports/E-btxrd-source-shift.md",
+        "docs/research-handoff/BTXRD-readiness.md"
+      ]
+    },
+    "cbis-ddsm": {
+      "card_type": "dataset",
+      "release": "TCIA collection CBIS-DDSM, doi:10.7937/K9/TCIA.2016.7O02S9CY, CC BY 3.0; Lee et al. 2017",
+      "local_artifact": null,
+      "units": "1,566 participants carrying 6,671 TCIA patient IDs (several per participant), 6,775 DICOM series, 3,568 abnormality rows. 163 GB in total, so only patient subsets fit the 40 GB budget; nothing is in data/ yet.",
+      "labels": "Lesion-level pathology MALIGNANT / BENIGN / BENIGN_WITHOUT_CALLBACK, BI-RADS assessment, density and subtlety in four case-description CSVs (calc/mass x train/test).",
+      "reference_standard": "Pathology column per row; how each row was confirmed is not reviewed.",
+      "grouping": "Verified: P_xxxxx participant IDs group all of a participant's patient IDs.",
+      "duplicates_and_overlap": "The official split was made separately for mass and calcification cases, so 31 participants appear in both a train and a test file; a patient-level split must regroup them.",
+      "compatible_models": [
+        "None cataloged for mammography: the router rejects rad-dino and resnet50-a1-in1k for modality 'mammography'"
+      ],
+      "can_teach": "Patient-grouped splitting when real IDs exist, lesion versus image units, and auditing an official split for leakage.",
+      "cannot_teach": "Anything about bone tumors; screening performance without a reviewed protocol.",
+      "data_products": {
+        "medical_images_labels": "DICOM images, crops and masks plus CSV labels under CC BY 3.0",
+        "literature": "Lee et al. 2017",
+        "tool_workflows": "subset fetch by participant (fetch plan|get cbis-ddsm --sample N)",
+        "teacher_outputs": "None. No teacher outputs exist or are permitted for this record yet."
+      },
+      "unknowns": [
+        "per-row reference standard"
+      ],
+      "sources": [
+        "https://doi.org/10.7937/K9/TCIA.2016.7O02S9CY",
+        "https://www.cancerimagingarchive.net/collection/cbis-ddsm/"
+      ]
+    },
+    "lidc-idri-sample": {
+      "card_type": "dataset",
+      "release": "TCIA collection LIDC-IDRI, doi:10.7937/K9/TCIA.2015.LO9QL9SX, CC BY 3.0; Armato et al. 2011",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:54:06+00:00",
+        "files": [
+          {
+            "path": "LIDC-IDRI-0001/1.3.6.1.4.1.14519.5.2.1.6279.6001.179049373636438705059720603192.zip",
+            "bytes": 34607329,
+            "sha256": "35ed2b30bed39f338741e588f16a95df6ddcafec4b6da22f5a057113daafc444",
+            "integrity": "trust_on_first_use"
+          },
+          {
+            "path": "LIDC-IDRI-0003/1.3.6.1.4.1.14519.5.2.1.6279.6001.170706757615202213033480003264.zip",
+            "bytes": 36104899,
+            "sha256": "610185919aa9e43eaa324d3f6fa7f1eec519c820ee8ef733e1a4debff57fc920",
+            "integrity": "trust_on_first_use"
+          },
+          {
+            "path": "LIDC-IDRI-0005/1.3.6.1.4.1.14519.5.2.1.6279.6001.129007566048223160327836686225.zip",
+            "bytes": 34033934,
+            "sha256": "b9a1f85bfc9ec0cce38ca14050531400abf6cd80956e090d9d1ebe35624ce1f4",
+            "integrity": "trust_on_first_use"
+          }
+        ]
+      },
+      "units": "3 patients, 3 CT series, 406 DICOM images here (collection: 1,010 patients, 1,018 CT series). Files recorded trust-on-first-use (no publisher checksum).",
+      "labels": "None here: radiologist XML annotations are distributed separately and were not fetched.",
+      "reference_standard": "Not applicable without the XML reads; LIDC reads are radiologist annotations, not pathology.",
+      "grouping": "TCIA patient IDs (LIDC-IDRI-0001 etc.).",
+      "duplicates_and_overlap": "LIDC-IDRI is the source of LUNA16, the MONAI lung detector's training data, and of NoduleMNIST3D.",
+      "compatible_models": [
+        "monai-lung-nodule-ct-detection (catalog-only, no adapter)"
+      ],
+      "can_teach": "DICOM ingestion and a detector adapter smoke test.",
+      "cannot_teach": "Detector evaluation: the detector was trained on this collection.",
+      "data_products": {
+        "medical_images_labels": "CT DICOM under CC BY 3.0",
+        "literature": "Armato et al. 2011",
+        "tool_workflows": "subset fetch by patient",
+        "teacher_outputs": "None. No teacher outputs exist or are permitted for this record yet."
+      },
+      "unknowns": [],
+      "sources": [
+        "https://doi.org/10.7937/K9/TCIA.2015.LO9QL9SX"
+      ]
+    },
+    "breastmnist": {
+      "card_type": "dataset",
+      "release": "MedMNIST v2 (Yang et al., Scientific Data 2023), Zenodo doi:10.5281/zenodo.10519652, CC BY 4.0; source breast ultrasound set from Al-Dhabyani et al. 2020",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:43:04+00:00",
+        "files": [
+          {
+            "path": "breastmnist.npz",
+            "bytes": 559580,
+            "sha256": "3a22d2a4625e7dd8903f0f59030e81a3d0c222bece2e5e10927456cb50efdec1",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "breastmnist_224.npz",
+            "bytes": 30903564,
+            "sha256": "833ebdedcee2fd9aec6e242b0c59af91410302d9b6247a012bd71af51ac867bb",
+            "integrity": "publisher_checksum"
+          }
+        ]
+      },
+      "units": "780 grayscale ultrasound images at 28 x 28 (and 224 x 224): train 546, val 78, test 156, measured from the local npz. Patients: unknown.",
+      "labels": "Binary. Local label counts (index 0 / 1): train 147/399, val 21/57, test 42/114. MedMNIST documents 0 = malignant, 1 = normal or benign (not re-checked against the source here).",
+      "reference_standard": "Inherited from the source dataset; not reviewed.",
+      "grouping": "None; MedMNIST splits may not respect source patients.",
+      "duplicates_and_overlap": "Not checked.",
+      "compatible_models": [
+        "Router: rad-dino rejects modality 'ultrasound'; resnet50-a1-in1k accepts it as a generic encoder"
+      ],
+      "can_teach": "Fast pipeline and loader tests on small arrays.",
+      "cannot_teach": "Medical performance: tiny downsampled images with unknown patient grouping.",
+      "data_products": {
+        "medical_images_labels": "npz arrays under CC BY 4.0",
+        "literature": "MedMNIST v2 paper",
+        "tool_workflows": "none specific",
+        "teacher_outputs": "None. No teacher outputs exist or are permitted for this record yet."
+      },
+      "unknowns": [
+        "patient grouping",
+        "label index meaning not re-checked locally"
+      ],
+      "sources": [
+        "https://doi.org/10.5281/zenodo.10519652"
+      ]
+    },
+    "nodulemnist3d": {
+      "card_type": "dataset",
+      "release": "MedMNIST v2, Zenodo doi:10.5281/zenodo.10519652, CC BY 4.0 (source LIDC-IDRI, CC BY 3.0)",
+      "local_artifact": {
+        "retrieved_at": "2026-10-24T02:53:41+00:00",
+        "files": [
+          {
+            "path": "nodulemnist3d.npz",
+            "bytes": 29299364,
+            "sha256": "5dc6f82bdb2b91f300263522aab82f7c034d0b264692f6d5f4c70179ad27f76b",
+            "integrity": "publisher_checksum"
+          },
+          {
+            "path": "nodulemnist3d_64.npz",
+            "bytes": 289765731,
+            "sha256": "ac9b99b9cc523f1cc0ad320b18eb4a63693e005c744c550e9606bfed75ecc41d",
+            "integrity": "publisher_checksum"
+          }
+        ]
+      },
+      "units": "1,633 nodule volumes at 28^3 (and 64^3): train 1,158, val 165, test 310, measured from the local npz. Patients: not in the release.",
+      "labels": "Binary benign/malignant. Local counts (index 0 / 1): train 863/295, val 123/42, test 246/64.",
+      "reference_standard": "Radiologist malignancy suspicion ratings, not confirmed diagnosis.",
+      "grouping": "No patient IDs; several nodules can come from one patient.",
+      "duplicates_and_overlap": "Derived from LIDC-IDRI, the MONAI lung detector's training source.",
+      "compatible_models": [
+        "None cataloged for 3D CT classification"
+      ],
+      "can_teach": "3D array handling and why a rating-derived label is not a pathology label.",
+      "cannot_teach": "Malignancy detection performance.",
+      "data_products": {
+        "medical_images_labels": "npz arrays under CC BY 4.0",
+        "literature": "MedMNIST v2; Armato et al. 2011",
+        "tool_workflows": "none specific",
+        "teacher_outputs": "None. No teacher outputs exist or are permitted for this record yet."
+      },
+      "unknowns": [
+        "patient grouping"
+      ],
+      "sources": [
+        "https://doi.org/10.5281/zenodo.10519652"
+      ]
+    }
+  }
+}

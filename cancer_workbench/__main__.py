@@ -1,4 +1,4 @@
-"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|btxrd-review|baseline|source-shift|near-duplicates> ..."""
+"""CLI: python -m cancer_workbench <app|fetch|catalog|route|specialist|curriculum|coordinator|btxrd|btxrd-review|baseline|source-shift|near-duplicates> ..."""
 from __future__ import annotations
 
 import argparse
@@ -166,6 +166,46 @@ def _near_duplicates(argv: list[str]) -> int:
     return 0
 
 
+def _specialist(argv: list[str]) -> int:
+    from .adapters.installed import adapter_status
+    from .app import api
+    from .registry import load_catalog
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench specialist",
+                                 description="Run a catalog specialist through the coordinator's run_specialist tool (same path as the app).")
+    ap.add_argument("cmd", choices=["status", "run"])
+    ap.add_argument("--model", help="catalog model id, e.g. rad-dino")
+    ap.add_argument("--image", help="btxrd:<sample_id> or uploads:<id>")
+    ap.add_argument("--task", default="feature_extraction")
+    ap.add_argument("--modality", default="xray")
+    ap.add_argument("--anatomy", default="bone")
+    ap.add_argument("--return-vector", action="store_true", help="include the full embedding in the output")
+    a = ap.parse_args(argv)
+    if a.cmd == "status":
+        print(json.dumps(adapter_status(load_catalog().models), indent=2))
+        return 0
+    if not a.model or not a.image:
+        ap.error("run needs --model and --image")
+    inputs = {"image": a.image, **({"return_vector": True} if a.return_vector else {})}
+    out = api.specialist_run({"model_id": a.model, "task": a.task, "modality": a.modality, "anatomy": a.anatomy, "inputs": inputs})
+    print(json.dumps(out, indent=2, default=str))
+    return 0 if out.get("result", {}).get("status") == "ok" else 1
+
+
+def _curriculum(argv: list[str]) -> int:
+    from .curriculum import capture as cap
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench curriculum",
+                                 description="Capture candidate conversations from observed tool results (pending review; never admitted automatically).")
+    ap.add_argument("cmd", choices=["capture"])
+    a = ap.parse_args(argv)
+    out = cap.capture()
+    manifest = json.loads((out / "manifest.json").read_text())
+    print(json.dumps({k: manifest[k] for k in ("candidates", "tool_calls", "counts")}, indent=2))
+    print(f"wrote {out}")
+    return 0
+
+
 def _app(argv: list[str]) -> int:
     from .app.server import serve
 
@@ -179,12 +219,14 @@ def _app(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "btxrd-review": _btxrd_review, "baseline": _baseline,
+    commands = {"fetch": None, "catalog": _catalog, "route": _route, "specialist": _specialist, "curriculum": _curriculum, "coordinator": _coordinator, "btxrd": _btxrd, "btxrd-review": _btxrd_review, "baseline": _baseline,
                 "source-shift": _source_shift, "near-duplicates": _near_duplicates, "app": _app}
     if not argv or argv[0] not in commands:
         print(__doc__ + "\n  app          open the local researcher app in your browser\n"
               "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
-              "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
+              "  route        list compatible models for a task\n"
+              "  specialist   status / run an installed specialist through the coordinator's tool path\n"
+              "  curriculum   capture candidate tool-use conversations (pending review)\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
               "  btxrd        describe the BTXRD release / build its manifest\n"
               "  btxrd-review audit local ZIP / prepare or check evidence CSV (no network or training)\n"
               "  baseline     exploratory frozen-encoder baseline on BTXRD (needs the ml extra)\n"

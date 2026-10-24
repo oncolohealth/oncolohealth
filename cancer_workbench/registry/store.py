@@ -1,4 +1,4 @@
-"""Load the model and dataset catalogs (catalog/models.json, catalog/datasets.json)."""
+"""Load the model and dataset catalogs (catalog/models.json, catalog/datasets.json) and their knowledge cards (catalog/cards.json)."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ from .schema import validate_dataset, validate_model
 
 
 class Catalog:
-    def __init__(self, models: list[dict], datasets: list[dict]):
+    def __init__(self, models: list[dict], datasets: list[dict], cards: dict[str, dict] | None = None):
         self.models = [dict(m, _kind="model") for m in models]
         self.datasets = [dict(d, _kind="dataset") for d in datasets]
         ids = [r["id"] for r in self.all()]
@@ -17,6 +17,10 @@ class Catalog:
         if dupes:
             raise ValueError(f"duplicate catalog ids: {sorted(dupes)}")
         self._by_id = {r["id"]: r for r in self.all()}
+        self.orphan_cards = sorted(set(cards or {}) - set(self._by_id))
+        for rid, card in (cards or {}).items():
+            if rid in self._by_id:
+                self._by_id[rid]["card"] = card
 
     def all(self) -> list[dict]:
         return self.models + self.datasets
@@ -27,7 +31,7 @@ class Catalog:
     def validate(self) -> list[str]:
         return [e for m in self.models for e in validate_model(m)] + [
             e for d in self.datasets for e in validate_dataset(d)
-        ]
+        ] + [f"cards.json: no catalog record {rid!r}" for rid in self.orphan_cards]
 
     def search(self, text: str = "", kind: str | None = None) -> list[dict]:
         """Naive substring search over id/name/tasks/modality/anatomy. Workstream D may replace this."""
@@ -47,4 +51,5 @@ class Catalog:
 def load_catalog(root: Path = CATALOG_DIR) -> Catalog:
     models = json.loads((root / "models.json").read_text())["records"]
     datasets = json.loads((root / "datasets.json").read_text())["records"]
-    return Catalog(models, datasets)
+    cards = root / "cards.json"
+    return Catalog(models, datasets, json.loads(cards.read_text())["cards"] if cards.exists() else None)
