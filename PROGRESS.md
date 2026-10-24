@@ -45,18 +45,18 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 ## Milestone 1: Bone X-ray workflow (BTXRD)
 
 ### A: Dataset curator
-- [~] Inventory `data/btxrd/BTXRD/BTXRD/`: found `images/` (3,719 .jpeg + 27 .jpg = 3,746, matching the paper), `Annotations/` (1,867 .json = tumor count), `dataset.xlsx`, plus a stray Office lock file `~$dataset(total).xlsx` in the release. Still to do: metadata columns, annotation format, `describe_release`
-- [ ] Recover patient grouping if the release provides it. If it doesn't, document which claims become unsupported and propose an alternative (e.g. near-duplicate clustering + per-center grouping)
+- [x] Inventory `data/btxrd/BTXRD/BTXRD/` (`python3 -m cancer_workbench btxrd describe`): 3,746 images (3,719 .jpeg + 27 .jpg), 1,867 LabelMe 5.4.1 annotation JSONs (2,324 rectangles + 2,318 polygons, one file per tumor image), `dataset.xlsx` (Sheet1 only; Sheet2/3 empty), plus a stray 165-byte Office lock file. Every image, row and annotation ID reconciles. 37 columns: image_id, center (1/2/3: 2,938/549/259), age, gender, 15 site flags, tumor/benign/malignant, 9 subtype flags, region (upper/lower limb, pelvis), view (frontal/lateral/oblique). Exactly one region and one view per row
+- [~] Recover patient grouping if the release provides it. **Checked 2026-10-23: it does not.** `dataset.xlsx` has no patient, case or lesion column. Many consecutive rows share center, age and gender (e.g. IMG000002/3), consistent with several views per patient, but grouping must not be derived from that (Hub D04). Next: ask the maintainers for a pseudonymous mapping (Hub Q01). If it doesn't, document which claims become unsupported and propose an alternative (e.g. near-duplicate clustering + per-center grouping)
 - [ ] Near-duplicate / same-patient detection (perceptual hash on images)
-- [ ] Confirm label meanings and reference standard (histopathology vs. radiologic) from the paper
+- [ ] Confirm label meanings and reference standard (histopathology vs. radiologic) from the paper. Indicators are clean: only 000 (1,879 normal), 110 (1,525 benign), 101 (342 malignant). One row, IMG001276, lists two benign subtypes (osteochondroma + synovial osteochondroma) while its annotation says synovial osteochondroma only; it is flagged in the manifest
 - [ ] Check source overlap with other public bone X-ray sets
-- [ ] `build_manifest` → `data/btxrd/manifest.csv`, with `partition=unassigned`
+- [x] `build_manifest` → `data/btxrd/manifest.csv`, with `partition=unassigned` (`python3 -m cancer_workbench btxrd manifest [--endpoint three_class|tumor_vs_normal|benign_vs_malignant]`). 3,746 rows, all image sha256s verified by the audit; `patient_id` empty everywhere, so the audit reports `missing_patient_id` and `ready_for_training: false`
 - [ ] Readiness report `docs/reports/A-btxrd-readiness.md` with an acquire/defer/catalog-only recommendation
 
 ### B: Experiment design
-- [ ] **Endpoint decision** (record in report): tumor-vs-normal *or* benign-vs-malignant (342 malignant images, source-reported) at image or patient level
+- [ ] **Endpoint decision** (record in report; Hub Q02, still open): three-class, tumor-vs-normal *or* benign-vs-malignant (342 malignant images, confirmed in `dataset.xlsx`). Without patient IDs only image-level, exploratory evaluation is supported. The manifest builder supports all three; `three_class` is its default, not a decision
 - [ ] Protocol: eligibility, preprocessing policy, grouped split fractions + seed, threshold rule, metrics, error review
-- [ ] Arms: frozen encoder (RAD-DINO now; MedSigLIP once gated access is granted) + linear head vs. ResNet-50 (and DINOv2) matched baseline
+- [~] Arms (Hub Q03, decided 2026-10-23): frozen RAD-DINO + linear head vs. frozen ResNet-50 + linear head, both already downloaded. MedSigLIP joins as a second medical arm once its gated access is granted
 - [ ] Check MedSigLIP/RAD-DINO pretraining overlap with BTXRD sources
 - [ ] Implement `experiments/plan.py::plan_experiment`
 

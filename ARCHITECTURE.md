@@ -25,7 +25,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 
 | Path | Role | Status |
 |---|---|---|
-| `cancer_workbench/__main__.py` | CLI dispatcher: `app`, `fetch`, `catalog`, `route`, `coordinator` | done |
+| `cancer_workbench/__main__.py` | CLI dispatcher: `app`, `fetch`, `catalog`, `route`, `coordinator`, `btxrd` | done |
 | `common/types.py` | Shared types: `EvidenceState`, `Permission`, `ResultStatus`, `ResultEnvelope` | done; changes need cross-workstream review |
 | `common/paths.py` | `PROJECT_ROOT`, `CATALOG_DIR`, `CONFIG_DIR`, `DATA_DIR`, `MODELS_DIR` (env-overridable) | done |
 | `registry/store.py` | `load_catalog()` → `Catalog` (models + datasets tagged with `_kind`, duplicate-id check, lookup, search) | done |
@@ -40,7 +40,8 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `datasets/manifest.py` | Manifest CSV contract (`FIELDS`, `PARTITIONS`), read/write | done |
 | `datasets/audit.py` | `audit_dataset`: leakage, missing patient ids, labels, file integrity | done (no pixel/near-duplicate checks) |
 | `datasets/splits.py` | `grouped_split`: deterministic, group-preserving, label-stratified | done |
-| `datasets/btxrd.py` | BTXRD release → manifest | stub |
+| `datasets/btxrd.py` | BTXRD release → `describe_release` inventory and `build_manifest` (endpoints: `three_class`, `tumor_vs_normal`, `benign_vs_malignant`) | done |
+| `datasets/xlsx.py` | Read-only stdlib `.xlsx` reader for metadata sheets | done |
 | `coordinator/providers.py` | `OpenAICompatibleProvider` (any `/chat/completions` server), `ScriptedProvider` for tests | done |
 | `coordinator/config.py` | Named profiles from `configs/coordinator.json` or `configs/coordinator.example.json` | done |
 | `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist` | done |
@@ -66,8 +67,8 @@ common          ◄── everything
 registry        ◄── acquisition.fetch, coordinator.tools, app, __main__
 routing         ◄── adapters.base, coordinator.tools, app, __main__
 adapters        ◄── coordinator.tools, app
-acquisition     ◄── datasets.audit (hash_file), app, __main__
-datasets        ◄── app
+acquisition     ◄── datasets.audit + datasets.btxrd (hash_file), app, __main__
+datasets        ◄── app, __main__
 coordinator     ◄── app, __main__
 app             ◄── __main__
 ```
@@ -144,6 +145,7 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_registry_routing.py` | Catalog validation, routing, `execute_specialist` |
 | `test_acquisition.py` | Download, resume and verification; zip safety |
 | `test_datasets.py` | Audit findings, grouped splits |
+| `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
 | `test_app.py` | `PROGRESS.md` editing, API functions, server Host and token guards |
 | `helpers.py` | `LocalServer` fixture |
@@ -154,7 +156,7 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 |---|---|---|
 | A model or dataset | `catalog/*.json` record | `catalog validate`; resolver in `acquisition/sources.py` if the publisher is new |
 | A real specialist | `adapters/<name>.py` implementing `Adapter` | catalog `adapter` field; pass the instance in the `adapters` dict |
-| BTXRD manifest | `datasets/btxrd.py` | Datasets screen picks up `data/<id>/*.csv` automatically |
+| Another dataset's manifest | `datasets/<name>.py`, following `btxrd.py` | Datasets screen picks up `data/<id>/*.csv` automatically |
 | Feature extraction or heads | `learning/` | consumes manifests; hands predictions to `evaluation/` |
 | A coordinator tool | `coordinator/tools.py::default_toolbox` | JSON schema + handler returning observed data |
 | An app endpoint | function in `app/api.py` + entry in a route table | call it from `app/static/app.js` via `api()` |

@@ -1,4 +1,4 @@
-"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator> ..."""
+"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd> ..."""
 from __future__ import annotations
 
 import argparse
@@ -90,6 +90,28 @@ def _coordinator(argv: list[str]) -> int:
     return rc
 
 
+def _btxrd(argv: list[str]) -> int:
+    from pathlib import Path
+
+    from .datasets import btxrd, write_manifest
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench btxrd")
+    ap.add_argument("cmd", choices=["describe", "manifest"])
+    ap.add_argument("--raw-dir", type=Path, default=btxrd.RAW_DIR)
+    ap.add_argument("--endpoint", choices=sorted(btxrd.ENDPOINTS), default="three_class")
+    ap.add_argument("--out", type=Path, default=btxrd.MANIFEST_PATH)
+    ap.add_argument("--no-hash", action="store_true", help="skip per-image sha256")
+    a = ap.parse_args(argv)
+    if a.cmd == "describe":
+        print(json.dumps(btxrd.describe_release(a.raw_dir), indent=2))
+        return 0
+    rows = btxrd.build_manifest(a.raw_dir, a.endpoint, hash_files=not a.no_hash)
+    write_manifest(a.out, rows)
+    flagged = sum(1 for r in rows if r["audit_flags"])
+    print(f"wrote {len(rows)} rows to {a.out} ({flagged} with audit flags)")
+    return 0
+
+
 def _app(argv: list[str]) -> int:
     from .app.server import serve
 
@@ -103,11 +125,12 @@ def _app(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "app": _app}
+    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "app": _app}
     if not argv or argv[0] not in commands:
         print(__doc__ + "\n  app          open the local researcher app in your browser\n"
               "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
-              "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints")
+              "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
+              "  btxrd        describe the BTXRD release / build its manifest")
         return 0 if not argv else 2
     if argv[0] == "fetch":
         from .acquisition.fetch import main as fetch_main
