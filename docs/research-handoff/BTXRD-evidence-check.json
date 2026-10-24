@@ -1,0 +1,88 @@
+{
+  "dataset_id": "btxrd",
+  "scope": "Local source binding and declared evidence completeness only",
+  "status": "blocked",
+  "archive_sha256": "e7c800c3b4e090262b160525a0765f9d93bcc53d639c03806a3ac47b0ded3373",
+  "archive_reference_md5_checked": true,
+  "evidence_content_sha256": "94cf1d55035ddfeb7f175fb297b755449d3d971678370fa77c088bfe270f239f",
+  "release_image_count": 3746,
+  "supplied_row_count": 3746,
+  "matched_image_count": 3746,
+  "source_binding_verified": true,
+  "missing_evidence_counts": {
+    "grouping_reference": 3746,
+    "lesion_id": 3746,
+    "patient_id": 3746,
+    "reference_evidence": 3746,
+    "reference_standard": 3746
+  },
+  "findings": [
+    {
+      "level": "blocker",
+      "code": "evidence_missing_or_placeholder",
+      "image_count": 3746,
+      "field": "grouping_reference"
+    },
+    {
+      "level": "blocker",
+      "code": "evidence_missing_or_placeholder",
+      "image_count": 3746,
+      "field": "lesion_id"
+    },
+    {
+      "level": "blocker",
+      "code": "evidence_missing_or_placeholder",
+      "image_count": 3746,
+      "field": "patient_id"
+    },
+    {
+      "level": "blocker",
+      "code": "evidence_missing_or_placeholder",
+      "image_count": 3746,
+      "field": "reference_evidence"
+    },
+    {
+      "level": "blocker",
+      "code": "evidence_missing_or_placeholder",
+      "image_count": 3746,
+      "field": "reference_standard"
+    },
+    {
+      "level": "blocker",
+      "code": "review_status_not_reviewed",
+      "image_count": 3746
+    },
+    {
+      "level": "blocker",
+      "code": "source_exact_duplicate_label_conflict",
+      "image_count": 4
+    },
+    {
+      "level": "warning",
+      "code": "source_subtype_label_set_difference_requires_review",
+      "image_count": 1
+    },
+    {
+      "level": "warning",
+      "code": "patient_and_lesion_mapping_assertions_not_authenticated"
+    },
+    {
+      "level": "warning",
+      "code": "diagnostic_reference_assertions_not_verified"
+    },
+    {
+      "level": "warning",
+      "code": "permissions_and_protocol_require_review"
+    },
+    {
+      "level": "warning",
+      "code": "near_duplicate_and_pixel_privacy_review_not_completed"
+    }
+  ],
+  "ready_for_training": false,
+  "cohort_created": false,
+  "patient_grouping_verified": false,
+  "reference_standard_verified": false,
+  "medical_validation_established": false,
+  "supplied_patient_ids_and_reference_values_exported": false
+}

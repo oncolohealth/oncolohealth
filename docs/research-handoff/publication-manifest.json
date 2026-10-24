@@ -1,0 +1,306 @@
+{
+  "base_commit": "c13a74a15fdd636249899a587a239cb000107e6d",
+  "target_branch": "research/overnight-integration",
+  "status": "prepared_for_browser_publication",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "d09daf4849d32623598398aaa019f44c995497c45c5d26206db2bac3d2f30fd9",
+      "bytes": 2105
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "sha256": "81943e42699339165c38a775d00c6d7aab696307a37eff556d81bef7628bab28",
+      "bytes": 19274
+    },
+    {
+      "path": "PROGRESS.md",
+      "sha256": "ad39ff2d188b78a1bf6e106c470cbc01bae8ea46d2c8eadf78fd6507c4bd06e3",
+      "bytes": 25404
+    },
+    {
+      "path": "README.md",
+      "sha256": "0a2161102951fd8f8650b19dcdb445319cd6439f4ed34ed134054bbcdd0c5925",
+      "bytes": 5428
+    },
+    {
+      "path": "cancer_workbench/__main__.py",
+      "sha256": "f0cb0f1bcbbe4903ff5b51aaa91cd9fe18150dca22da8b6e79c54ef4994d4ab5",
+      "bytes": 8950
+    },
+    {
+      "path": "cancer_workbench/adapters/encoder.py",
+      "sha256": "01a6cab37df85c2a66a23f7d6435f59403a0fb257ac4b4d8243874fc8dd1aa6b",
+      "bytes": 8583
+    },
+    {
+      "path": "cancer_workbench/datasets/btxrd_review.py",
+      "sha256": "b4b46db8eb8f5b95c1e7820692ac4b99d2c7c66ff1f9022a30b9b55994bea23d",
+      "bytes": 2599
+    },
+    {
+      "path": "cancer_workbench/datasets/evidence.py",
+      "sha256": "1041bc5c161b7c395e87214bb09985e04f20750057a14bde006ba3eaefda3dce",
+      "bytes": 6897
+    },
+    {
+      "path": "cancer_workbench/datasets/release_audit.py",
+      "sha256": "1d3dce66231e3e667ef6589479639276726e788eb8bd49bf890e2b1f25e96382",
+      "bytes": 18763
+    },
+    {
+      "path": "cancer_workbench/experiments/btxrd_baseline.py",
+      "sha256": "91ccce9f07eb813d4d5bd4c0afdd565d73de3b31b10b3b8f091b25eaa4de25ed",
+      "bytes": 11010
+    },
+    {
+      "path": "cancer_workbench/experiments/btxrd_near_duplicates.py",
+      "sha256": "4c4fbf10724f4d31f2905f3cc3faddf98844663b60d86ae3268f19eed0ade5bf",
+      "bytes": 5034
+    },
+    {
+      "path": "cancer_workbench/experiments/btxrd_source_shift.py",
+      "sha256": "cc1a29ff180a3a5a41718e0bee03008bdf66557875318185caf7d7b5c71e784d",
+      "bytes": 7416
+    },
+    {
+      "path": "cancer_workbench/experiments/explore.py",
+      "sha256": "da8641191acf67a695e85cb6b0b0c428a406910e4bb36965165ef66fc9318331",
+      "bytes": 10416
+    },
+    {
+      "path": "cancer_workbench/learning/feature_identity.py",
+      "sha256": "20417fbca757c01d5ef8f0c6c84a82c4a5e9542d8bc02769d815e6d5caa48e2f",
+      "bytes": 4956
+    },
+    {
+      "path": "cancer_workbench/learning/features.py",
+      "sha256": "3f5935730da5d873ad6ba15704a85f04aefe1c207fa502260f1f231c815fbbd2",
+      "bytes": 4557
+    },
+    {
+      "path": "configs/coordinator.example.json",
+      "sha256": "60a22f93797e8d2bb8bfe5374b048ada966d5e539ce8b4c5d6e3a5b2c580b35d",
+      "bytes": 3613
+    },
+    {
+      "path": "docs/reports/A-offline-release-review.md",
+      "sha256": "acfb6cbc0dedfeb98720e43b7f6fa24fd36fefdf5e4c75ec1a13e528423b1939",
+      "bytes": 4883
+    },
+    {
+      "path": "docs/reports/C-model-root-provenance.md",
+      "sha256": "d8db24aa824eb69293a8397ed3c383f9f58575cdf639a4a45653971359f67e0e",
+      "bytes": 1596
+    },
+    {
+      "path": "docs/reports/E-feature-cache-input-binding.md",
+      "sha256": "7ef9d321a0506be2d649627155bd2481080cef628bed9107026248b3e537f55b",
+      "bytes": 2552
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-audit.json",
+      "sha256": "347f87c4feb967cdc4f897e2bbabad2294336f7e61d3d862672afc07cd73efca",
+      "bytes": 7402
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-baseline-input-checks.py",
+      "sha256": "f21ae33d6ef6ffb6f38e66d8bc8167b5b6b66033a1637ebfaf71e7f2f24a80b3",
+      "bytes": 8563
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-baseline-input-review.json",
+      "sha256": "ba19f5f6ada74a53ed1977f441550f262ce3a6bb596171024e19030d61687e06",
+      "bytes": 4967
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-baseline-input-review.md",
+      "sha256": "1582e17a6b40505c905ef2b05c81f07fc6b78256b1e0c6b190937afa3daaa023",
+      "bytes": 8299
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-evidence-check.json",
+      "sha256": "c04baee1254cf0836eede15e40472ce40d384257c59bdb8b1a4677fb6d312c9d",
+      "bytes": 2429
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-evidence-handoff.md",
+      "sha256": "db55eb73c99b7a9cb61f05b3e6cb8aaaa101114f811e71e775ee47a26ebf9f5d",
+      "bytes": 7419
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-evidence-template.csv",
+      "sha256": "97891aa3d6c9cf051bd5876cc79d80c3520320368a64cec0903971e4c94c272f",
+      "bytes": 394436
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-feature-cache-fix.json",
+      "sha256": "8097325d7881552dea69b3c1a404282cd48580f4a150d4592eeca0324d32fbfd",
+      "bytes": 5075
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-feature-cache-fix.md",
+      "sha256": "b0f07364a265fade55b0b85172412aabafb8ec15157f949a945f32c0dcab8ecb",
+      "bytes": 5968
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-feature-cache-fix.patch",
+      "sha256": "9ae70d91b8052f0b5fa98b5af94737042eaf306b44bc834cba0515a652997425",
+      "bytes": 37702
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-model-provenance-fix.json",
+      "sha256": "731892145bb5e58232e4c6eb6af8dce856e40ba2d49c33c1ec7eae68c775d11f",
+      "bytes": 2501
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-model-provenance-fix.md",
+      "sha256": "37ecd685640a262211d9ae64d38957a9281acc522a275b587f9d9627582fc24f",
+      "bytes": 4114
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-model-provenance-fix.patch",
+      "sha256": "03dd64f988e972af04c8b87f7e5d1b77b9fe8553db2bd1edd6cece45bbbf3cc4",
+      "bytes": 8939
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-readiness.md",
+      "sha256": "f6cf56c484a919a76f06a8e7047409f1733eac28f252b1126350aad30553ce61",
+      "bytes": 18397
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-shared-integration.json",
+      "sha256": "28079327dde9b1b4cea8962f2137c262cc665c1a3b7c49aaef17f9c4e49f5128",
+      "bytes": 2757
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-shared-integration.md",
+      "sha256": "9c67c5c4b8493de31c349594c8758ec154a854d7b70beb8d50c21dc6bd590f1f",
+      "bytes": 4949
+    },
+    {
+      "path": "docs/research-handoff/BTXRD-shared-integration.patch",
+      "sha256": "504c977451cfdfb7fb06345d5384f3c37d648fa8c834a6267dd8d960f3db8238",
+      "bytes": 61045
+    },
+    {
+      "path": "docs/research-handoff/Cancer-platform-design.md",
+      "sha256": "0daa97feae94511360d8418e1a6ad8ff9916105e95b9e4aa918a4c4ef63d0ca3",
+      "bytes": 37082
+    },
+    {
+      "path": "docs/research-handoff/Cancer-platform-model-research.md",
+      "sha256": "5a7fe1a86fac3abc3676dc1f36a2f601b7512245a899dce242b240bfe54623c8",
+      "bytes": 16981
+    },
+    {
+      "path": "docs/research-handoff/Collaboration-context.md",
+      "sha256": "d946c11ed56abf08a0f9a88f36b57aa9329e5481052c03e3dbab26332777322e",
+      "bytes": 41290
+    },
+    {
+      "path": "docs/research-handoff/Connected-chats.md",
+      "sha256": "e92c88d3b72a8c1c692e443969934322b00ad2d1b5e36086c8d536be17de7df9",
+      "bytes": 382
+    },
+    {
+      "path": "docs/research-handoff/Dataset-inventory.md",
+      "sha256": "d1e31bfa111bbe8e59928b27978576083b4bf5599ad09533e752626191641b36",
+      "bytes": 4650
+    },
+    {
+      "path": "docs/research-handoff/NPS-GB300-workflow.md",
+      "sha256": "e842a0598d5087745e080fd1a67487e10423e34cfaac0b771ab1b0d673f4da6f",
+      "bytes": 978
+    },
+    {
+      "path": "docs/research-handoff/Project-brief.md",
+      "sha256": "ac09756090075975e16e2030f62a035fd73a6f6696002fe99ce4ef44883154d7",
+      "bytes": 2493
+    },
+    {
+      "path": "docs/research-handoff/Project-context.md",
+      "sha256": "d89936908ce438be87f7b33d7972f60f21144d71d78e2040e94a79129137b391",
+      "bytes": 17809
+    },
+    {
+      "path": "docs/research-handoff/Project-walkthrough.md",
+      "sha256": "eab2dc420f8a74200b404959bcbecaebdacd47dd1a739d28a37f14ac0758f864",
+      "bytes": 3756
+    },
+    {
+      "path": "docs/research-handoff/README.md",
+      "sha256": "01f3eddcb42675e1fa5f3d9af0a9e0998e835229b59a869fa53a2b067cac27f7",
+      "bytes": 4616
+    },
+    {
+      "path": "docs/research-handoff/Research-index.md",
+      "sha256": "abd6b44ec62b2ff51759493d9962dfef5e94127517d90ef3fa9a924e34d5b512",
+      "bytes": 5197
+    },
+    {
+      "path": "docs/research-handoff/Team-hub.md",
+      "sha256": "5dcccd3a32886d70b8511a39363456e9c36f06b033bd9e65df369ed5e50bd462",
+      "bytes": 522
+    },
+    {
+      "path": "docs/research-handoff/Team-integration-plan.md",
+      "sha256": "cd683045979cfdc4bcfc9948ad0c6bf7ba88fe96d7b78f327f9e404efed6653c",
+      "bytes": 7291
+    },
+    {
+      "path": "docs/research-handoff/Weekend-next-actions.md",
+      "sha256": "bd03757c6a38c6b91e09a8fb4eeaa9b562781dfd0934d028f9286f88408705e3",
+      "bytes": 6307
+    },
+    {
+      "path": "docs/research-handoff/complete-source-handoff.zip",
+      "sha256": "a7797759a9b0d9a093034f303a3f96ccf2081fc18859a18b637d05e8d69e7a7c",
+      "bytes": 671068
+    },
+    {
+      "path": "tests/test_btxrd_evidence_review.py",
+      "sha256": "9d8bee7f87e384d64ee6db36dc179846d8ac8f008c048be661349a5a47d212d7",
+      "bytes": 7819
+    },
+    {
+      "path": "tests/test_btxrd_release_audit.py",
+      "sha256": "5d7fc87aded00c6a7027fa4416bddb663245aba01706a0986b898516d3810f04",
+      "bytes": 12676
+    },
+    {
+      "path": "tests/test_encoder_provenance.py",
+      "sha256": "259d0c80e07501f3df31935b0548de1da71e20df07f83d151bb773a566166928",
+      "bytes": 3618
+    },
+    {
+      "path": "tests/test_feature_identity.py",
+      "sha256": "e14a5df886cf02a0155e5f04f2d21883485fbe9579ea919f60eb597b13d98e30",
+      "bytes": 14738
+    }
+  ],
+  "source_archive_sha256": "a7797759a9b0d9a093034f303a3f96ccf2081fc18859a18b637d05e8d69e7a7c",
+  "source_archive_entries": 217,
+  "verification": {
+    "exported_shared_build": {
+      "discovered": 160,
+      "passed": 149,
+      "skipped": 11
+    },
+    "exported_foundation": {
+      "discovered": 72,
+      "passed": 72,
+      "skipped": 0
+    },
+    "exported_onco_copilot": {
+      "discovered": 84,
+      "passed": 84,
+      "skipped": 0
+    },
+    "actual_model_inference_or_training_performed": false
+  },
+  "source_medical_images_or_weights_included": false,
+  "private_conversation_or_account_details_included": false,
+  "optional_authoring_metadata_added": false,
+  "required_metadata": "ZIP date fields normalized; GitHub retains account/commit history"
+}

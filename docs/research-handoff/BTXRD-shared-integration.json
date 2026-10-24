@@ -1,0 +1,79 @@
+{
+  "base_commit": "c13a74a15fdd636249899a587a239cb000107e6d",
+  "status": "unmerged_local_integration_candidate",
+  "patch_sha256": "504c977451cfdfb7fb06345d5384f3c37d648fa8c834a6267dd8d960f3db8238",
+  "files": [
+    {
+      "path": "ARCHITECTURE.md",
+      "base_sha256": "1d57c9dff976bcf4f4367cc901bdc3b31cbc31706bcc5ed27c2192005fdb45ca",
+      "candidate_sha256": "81943e42699339165c38a775d00c6d7aab696307a37eff556d81bef7628bab28"
+    },
+    {
+      "path": "PROGRESS.md",
+      "base_sha256": "c459967b082afa4c07bf982156935dac310f1e93362b2a751fd8e2b486cb1e25",
+      "candidate_sha256": "fba0e42bde60e17208780111f3bf1d400816eaca5396c13dff2506e895764506"
+    },
+    {
+      "path": "cancer_workbench/__main__.py",
+      "base_sha256": "749340c2e059f21bc2e20ef1f6881aa092962b4859ebcb76013b166aa0405e9e",
+      "candidate_sha256": "f0cb0f1bcbbe4903ff5b51aaa91cd9fe18150dca22da8b6e79c54ef4994d4ab5"
+    },
+    {
+      "path": "cancer_workbench/datasets/btxrd_review.py",
+      "base_sha256": null,
+      "candidate_sha256": "b4b46db8eb8f5b95c1e7820692ac4b99d2c7c66ff1f9022a30b9b55994bea23d"
+    },
+    {
+      "path": "cancer_workbench/datasets/evidence.py",
+      "base_sha256": null,
+      "candidate_sha256": "1041bc5c161b7c395e87214bb09985e04f20750057a14bde006ba3eaefda3dce"
+    },
+    {
+      "path": "cancer_workbench/datasets/release_audit.py",
+      "base_sha256": null,
+      "candidate_sha256": "1d3dce66231e3e667ef6589479639276726e788eb8bd49bf890e2b1f25e96382"
+    },
+    {
+      "path": "docs/reports/A-offline-release-review.md",
+      "base_sha256": null,
+      "candidate_sha256": "acfb6cbc0dedfeb98720e43b7f6fa24fd36fefdf5e4c75ec1a13e528423b1939"
+    },
+    {
+      "path": "tests/test_btxrd_evidence_review.py",
+      "base_sha256": null,
+      "candidate_sha256": "9d8bee7f87e384d64ee6db36dc179846d8ac8f008c048be661349a5a47d212d7"
+    },
+    {
+      "path": "tests/test_btxrd_release_audit.py",
+      "base_sha256": null,
+      "candidate_sha256": "5d7fc87aded00c6a7027fa4416bddb663245aba01706a0986b898516d3810f04"
+    }
+  ],
+  "apply_check": "passed_against_base_snapshot",
+  "fresh_application_matches_candidate": true,
+  "verification": {
+    "plain_python": {
+      "tests_discovered": 131,
+      "passed": 117,
+      "skipped": 14
+    },
+    "optional_pillow": {
+      "tests_discovered": 131,
+      "passed": 118,
+      "skipped": 13
+    },
+    "catalog": {
+      "models": 16,
+      "datasets": 14,
+      "valid": true
+    },
+    "real_release_check_matches_canonical_report": true,
+    "real_release_matched_rows": 3746,
+    "real_release_status": "blocked",
+    "full_ml_torch_checks_performed": false,
+    "medical_validation_established": false
+  },
+  "shared_repository_changed": false,
+  "pushed": false,
+  "merged": false
+}

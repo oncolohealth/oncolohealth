@@ -1,0 +1,638 @@
+diff --git a/PROGRESS.md b/PROGRESS.md
+index dc58c50..9112865 100644
+--- a/PROGRESS.md
++++ b/PROGRESS.md
+@@ -106,6 +106,12 @@ Team Hub checklist update for this UI work is prepared in `DOCS.md` for the proj
+ - [x] Source check of existing foundation: `docs/reports/H-local-source-review.md`, with evidence-backed E/C/D/F gaps and next experiment prerequisites
+ - [ ] Independent review of new B/F additions and fixes to the remaining source findings
+ 
++## Local feature-cache image-binding repair candidate
++
++This isolated candidate against inspected main `c13a74a15fdd636249899a587a239cb000107e6d` records measured per-image SHA-256 bindings in new feature caches. Baseline fitting, source-shift experiments, near-duplicate ranking and legacy head rebuilding all reject missing, inconsistent or changed input bindings before their downstream work. Declared encoder/preprocessing identity is also checked; actual weight/processor authentication remains open. Extraction checks input hashes before/after embedding and publishes through a temporary file, preserving the old artifact on detected mutation or failure. This does not lock input files or detect every transient edit/restoration.
++
++Twenty synthetic tests use local byte fixtures, mocked embeddings and optional NumPy NPZ I/O. Standalone plain Python: 126 discovered, 107 pass, 19 optional skips. With NumPy available: 126 discovered, 115 pass, 11 optional skips. Catalog stays at 16 models and 14 datasets. No medical data or weights were read/acquired, no model inference or training was run and no shared main or team branch was changed. Patient/lesion grouping, diagnostic references and medical validation remain unresolved. See [the scoped cache-binding report](docs/reports/E-feature-cache-input-binding.md).
++
+ ## Later milestones (only once their adapters, data and evaluation hold up)
+ - [ ] Lung CT: MONAI nodule-detection adapter on `lidc-idri-sample` (smoke test only, since LIDC is in its training data); NoduleMNIST3D prototyping
+ - [ ] Brain MRI: MONAI BraTS adapter on `msd-brain-tumour` (smoke test only, overlaps BraTS training); explicit label mapping
+diff --git a/cancer_workbench/experiments/btxrd_baseline.py b/cancer_workbench/experiments/btxrd_baseline.py
+index f635636..0c1e69a 100644
+--- a/cancer_workbench/experiments/btxrd_baseline.py
++++ b/cancer_workbench/experiments/btxrd_baseline.py
+@@ -119,8 +119,8 @@ def record(record_id: str, endpoint: str, enc: str, f: dict, split: str, seed: s
+ 
+ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out_dir: Path | None = None,
+         seed: str = "0", n_boot: int = 1000, features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
+-    from ..adapters.encoder import preprocessing, preprocessing_hash, revision
+-    from ..learning.features import cache_path, extract_features, load_features
++    from ..adapters.encoder import preprocessing
++    from ..learning.features import cache_path, extract_features, load_bound_features
+     from ..learning.heads import save_head, train_feature_head
+ 
+     if not MANIFEST_PATH.exists():
+@@ -137,9 +137,7 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
+         path = cache_path(enc, "btxrd", features_dir)
+         if not path.exists():
+             extract_features(enc, rows, RAW_DIR, path)
+-        f = load_features(path)
+-        if f["preprocessing_hash"] != preprocessing_hash(enc) or f["revision"] != str(revision(enc)):
+-            raise ValueError(f"{path} was made with different preprocessing or weights")
++        f = load_bound_features(path, rows, RAW_DIR, enc)
+         feats[enc] = (f, {sid: i for i, sid in enumerate(f["sample_ids"].tolist())}, path)
+ 
+     results, records = [], []
+diff --git a/cancer_workbench/experiments/btxrd_near_duplicates.py b/cancer_workbench/experiments/btxrd_near_duplicates.py
+index db92d50..e66faae 100644
+--- a/cancer_workbench/experiments/btxrd_near_duplicates.py
++++ b/cancer_workbench/experiments/btxrd_near_duplicates.py
+@@ -17,7 +17,7 @@ from pathlib import Path
+ 
+ from ..common.paths import PROJECT_ROOT
+ from ..datasets import read_manifest
+-from ..datasets.btxrd import MANIFEST_PATH
++from ..datasets.btxrd import MANIFEST_PATH, RAW_DIR
+ from .btxrd_baseline import ENCODERS, PROTOCOLS, make_split
+ 
+ CUTOFFS = (0.99, 0.98, 0.95, 0.90)
+@@ -50,7 +50,7 @@ def run(*, top: int = 300, out_dir: Path | None = None, seed: str = "0",
+         features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
+     import numpy as np
+ 
+-    from ..learning.features import cache_path, load_features
++    from ..learning.features import cache_path, load_bound_features
+ 
+     rows = read_manifest(MANIFEST_PATH)
+     by_id = {r["sample_id"]: r for r in rows}
+@@ -59,7 +59,7 @@ def run(*, top: int = 300, out_dir: Path | None = None, seed: str = "0",
+         path = cache_path(enc, "btxrd", features_dir)
+         if not path.exists():
+             raise FileNotFoundError(f"{path.name} missing; run the baseline first to extract features")
+-        feats.append(load_features(path))
++        feats.append(load_bound_features(path, rows, RAW_DIR, enc))
+     ids = feats[0]["sample_ids"].tolist()
+     if any(f["sample_ids"].tolist() != ids for f in feats) or set(ids) != set(by_id):
+         raise ValueError("feature files and manifest do not list the same images in the same order")
+diff --git a/cancer_workbench/experiments/btxrd_source_shift.py b/cancer_workbench/experiments/btxrd_source_shift.py
+index 5a9d7ec..ec9768c 100644
+--- a/cancer_workbench/experiments/btxrd_source_shift.py
++++ b/cancer_workbench/experiments/btxrd_source_shift.py
+@@ -38,8 +38,8 @@ def select(val_scores: dict[str, float]) -> str:
+ 
+ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), variants=VARIANTS, *, out_dir: Path | None = None,
+         seed: str = "0", n_boot: int = 1000, features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
+-    from ..adapters.encoder import preprocessing, preprocessing_hash, revision
+-    from ..learning.features import cache_path, extract_features, load_features
++    from ..adapters.encoder import preprocessing
++    from ..learning.features import cache_path, extract_features, load_bound_features
+     from ..learning.heads import save_head, train_feature_head
+ 
+     if "pad" not in variants or set(variants) - set(VARIANTS):
+@@ -59,9 +59,7 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), variants=VARIANTS, *, out_d
+             path = cache_path(enc, "btxrd", features_dir, v)
+             if not path.exists():
+                 extract_features(enc, rows, RAW_DIR, path, variant=v)
+-            f = load_features(path)
+-            if f["preprocessing_hash"] != preprocessing_hash(enc, v) or f["revision"] != str(revision(enc)):
+-                raise ValueError(f"{path} was made with different preprocessing or weights")
++            f = load_bound_features(path, rows, RAW_DIR, enc, v)
+             feats[enc, v] = (f, {sid: i for i, sid in enumerate(f["sample_ids"].tolist())}, path)
+ 
+     split = make_split(rows, "source_holdout", seed)
+diff --git a/cancer_workbench/experiments/explore.py b/cancer_workbench/experiments/explore.py
+index da4a75b..985bfe4 100644
+--- a/cancer_workbench/experiments/explore.py
++++ b/cancer_workbench/experiments/explore.py
+@@ -21,6 +21,7 @@ from pathlib import Path
+ 
+ from ..common.paths import PROJECT_ROOT
+ from ..datasets import read_manifest
++from ..datasets.btxrd import RAW_DIR
+ from .btxrd_baseline import CLASSES, LABEL, endpoint_rows, head_inputs
+ 
+ RUNS_DIR = PROJECT_ROOT / "runs"
+@@ -100,14 +101,15 @@ def _refit(d: Path, r: dict):
+     """Rebuild a run's head from its saved split and the feature cache; refuse unless it reproduces the stored val probs."""
+     import numpy as np
+ 
+-    from ..learning.features import cache_path, load_features
++    from ..learning.features import cache_path, load_bound_features
+     from ..learning.heads import evaluate_head, train_feature_head
+ 
+     fpath = cache_path(r["encoder"], "btxrd", RUNS_DIR / "features", r.get("variant", "pad"))
+     if not fpath.exists():
+         raise FileNotFoundError(f"{fpath.name} is missing, so the head can't be rebuilt. Re-run the baseline.")
+-    f = load_features(fpath)
+-    er = endpoint_rows(read_manifest(d / "splits" / f"{r['protocol']}.csv"), r["endpoint"])
++    rows = read_manifest(d / "splits" / f"{r['protocol']}.csv")
++    f = load_bound_features(fpath, rows, RAW_DIR, r["encoder"], r.get("variant", "pad"))
++    er = endpoint_rows(rows, r["endpoint"])
+     data = head_inputs(er, f, {sid: i for i, sid in enumerate(f["sample_ids"].tolist())}, r["endpoint"])
+     head = train_feature_head(data)
+     stored = json.loads((d / "predictions" / f"{r['id']}.json").read_text())["val"]
+diff --git a/cancer_workbench/learning/feature_identity.py b/cancer_workbench/learning/feature_identity.py
+new file mode 100644
+index 0000000..1a7d7d8
+--- /dev/null
++++ b/cancer_workbench/learning/feature_identity.py
+@@ -0,0 +1,108 @@
++"""Read-only image-byte binding for local feature caches; no model execution."""
++
++import hashlib
++import json
++from pathlib import Path, PurePosixPath, PureWindowsPath
++
++
++SCHEMA = "sample-image-sha256-v1"
++
++
++def _digest(value):
++    if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdefABCDEF" for c in value):
++        raise ValueError("Image SHA-256 must contain 64 hexadecimal characters")
++    return value.lower()
++
++
++def _ids(values):
++    if isinstance(values, (str, bytes)):
++        raise ValueError("Sample IDs must be a sequence")
++    try:
++        ids = list(values)
++    except TypeError:
++        raise ValueError("Sample IDs must be a sequence") from None
++    if not ids or any(not isinstance(v, str) or not v or v != v.strip() or "\x00" in v for v in ids):
++        raise ValueError("Sample IDs must be nonempty strings without surrounding whitespace")
++    if len(set(ids)) != len(ids):
++        raise ValueError("Sample IDs must be unique")
++    return ids
++
++
++def binding_digest(records):
++    """Canonical mapping digest, independent of row order and label/group edits."""
++    encoded = json.dumps(sorted(records, key=lambda r: r["sample_id"]), sort_keys=True, separators=(",", ":"))
++    return hashlib.sha256(encoded.encode()).hexdigest()
++
++
++def measure_inputs(rows, data_root):
++    """Measure contained files and check any declared hashes. Do not decode pixels.
++
++    Missing declared hashes do not establish curated source provenance; the
++    measured hashes still bind a future cache to the bytes present here.
++    """
++    rows = list(rows)
++    if any(not isinstance(r, dict) for r in rows):
++        raise ValueError("Manifest rows must be mappings")
++    ids = _ids([r.get("sample_id") for r in rows])
++    try:
++        root = Path(data_root).resolve(strict=True)
++    except OSError:
++        raise ValueError("Image root is unavailable") from None
++    if not root.is_dir():
++        raise ValueError("Image root must be a directory")
++    records = []
++    for sid, row in zip(ids, rows):
++        name = row.get("file")
++        if (not isinstance(name, str) or not name or "\x00" in name or "\\" in name
++                or PurePosixPath(name).is_absolute() or PureWindowsPath(name).drive
++                or ".." in PurePosixPath(name).parts):
++            raise ValueError("Image file must be a contained relative path")
++        declared = row.get("sha256")
++        if declared is not None and declared != "":
++            declared = _digest(declared)
++        try:
++            image = (root / name).resolve(strict=True)
++            if not image.is_relative_to(root) or not image.is_file():
++                raise ValueError("Image file must stay inside the image root")
++            measured = hashlib.sha256()
++            with image.open("rb") as stream:
++                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
++                    measured.update(chunk)
++        except OSError:
++            raise ValueError("Source image is unavailable or unreadable") from None
++        actual = measured.hexdigest()
++        if declared and declared != actual:
++            raise ValueError("Source image bytes differ from the declared hash")
++        records.append({"sample_id": sid, "sha256": actual})
++    return records
++
++
++def validate_cached_inputs(cache, rows, data_root):
++    """Reject legacy, inconsistent or changed inputs before a cache is consumed.
++
++    This detects persistent input changes. It is not an authenticated cache,
++    a filesystem lock, a model-artifact verifier or a scientific eligibility gate.
++    """
++    required = {"sample_ids", "image_sha256", "input_content_sha256", "input_binding_schema", "features"}
++    if (not required <= cache.keys() or not isinstance(cache["input_binding_schema"], str)
++            or cache["input_binding_schema"] != SCHEMA):
++        raise ValueError("Feature cache lacks supported image binding; explicit recomputation is required")
++    ids = _ids(cache["sample_ids"])
++    values = cache["image_sha256"]
++    if isinstance(values, (str, bytes)):
++        raise ValueError("Cached image hashes must be a sequence")
++    try:
++        hashes = [_digest(v) for v in values]
++    except TypeError:
++        raise ValueError("Cached image hashes must be a sequence") from None
++    if len(ids) != len(hashes):
++        raise ValueError("Cached sample/hash rows are misaligned")
++    shape = getattr(cache["features"], "shape", ())
++    if len(shape) != 2 or shape[0] != len(ids) or shape[1] < 1:
++        raise ValueError("Cached feature rows must align with sample IDs")
++    cached = [{"sample_id": sid, "sha256": sha} for sid, sha in zip(ids, hashes)]
++    if _digest(cache["input_content_sha256"]) != binding_digest(cached):
++        raise ValueError("Cached input mapping digest is inconsistent")
++    current = measure_inputs(rows, data_root)
++    if binding_digest(current) != binding_digest(cached):
++        raise ValueError("Feature cache does not match the current image IDs and bytes")
+diff --git a/cancer_workbench/learning/features.py b/cancer_workbench/learning/features.py
+index bfdfb06..bdf35a3 100644
+--- a/cancer_workbench/learning/features.py
++++ b/cancer_workbench/learning/features.py
+@@ -1,25 +1,27 @@
+ """Frozen-encoder feature extraction. Owner: Workstream E. Needs the `ml` extra (see package docstring)."""
+ from __future__ import annotations
+ 
++import os
+ import sys
++import tempfile
+ import time
+ from pathlib import Path
+ 
++from .feature_identity import SCHEMA, binding_digest, measure_inputs, validate_cached_inputs
++
+ 
+ def extract_features(encoder_id: str, manifest_rows: list[dict], data_root: Path, out_path: Path,
+                      *, batch_size: int = 16, device: str | None = None, quiet: bool = False, variant: str = "pad") -> Path:
+     """Embed every manifest row's `file` (relative to `data_root`) and write an .npz.
+ 
+     The file holds sample_ids, patient_ids, partitions, labels, features (N x D), plus
+-    encoder id, revision, preprocessing variant and hash so a stale cache is never reused silently.
++    encoder identity and measured input hashes. Consumers must use load_bound_features.
+     """
+     import numpy as np
+ 
+     from ..adapters.encoder import FrozenEncoderAdapter, preprocessing_hash, revision
+ 
+-    missing = [r["sample_id"] for r in manifest_rows if not r.get("file")]
+-    if missing:
+-        raise ValueError(f"{len(missing)} rows have no file, e.g. {missing[:3]}")
++    inputs = measure_inputs(manifest_rows, data_root)
+     adapter = FrozenEncoderAdapter(encoder_id, device=device, variant=variant)
+     t0 = time.monotonic()
+ 
+@@ -29,20 +31,34 @@ def extract_features(encoder_id: str, manifest_rows: list[dict], data_root: Path
+             print(f"\r  {encoder_id}: {done}/{total} images ({rate:.1f}/s)", end="", file=sys.stderr)
+ 
+     feats = adapter.embed([Path(data_root) / r["file"] for r in manifest_rows], batch_size=batch_size, progress=progress)
++    if inputs != measure_inputs(manifest_rows, data_root):
++        raise ValueError("Source images changed during feature extraction")
++    if (feats.ndim != 2 or feats.shape[0] != len(inputs) or feats.shape[1] < 1
++            or not np.issubdtype(feats.dtype, np.number) or not np.isfinite(feats).all()):
++        raise ValueError("Encoder returned invalid feature rows")
+     if not quiet:
+         print(file=sys.stderr)
+     out_path = Path(out_path)
+     out_path.parent.mkdir(parents=True, exist_ok=True)
+     col = lambda k: np.array([r.get(k, "") for r in manifest_rows])
+-    np.savez(out_path, sample_ids=col("sample_id"), patient_ids=col("patient_id"), partitions=col("partition"),
+-             labels=col("label"), features=feats, encoder_id=encoder_id, revision=str(revision(encoder_id)),
+-             preprocessing_hash=preprocessing_hash(encoder_id, variant), variant=variant, device=str(adapter.device),
+-             seconds=round(time.monotonic() - t0, 1))
++    temporary = None
++    try:
++        with tempfile.NamedTemporaryFile(dir=out_path.parent, suffix=".npz", delete=False) as stream:
++            temporary = Path(stream.name)
++            np.savez(stream, sample_ids=col("sample_id"), patient_ids=col("patient_id"), partitions=col("partition"),
++                     labels=col("label"), features=feats, encoder_id=encoder_id, revision=str(revision(encoder_id)),
++                     preprocessing_hash=preprocessing_hash(encoder_id, variant), variant=variant, device=str(adapter.device),
++                     seconds=round(time.monotonic() - t0, 1), input_binding_schema=SCHEMA,
++                     image_sha256=np.array([r["sha256"] for r in inputs]), input_content_sha256=binding_digest(inputs))
++        os.replace(temporary, out_path)
++    finally:
++        if temporary is not None:
++            temporary.unlink(missing_ok=True)
+     return out_path
+ 
+ 
+ def cache_path(encoder_id: str, dataset_id: str, root: Path, variant: str = "pad") -> Path:
+-    """Feature file name pinned to encoder revision and preprocessing, so changes never reuse stale features."""
++    """Cache locator only; load_bound_features must verify image-byte bindings."""
+     from ..adapters.encoder import preprocessing_hash, revision
+ 
+     return Path(root) / f"{dataset_id}-{encoder_id}-{str(revision(encoder_id))[:8]}-{preprocessing_hash(encoder_id, variant)}.npz"
+@@ -53,3 +69,24 @@ def load_features(path: Path) -> dict:
+ 
+     with np.load(path, allow_pickle=False) as z:
+         return {k: (z[k].item() if z[k].ndim == 0 else z[k]) for k in z.files}
++
++
++def load_bound_features(path: Path, manifest_rows: list[dict], data_root: Path,
++                        encoder_id: str, variant: str = "pad") -> dict:
++    """Return NPZ features only after checking declared encoder identity and image bytes.
++
++    Model revisions and preprocessing hashes remain assertions, not actual
++    weight or implementation authentication. Legacy unbound caches fail closed.
++    """
++    from ..adapters.encoder import preprocessing_hash, revision
++
++    cache = load_features(path)
++    current_revision = revision(encoder_id)
++    if not current_revision:
++        raise ValueError("Encoder revision is unavailable for cache identity checking")
++    expected = {"encoder_id": encoder_id, "revision": str(current_revision),
++                "preprocessing_hash": preprocessing_hash(encoder_id, variant), "variant": variant}
++    if any(not isinstance(cache.get(k), str) or cache[k] != value for k, value in expected.items()):
++        raise ValueError("Feature cache encoder or preprocessing identity differs")
++    validate_cached_inputs(cache, manifest_rows, data_root)
++    return cache
+diff --git a/docs/reports/E-feature-cache-input-binding.md b/docs/reports/E-feature-cache-input-binding.md
+new file mode 100644
+index 0000000..26ed97d
+--- /dev/null
++++ b/docs/reports/E-feature-cache-input-binding.md
+@@ -0,0 +1,13 @@
++# Feature-cache image binding repair candidate
++
++Existing feature-cache locators identify a dataset name, encoder revision prefix and preprocessing settings, but do not identify source-image bytes. This candidate keeps those locators and requires measured input bindings at consumption. Old caches are rejected; they are not silently trusted or automatically overwritten by a failed reuse attempt.
++
++New caches carry a functional binding schema, measured image SHA-256 values aligned with unique sample IDs and a canonical mapping digest. Any declared manifest hashes must match the files. If hashes were absent, measuring the current bytes still binds the cache but does not establish curated release provenance. Absolute/escaping paths, duplicate or missing IDs, inconsistent mapping hashes and misaligned feature rows fail.
++
++The baseline, source-shift experiment, near-duplicate ranker and legacy head-rebuild path all use the bound loader. It checks declared encoder/revision/variant/preprocessing identity and the current source files before fitting or ranking. Labels, patient groups and partitions come from the current reviewed manifest; changing them alone does not require re-encoding unchanged pixels. Their scientific truth and eligibility are not established by this check.
++
++Extraction measures files before and after its encoder call, rejects detected changes or invalid arrays, and replaces its output only after a temporary NPZ is fully written. This detects persistent changes; it does not lock files or rule out transient edit-and-restoration races. It is not an authenticated feature store or actual weight/processor verifier. The low-level NPZ reader and direct feature-head APIs remain available; this is not a security/authorization boundary.
++
++Twenty synthetic tests cover replaced bytes, source/hash drift, missing and duplicate IDs, malformed caches, contained paths, reordering, unchanged-pixel reuse, NPZ roundtrips, failure/mutation preservation, invalid arrays, identity mismatch and refusal in all four consumers before downstream work. No medical images, actual model weights, image-model inference, training or cluster compute were used.
++
++Standalone verification: 126 tests discovered; plain Python passes 107 and skips 19; NumPy-enabled Python passes 115 and skips 11. Catalog validation remains 16 models and 14 datasets. Full ML/Torch execution, receiving-branch reconciliation and scientific validation remain pending. This is a local unmerged candidate against inspected main c13a74a15fdd636249899a587a239cb000107e6d.
+diff --git a/tests/test_feature_identity.py b/tests/test_feature_identity.py
+new file mode 100644
+index 0000000..a17bc33
+--- /dev/null
++++ b/tests/test_feature_identity.py
+@@ -0,0 +1,267 @@
++"""SYNTHETIC files and mocked embeddings only; no cancer data or model loading."""
++
++import copy
++import hashlib
++import importlib.util
++from pathlib import Path
++import tempfile
++from types import SimpleNamespace
++import unittest
++from unittest.mock import patch
++
++from cancer_workbench.learning.feature_identity import SCHEMA, binding_digest, measure_inputs, validate_cached_inputs
++
++
++class BindingFixture(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.root = Path(self.temp.name)
++        self.rows = []
++        for i, body in enumerate((b"synthetic first image bytes", b"synthetic second image bytes")):
++            name = f"image-{i}.bin"
++            (self.root / name).write_bytes(body)
++            self.rows.append({"sample_id": f"s{i}", "file": name, "sha256": hashlib.sha256(body).hexdigest()})
++
++    def cache(self):
++        measured = measure_inputs(self.rows, self.root)
++        return {"sample_ids": [r["sample_id"] for r in measured], "image_sha256": [r["sha256"] for r in measured],
++                "input_binding_schema": SCHEMA, "input_content_sha256": binding_digest(measured),
++                "features": SimpleNamespace(shape=(len(measured), 2))}
++
++
++class InputBindingTests(BindingFixture):
++    def test_measured_roundtrip_and_no_optional_identity_metadata(self):
++        measured = measure_inputs(self.rows, self.root)
++        self.assertEqual(set(measured[0]), {"sample_id", "sha256"})
++        self.assertIsNone(validate_cached_inputs(self.cache(), self.rows, self.root))
++
++    def test_replaced_file_rejects_old_cache_even_with_updated_manifest_hash(self):
++        cached = self.cache()
++        body = b"synthetic replacement"
++        (self.root / self.rows[0]["file"]).write_bytes(body)
++        self.rows[0]["sha256"] = hashlib.sha256(body).hexdigest()
++        with self.assertRaisesRegex(ValueError, "current image IDs and bytes"):
++            validate_cached_inputs(cached, self.rows, self.root)
++
++    def test_no_declared_hash_still_binds_measured_bytes(self):
++        self.rows = [dict(r, sha256="") for r in self.rows]
++        cached = self.cache()
++        (self.root / self.rows[0]["file"]).write_bytes(b"replacement without a declaration")
++        with self.assertRaises(ValueError):
++            validate_cached_inputs(cached, self.rows, self.root)
++
++    def test_declared_hash_drift_and_malformed_hash_fail(self):
++        for value in ("0" * 64, "invalid", 5, True):
++            with self.subTest(value=value), self.assertRaises(ValueError):
++                measure_inputs([dict(self.rows[0], sha256=value)], self.root)
++
++    def test_duplicate_or_blank_source_ids_fail(self):
++        for rows in ([], [self.rows[0], self.rows[0]], [dict(self.rows[0], sample_id="")],
++                     [dict(self.rows[0], sample_id=" s0")], [dict(self.rows[0], sample_id=1)]):
++            with self.subTest(rows=rows), self.assertRaises(ValueError):
++                measure_inputs(rows, self.root)
++
++    def test_missing_file_is_explicit_without_exporting_path(self):
++        secret = "synthetic-private-file-name.bin"
++        with self.assertRaises(ValueError) as caught:
++            measure_inputs([dict(self.rows[0], file=secret)], self.root)
++        self.assertNotIn(secret, str(caught.exception))
++        self.assertNotIn(str(self.root), str(caught.exception))
++
++    def test_absolute_parent_windows_and_symlink_escape_fail(self):
++        with tempfile.TemporaryDirectory() as outside:
++            external = Path(outside) / "external.bin"
++            external.write_bytes(b"synthetic external bytes")
++            (self.root / "escape.bin").symlink_to(external)
++            for name in (str(external), "../external.bin", "C:external.bin", "folder\\external.bin", "escape.bin"):
++                with self.subTest(path_kind=name), self.assertRaises(ValueError):
++                    measure_inputs([dict(self.rows[0], file=name, sha256="")], self.root)
++
++    def test_legacy_cache_or_unknown_schema_fails(self):
++        cache = self.cache()
++        for missing in ("image_sha256", "input_content_sha256", "input_binding_schema"):
++            old = {k: v for k, v in cache.items() if k != missing}
++            with self.subTest(missing=missing), self.assertRaisesRegex(ValueError, "supported image binding"):
++                validate_cached_inputs(old, self.rows, self.root)
++        with self.assertRaises(ValueError):
++            validate_cached_inputs(dict(cache, input_binding_schema="other"), self.rows, self.root)
++
++    def test_duplicate_cached_ids_fail(self):
++        with self.assertRaisesRegex(ValueError, "unique"):
++            validate_cached_inputs(dict(self.cache(), sample_ids=["s0", "s0"]), self.rows, self.root)
++
++    def test_omitted_extra_or_renamed_source_rows_fail(self):
++        cached = self.cache()
++        for rows in (self.rows[:1], [*self.rows, dict(self.rows[0], sample_id="extra")],
++                     [dict(self.rows[0], sample_id="renamed"), self.rows[1]]):
++            with self.subTest(row_count=len(rows)), self.assertRaises(ValueError):
++                validate_cached_inputs(cached, rows, self.root)
++
++    def test_mapping_digest_tampering_and_bad_hash_rows_fail(self):
++        cached = self.cache()
++        cases = (dict(cached, input_content_sha256="0" * 64), dict(cached, image_sha256=["bad"] * 2),
++                 dict(cached, image_sha256=cached["image_sha256"][:1]), dict(cached, sample_ids="s0"),
++                 dict(cached, image_sha256="0" * 64), dict(cached, input_content_sha256=None))
++        for bad in cases:
++            with self.subTest(fields=list(bad)), self.assertRaises(ValueError):
++                validate_cached_inputs(bad, self.rows, self.root)
++
++    def test_feature_row_shape_must_match_cached_ids(self):
++        for shape in ((1, 2), (2,), (2, 0), (2, 2, 1)):
++            with self.subTest(shape=shape), self.assertRaises(ValueError):
++                validate_cached_inputs(dict(self.cache(), features=SimpleNamespace(shape=shape)), self.rows, self.root)
++
++    def test_manifest_and_cache_order_may_differ_without_losing_id_binding(self):
++        cached = self.cache()
++        self.assertIsNone(validate_cached_inputs(cached, list(reversed(self.rows)), self.root))
++        self.assertEqual(binding_digest(measure_inputs(self.rows, self.root)),
++                         binding_digest(measure_inputs(list(reversed(self.rows)), self.root)))
++
++    def test_label_patient_and_partition_edits_do_not_invalidate_unchanged_pixels(self):
++        updated = [dict(r, patient_id="synthetic-private-patient", label="synthetic-new-label", partition="val")
++                   for r in self.rows]
++        self.assertIsNone(validate_cached_inputs(self.cache(), updated, self.root))
++
++
++@unittest.skipUnless(importlib.util.find_spec("numpy"), "Optional numpy unavailable")
++class CacheIOTests(BindingFixture):
++    def extract(self, path, *, side_effect=None, values=None):
++        import numpy as np
++        from cancer_workbench.adapters import encoder
++        from cancer_workbench.learning import features
++
++        adapter = SimpleNamespace(device="synthetic", embed=unittest.mock.Mock(
++            side_effect=side_effect, return_value=np.array([[1., 2.], [3., 4.]]) if values is None else values))
++        with patch.object(encoder, "FrozenEncoderAdapter", return_value=adapter), \
++                patch.object(encoder, "revision", return_value="a" * 40):
++            return features.extract_features("rad-dino", self.rows, self.root, path, quiet=True)
++
++    def legacy(self, path):
++        import numpy as np
++        from cancer_workbench.adapters import encoder
++
++        np.savez(path, sample_ids=np.array([r["sample_id"] for r in self.rows]), features=np.zeros((2, 2)),
++                 encoder_id="rad-dino", revision="a" * 40, variant="pad",
++                 preprocessing_hash=encoder.preprocessing_hash("rad-dino"))
++
++    def test_npz_roundtrip_is_bound_and_changed_source_is_rejected(self):
++        from cancer_workbench.adapters import encoder
++        from cancer_workbench.learning.features import load_bound_features
++
++        target = self.root / "bound.npz"
++        self.extract(target)
++        with patch.object(encoder, "revision", return_value="a" * 40):
++            result = load_bound_features(target, self.rows, self.root, "rad-dino")
++            self.assertEqual(result["input_binding_schema"], SCHEMA)
++            self.assertEqual(result["features"].shape, (2, 2))
++            body = b"synthetic replacement after cache write"
++            (self.root / self.rows[0]["file"]).write_bytes(body)
++            self.rows[0]["sha256"] = hashlib.sha256(body).hexdigest()
++            with self.assertRaises(ValueError):
++                load_bound_features(target, self.rows, self.root, "rad-dino")
++
++    def test_changed_source_during_embedding_preserves_existing_output(self):
++        import numpy as np
++
++        self.rows = [dict(r, sha256="") for r in self.rows]
++        target = self.root / "existing.npz"
++        target.write_bytes(b"synthetic old artifact")
++
++        def changed(*args, **kwargs):
++            (self.root / self.rows[0]["file"]).write_bytes(b"synthetic mutation during mocked embedding")
++            return np.zeros((2, 2))
++
++        with self.assertRaisesRegex(ValueError, "changed during feature extraction"):
++            self.extract(target, side_effect=changed)
++        self.assertEqual(target.read_bytes(), b"synthetic old artifact")
++
++    def test_failed_embedding_and_failed_npz_write_preserve_existing_output(self):
++        import numpy as np
++
++        target = self.root / "existing.npz"
++        target.write_bytes(b"synthetic old artifact")
++        with self.assertRaises(RuntimeError):
++            self.extract(target, side_effect=RuntimeError("Synthetic embedding failure"))
++        before = set(self.root.iterdir())
++        with patch.object(np, "savez", side_effect=OSError("Synthetic disk failure")), self.assertRaises(OSError):
++            self.extract(target)
++        self.assertEqual(target.read_bytes(), b"synthetic old artifact")
++        self.assertEqual(set(self.root.iterdir()), before)
++
++    def test_invalid_encoder_arrays_never_publish_a_cache(self):
++        import numpy as np
++
++        target = self.root / "invalid.npz"
++        for values in (np.zeros((1, 2)), np.zeros(2), np.full((2, 2), np.nan), np.array([["x", "y"], ["a", "b"]])):
++            with self.subTest(shape=values.shape), self.assertRaises(ValueError):
++                self.extract(target, values=values)
++            self.assertFalse(target.exists())
++
++    def test_wrong_encoder_revision_variant_and_nonscalar_identity_fail(self):
++        import numpy as np
++        from cancer_workbench.adapters import encoder
++        from cancer_workbench.learning.features import load_bound_features, load_features
++
++        target = self.root / "bound.npz"
++        self.extract(target)
++        original = load_features(target)
++        changes = ({"encoder_id": "other"}, {"revision": "b" * 40}, {"variant": "native_crop"},
++                   {"preprocessing_hash": "other"}, {"encoder_id": np.array(["rad-dino"])},
++                   {"input_binding_schema": np.array([SCHEMA])})
++        with patch.object(encoder, "revision", return_value="a" * 40):
++            for change in changes:
++                np.savez(target, **{**original, **change})
++                with self.subTest(fields=list(change)), self.assertRaises(ValueError):
++                    load_bound_features(target, self.rows, self.root, "rad-dino")
++        np.savez(target, **original)
++        with patch.object(encoder, "revision", return_value=None), self.assertRaisesRegex(ValueError, "revision is unavailable"):
++            load_bound_features(target, self.rows, self.root, "rad-dino")
++
++    def test_all_four_cache_readers_refuse_legacy_and_stale_before_work(self):
++        from contextlib import ExitStack
++        from cancer_workbench.adapters import encoder
++        from cancer_workbench.experiments import btxrd_baseline, btxrd_source_shift, btxrd_near_duplicates, explore
++        from cancer_workbench.learning import features, heads
++
++        target = self.root / "legacy.npz"
++        self.legacy(target)
++        stale = self.root / "stale.npz"
++        self.extract(stale)
++        changed = b"synthetic source changed before consumer entry"
++        (self.root / self.rows[0]["file"]).write_bytes(changed)
++        self.rows[0]["sha256"] = hashlib.sha256(changed).hexdigest()
++        manifest = self.root / "manifest.csv"
++        manifest.write_text("synthetic manifest bytes")
++        for kind, cache_file, expected_error in (("legacy", target, "supported image binding"),
++                                                  ("stale", stale, "current image IDs and bytes")):
++            for module in (btxrd_baseline, btxrd_source_shift, btxrd_near_duplicates, explore):
++                with self.subTest(reader=module.__name__, cache_kind=kind), ExitStack() as stack:
++                    stack.enter_context(patch.object(module, "read_manifest", return_value=copy.deepcopy(self.rows)))
++                    stack.enter_context(patch.object(module, "RAW_DIR", self.root))
++                    stack.enter_context(patch.object(encoder, "revision", return_value="a" * 40))
++                    stack.enter_context(patch.object(features, "cache_path", return_value=cache_file))
++                    extract = stack.enter_context(patch.object(features, "extract_features"))
++                    fit = stack.enter_context(patch.object(heads, "train_feature_head"))
++                    rank = stack.enter_context(patch.object(btxrd_near_duplicates, "pair_scores"))
++                    if module is explore:
++                        call = lambda: module._refit(self.root, {"encoder": "rad-dino", "endpoint": "three_class", "protocol": "synthetic"})
++                    else:
++                        stack.enter_context(patch.object(module, "MANIFEST_PATH", manifest))
++                        if module is not btxrd_near_duplicates:
++                            stack.enter_context(patch.object(module, "_git_revision", return_value="synthetic"))
++                        kwargs = {"out_dir": self.root / module.__name__.split(".")[-1]}
++                        if module is not btxrd_near_duplicates:
++                            kwargs["encoders"] = ("rad-dino",)
++                        if module is btxrd_source_shift:
++                            kwargs["variants"] = ("pad",)
++                        call = lambda: module.run(**kwargs)
++                    with self.assertRaisesRegex(ValueError, expected_error):
++                        call()
++                    extract.assert_not_called()
++                    fit.assert_not_called()
++                    rank.assert_not_called()
++
++
++if __name__ == "__main__":
++    unittest.main()

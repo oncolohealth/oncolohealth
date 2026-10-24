@@ -1,0 +1,140 @@
+{
+  "base_commit": "c13a74a15fdd636249899a587a239cb000107e6d",
+  "status": "local_unmerged_input_binding_repair",
+  "patch_sha256": "9ae70d91b8052f0b5fa98b5af94737042eaf306b44bc834cba0515a652997425",
+  "files": {
+    "PROGRESS.md": {
+      "base_sha256": "c459967b082afa4c07bf982156935dac310f1e93362b2a751fd8e2b486cb1e25",
+      "candidate_sha256": "22f3b6991e27aa62943fd42733c67576a47107d39b77ee0f1d09d233020c3eb0"
+    },
+    "cancer_workbench/experiments/btxrd_baseline.py": {
+      "base_sha256": "0eeef38a39ca8200fe96e0338586e34d20ecfb59ebea2ca33d6d73c2528e320e",
+      "candidate_sha256": "91ccce9f07eb813d4d5bd4c0afdd565d73de3b31b10b3b8f091b25eaa4de25ed"
+    },
+    "cancer_workbench/experiments/btxrd_near_duplicates.py": {
+      "base_sha256": "33df0ec14364bc77900863c0546bdc5982b50efc998bc0d8ec6992105521fb25",
+      "candidate_sha256": "4c4fbf10724f4d31f2905f3cc3faddf98844663b60d86ae3268f19eed0ade5bf"
+    },
+    "cancer_workbench/experiments/btxrd_source_shift.py": {
+      "base_sha256": "d6cf9fc8b1b247ba053b8ddaf2e13ed2544e5c87f464cacf260c01ff08e86a17",
+      "candidate_sha256": "cc1a29ff180a3a5a41718e0bee03008bdf66557875318185caf7d7b5c71e784d"
+    },
+    "cancer_workbench/experiments/explore.py": {
+      "base_sha256": "6e0471be601497daf4a1b3aeaf5008355f9e70155de3e541778f0bb2ee011c32",
+      "candidate_sha256": "da8641191acf67a695e85cb6b0b0c428a406910e4bb36965165ef66fc9318331"
+    },
+    "cancer_workbench/learning/feature_identity.py": {
+      "base_sha256": null,
+      "candidate_sha256": "20417fbca757c01d5ef8f0c6c84a82c4a5e9542d8bc02769d815e6d5caa48e2f"
+    },
+    "cancer_workbench/learning/features.py": {
+      "base_sha256": "6d47182d67d564d5248ecd372c5a9751a349670d30bb9dfb7d612a6af1a93dcf",
+      "candidate_sha256": "3f5935730da5d873ad6ba15704a85f04aefe1c207fa502260f1f231c815fbbd2"
+    },
+    "docs/reports/E-feature-cache-input-binding.md": {
+      "base_sha256": null,
+      "candidate_sha256": "7ef9d321a0506be2d649627155bd2481080cef628bed9107026248b3e537f55b"
+    },
+    "tests/test_feature_identity.py": {
+      "base_sha256": null,
+      "candidate_sha256": "e14a5df886cf02a0155e5f04f2d21883485fbe9579ea919f60eb597b13d98e30"
+    }
+  },
+  "patch_verification": {
+    "whitespace_and_apply_check": true,
+    "fresh_application_equals_candidate": true,
+    "all_three_patch_orders_checked": [
+      [
+        "BTXRD-shared-integration.patch",
+        "BTXRD-model-provenance-fix.patch",
+        "BTXRD-feature-cache-fix.patch"
+      ],
+      [
+        "BTXRD-shared-integration.patch",
+        "BTXRD-feature-cache-fix.patch",
+        "BTXRD-model-provenance-fix.patch"
+      ],
+      [
+        "BTXRD-model-provenance-fix.patch",
+        "BTXRD-shared-integration.patch",
+        "BTXRD-feature-cache-fix.patch"
+      ],
+      [
+        "BTXRD-model-provenance-fix.patch",
+        "BTXRD-feature-cache-fix.patch",
+        "BTXRD-shared-integration.patch"
+      ],
+      [
+        "BTXRD-feature-cache-fix.patch",
+        "BTXRD-shared-integration.patch",
+        "BTXRD-model-provenance-fix.patch"
+      ],
+      [
+        "BTXRD-feature-cache-fix.patch",
+        "BTXRD-model-provenance-fix.patch",
+        "BTXRD-shared-integration.patch"
+      ]
+    ],
+    "all_six_orders_produce_identical_source_trees": true
+  },
+  "weights_or_medical_data_downloaded": false,
+  "medical_source_files_read": false,
+  "real_model_inference_or_training_performed": false,
+  "shared_main_changed": false,
+  "team_branch_changed": false,
+  "pushed": false,
+  "merged": false,
+  "medical_validation_established": false,
+  "patient_grouping_verified": false,
+  "reference_standard_verified": false,
+  "limitations": [
+    "Measured byte binding is not curated source, grouping or label authentication",
+    "Actual weight bytes and processor implementation are not authenticated",
+    "Before/after hashing is not a file lock and cannot exclude every transient edit/restoration",
+    "Low-level reader and feature-head APIs are not a security or authorization boundary",
+    "Receiving branch and full ML/Torch execution remain unverified"
+  ],
+  "verification": {
+    "new_targeted_checks": {
+      "discovered": 20,
+      "numpy_enabled_passed": 20,
+      "plain_python_passed": 14,
+      "plain_python_skipped": 6
+    },
+    "standalone_plain_python": {
+      "discovered": 126,
+      "passed": 107,
+      "skipped": 19,
+      "failures": 0,
+      "errors": 0
+    },
+    "standalone_numpy_enabled": {
+      "discovered": 126,
+      "passed": 115,
+      "skipped": 11,
+      "failures": 0,
+      "errors": 0
+    },
+    "all_three_patches_plain_python": {
+      "discovered": 160,
+      "passed": 140,
+      "skipped": 20,
+      "failures": 0,
+      "errors": 0
+    },
+    "all_three_patches_numpy_and_pillow": {
+      "discovered": 160,
+      "passed": 149,
+      "skipped": 11,
+      "failures": 0,
+      "errors": 0
+    },
+    "catalog": {
+      "models": 16,
+      "datasets": 14,
+      "validated": true
+    },
+    "all_four_consumers_reject_legacy_and_stale_before_fitting_or_ranking": true,
+    "full_ml_torch_execution_performed": false
+  }
+}

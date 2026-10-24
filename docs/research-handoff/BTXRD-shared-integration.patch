@@ -1,0 +1,1023 @@
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index edd08cd..5105f67 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -193,3 +193,8 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
+ | A coordinator tool | `coordinator/tools.py::default_toolbox` | JSON schema + handler returning observed data |
+ | An app endpoint | function in `app/api.py` + entry in a route table | call it from `app/static/app.js` via `api()` |
+ | A CLI command | `__main__.py` | add to `commands` |
++
++
++## Candidate offline release/evidence review
++
++`datasets/release_audit.py` audits an already-local BTXRD ZIP and prepares an evidence template. `datasets/evidence.py` binds returned records to source bytes and reports declared evidence gaps without exporting supplied identity/reference values. `datasets/btxrd_review.py` owns the `btxrd-review audit|template|check` CLI. These are independent utilities; they do not replace the current manifest/audit path, alter training/evaluation, or create a cohort. See [the candidate contract and verification](docs/reports/A-offline-release-review.md).
+diff --git a/PROGRESS.md b/PROGRESS.md
+index dc58c50..5010acc 100644
+--- a/PROGRESS.md
++++ b/PROGRESS.md
+@@ -159,3 +159,11 @@ Historical verification from the incoming branch's source checkout:
+ - [x] Local verification: workflow YAML parses and its triggers/matrix match the requested settings. Clean Python 3.12.13 and 3.14.3 environments each discover **98 tests, OK with 8 optional ML tests skipped**. `git diff --check` passes. These are synthetic software checks only.
+ - [ ] Verify the first GitHub-hosted run after the workflow is committed and pushed; Python 3.11/3.13 and Ubuntu have not been exercised locally.
+ - [ ] Synchronize this CI checklist with the Team Hub's Local build checklist tab. Access still redirects to Google sign-in; no remote checklist changes were made.
++
++
++## Unmerged local candidate: offline BTXRD review
++
++- [x] Candidate against main `c13a74a15fdd636249899a587a239cb000107e6d`: read-only ZIP audit, evidence-template CSV and evidence-return check under `datasets/`, exposed through `btxrd-review`. See [A-offline-release-review.md](docs/reports/A-offline-release-review.md).
++- [x] Combined synthetic suite: 131 discovered, 117 pass / 14 skip in plain Python; 118 pass / 13 skip with optional Pillow. Catalog remains 16 models / 14 datasets. Optional ML/Torch tests are not claimed as run.
++- [x] Real local evidence-check result compared with the independent foundation report: 3,746 source-bound rows, missing patient/lesion/reference evidence and four conflicting source-copy labels; no cohort created.
++- [ ] Review/rebase the candidate, test the full supported environment, and merge only after review. This is a local proposal; shared main and the unpushed team branch are not changed. No acquisition, training, catalog promotion or medical validation is established.
+diff --git a/cancer_workbench/__main__.py b/cancer_workbench/__main__.py
+index 9ba6ed1..4edafe3 100644
+--- a/cancer_workbench/__main__.py
++++ b/cancer_workbench/__main__.py
+@@ -1,4 +1,4 @@
+-"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|baseline|source-shift|near-duplicates> ..."""
++"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|btxrd-review|baseline|source-shift|near-duplicates> ..."""
+ from __future__ import annotations
+ 
+ import argparse
+@@ -112,6 +112,12 @@ def _btxrd(argv: list[str]) -> int:
+     return 0
+ 
+ 
++def _btxrd_review(argv: list[str]) -> int:
++    from .datasets.btxrd_review import main as review_main
++
++    return review_main(argv)
++
++
+ def _baseline(argv: list[str]) -> int:
+     from .experiments import btxrd_baseline as bb
+ 
+@@ -173,13 +179,14 @@ def _app(argv: list[str]) -> int:
+ 
+ def main(argv: list[str] | None = None) -> int:
+     argv = list(sys.argv[1:] if argv is None else argv)
+-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "baseline": _baseline,
++    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "btxrd-review": _btxrd_review, "baseline": _baseline,
+                 "source-shift": _source_shift, "near-duplicates": _near_duplicates, "app": _app}
+     if not argv or argv[0] not in commands:
+         print(__doc__ + "\n  app          open the local researcher app in your browser\n"
+               "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
+               "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
+               "  btxrd        describe the BTXRD release / build its manifest\n"
++              "  btxrd-review audit local ZIP / prepare or check evidence CSV (no network or training)\n"
+               "  baseline     exploratory frozen-encoder baseline on BTXRD (needs the ml extra)\n"
+               "  source-shift compare preprocessing variants under the BTXRD source hold-out (needs the ml extra)\n"
+               "  near-duplicates  rank BTXRD image pairs by feature similarity for review (needs numpy)")
+diff --git a/cancer_workbench/datasets/btxrd_review.py b/cancer_workbench/datasets/btxrd_review.py
+new file mode 100644
+index 0000000..4213b36
+--- /dev/null
++++ b/cancer_workbench/datasets/btxrd_review.py
+@@ -0,0 +1,55 @@
++"""Offline archive/evidence review; never acquires, extracts, splits or trains."""
++
++import argparse
++import csv
++import json
++import sys
++
++from .release_audit import audit_btxrd_release, prepare_btxrd_evidence_template, EVIDENCE_COLUMNS
++from .evidence import check_btxrd_evidence
++
++
++def _read_evidence(path):
++    with open(path, newline="", encoding="utf-8-sig") as stream:
++        reader = csv.DictReader(stream)
++        if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)):
++            raise ValueError("Evidence CSV requires unique column names")
++        return list(reader)
++
++
++def main(argv=None):
++    parser = argparse.ArgumentParser(prog="python -m cancer_workbench btxrd-review", description=__doc__)
++    sub = parser.add_subparsers(dest="command", required=True)
++    audit = sub.add_parser("audit", help="Audit a local release ZIP and optional split lists")
++    template = sub.add_parser("template", help="Print source flags/hashes and blank evidence fields as CSV")
++    check = sub.add_parser("check", help="Compare a returned evidence CSV with the local source archive")
++    for command in (audit, template, check):
++        command.add_argument("archive")
++        command.add_argument("--expected-md5", help="Reference digest from the chosen release record")
++    audit.add_argument("--train-list")
++    audit.add_argument("--validation-list")
++    audit.add_argument("--inspect-exif", action="store_true", help="Optional Pillow; tag counts only, never values")
++    check.add_argument("evidence")
++    args = parser.parse_args(argv)
++    try:
++        if args.command == "audit":
++            result = audit_btxrd_release(args.archive, expected_md5=args.expected_md5,
++                                         train_list=args.train_list, validation_list=args.validation_list,
++                                         inspect_exif=args.inspect_exif)
++        elif args.command == "template":
++            result = prepare_btxrd_evidence_template(args.archive, expected_md5=args.expected_md5)
++        else:
++            result = check_btxrd_evidence(args.archive, _read_evidence(args.evidence), expected_md5=args.expected_md5)
++    except (ValueError, TypeError, KeyError, OSError) as error:
++        parser.exit(2, "Input rejected: " + str(error) + "\n")
++    if args.command == "template":
++        writer = csv.DictWriter(sys.stdout, fieldnames=EVIDENCE_COLUMNS, lineterminator="\n")
++        writer.writeheader()
++        writer.writerows(result)
++    else:
++        print(json.dumps(result, indent=2, allow_nan=False))
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/cancer_workbench/datasets/evidence.py b/cancer_workbench/datasets/evidence.py
+new file mode 100644
+index 0000000..99d1949
+--- /dev/null
++++ b/cancer_workbench/datasets/evidence.py
+@@ -0,0 +1,128 @@
++"""Bind a returned evidence handoff to local source bytes; no medical attestation."""
++
++import hashlib
++import json
++from collections import Counter, defaultdict
++from pathlib import PurePosixPath
++
++from .release_audit import audit_btxrd_release, EVIDENCE_COLUMNS
++
++UNRESOLVED = {"", "unknown", "unavailable", "none", "n/a", "na", "not provided",
++              "pending", "tbd", "unreviewed"}
++IMMUTABLE = ("center", "tumor", "benign", "malignant", "sha256", "review_flags")
++REQUIRED_EVIDENCE = ("patient_id", "grouping_reference", "lesion_id", "reference_standard", "reference_evidence")
++
++
++def _text(value):
++    return "" if value is None else str(value).strip()
++
++
++def _source_value(field, value):
++    value = _text(value)
++    if field in {"tumor", "benign", "malignant"}:
++        return {"0": "0", "0.0": "0", "false": "0", "1": "1", "1.0": "1", "true": "1"}.get(value.casefold(), value)
++    if field == "center":
++        return value.removesuffix(".0")
++    if field == "sha256":
++        return value.lower()
++    if field == "review_flags":
++        return tuple(sorted(filter(None, (v.strip() for v in value.split(";")))))
++    return value
++
++
++def check_btxrd_evidence(archive, evidence_rows, *, expected_md5=None):
++    """Check source binding and declared completeness; never create a cohort.
++
++    The returned report omits supplied patient IDs and evidence/reference values.
++    Non-placeholder text is still an unverified assertion, not an authenticated map.
++    """
++    rows = list(evidence_rows)
++    if any(not isinstance(row, dict) or set(row) != set(EVIDENCE_COLUMNS) for row in rows):
++        raise ValueError("Evidence input must preserve exactly the template columns")
++    source = audit_btxrd_release(archive, expected_md5=expected_md5, include_evidence_rows=True)
++    baseline = {row["image_id"]: row for row in source["evidence_rows"]}
++    if not baseline:
++        raise ValueError("Cannot check evidence against empty source metadata")
++    supplied, repeated = {}, Counter()
++    for row in rows:
++        name = _text(row["image_id"])
++        repeated[name] += 1
++        supplied.setdefault(name, row)
++    findings = []
++
++    def finding(code, count, **extra):
++        if count:
++            findings.append({"level": "blocker", "code": code, "image_count": count, **extra})
++
++    finding("duplicate_image_id", sum(n - 1 for n in repeated.values() if n > 1))
++    finding("unknown_image_id", len(set(supplied) - set(baseline)))
++    finding("release_image_missing", len(set(baseline) - set(supplied)))
++    matched = sorted(set(supplied) & set(baseline))
++    source_changes = {}
++    for field in IMMUTABLE:
++        changed = [name for name in matched
++                   if _source_value(field, supplied[name][field]) != _source_value(field, baseline[name][field])]
++        if changed:
++            source_changes[field] = changed
++            finding("source_field_drift", len(changed), field=field, example_image_ids=changed[:10])
++    bound = not (set(supplied) != set(baseline) or source_changes or any(n > 1 for n in repeated.values()))
++    missing = Counter()
++    source_names = {name.casefold() for name in baseline} | {PurePosixPath(name).stem.casefold() for name in baseline}
++    unresolved_status = 0
++    valid_groups = []
++    for name in matched:
++        row = supplied[name]
++        unresolved = set()
++        for field in REQUIRED_EVIDENCE:
++            value = _text(row[field])
++            if value.casefold() in UNRESOLVED or (field in {"patient_id", "lesion_id"} and value.casefold() in source_names):
++                missing[field] += 1
++                unresolved.add(field)
++        if _text(row["review_status"]).casefold() != "reviewed":
++            unresolved_status += 1
++        if not unresolved & {"patient_id", "lesion_id"}:
++            valid_groups.append(name)
++    for field, count in sorted(missing.items()):
++        finding("evidence_missing_or_placeholder", count, field=field)
++    finding("review_status_not_reviewed", unresolved_status)
++    conflict_ids = {name for group in source["exact_duplicates"]["conflicting_label_groups"] for name in group}
++    finding("source_exact_duplicate_label_conflict", len(conflict_ids))
++    invalid_flags = sum(source["class_counts"].get(key, 0) for key in ("invalid_flags", "conflicting_flags"))
++    finding("source_diagnostic_flags_unresolved", invalid_flags)
++    exact_patient_conflicts = 0
++    for group in source["exact_duplicates"]["groups"]:
++        patients = {_text(supplied[name]["patient_id"]) for name in group if name in supplied
++                    and _text(supplied[name]["patient_id"]).casefold() not in UNRESOLVED}
++        if len(patients) > 1:
++            exact_patient_conflicts += len(group)
++    finding("exact_duplicate_patient_mapping_conflict", exact_patient_conflicts)
++    lesion_labels = defaultdict(set)
++    lesion_sizes = Counter()
++    for name in valid_groups:
++        row = supplied[name]
++        key = (_text(row["patient_id"]), _text(row["lesion_id"]))
++        label = tuple(baseline[name][k] for k in ("tumor", "benign", "malignant"))
++        lesion_labels[key].add(label)
++        lesion_sizes[key] += 1
++    finding("declared_lesion_source_label_conflict", sum(lesion_sizes[k] for k, labels in lesion_labels.items() if len(labels) > 1))
++    mismatches = source["annotations"]["subtype_label_set_mismatch"]
++    if mismatches:
++        findings.append({"level": "warning", "code": "source_subtype_label_set_difference_requires_review",
++                         "image_count": len(mismatches)})
++    findings.extend({"level": "warning", "code": code} for code in (
++        "patient_and_lesion_mapping_assertions_not_authenticated",
++        "diagnostic_reference_assertions_not_verified", "permissions_and_protocol_require_review",
++        "near_duplicate_and_pixel_privacy_review_not_completed"))
++    content = sorted(rows, key=lambda row: (_text(row["image_id"]), json.dumps(row, sort_keys=True)))
++    return {
++        "dataset_id": "btxrd", "scope": "Local source binding and declared evidence completeness only",
++        "status": "blocked" if any(f["level"] == "blocker" for f in findings) else "declared_evidence_requires_review",
++        "archive_sha256": source["archive"]["sha256"],
++        "archive_reference_md5_checked": source["archive"]["reference_md5_checked"],
++        "evidence_content_sha256": hashlib.sha256(json.dumps(content, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
++        "release_image_count": len(baseline), "supplied_row_count": len(rows), "matched_image_count": len(matched),
++        "source_binding_verified": bound, "missing_evidence_counts": dict(sorted(missing.items())),
++        "findings": findings, "ready_for_training": False, "cohort_created": False,
++        "patient_grouping_verified": False, "reference_standard_verified": False,
++        "medical_validation_established": False,
++        "supplied_patient_ids_and_reference_values_exported": False}
+diff --git a/cancer_workbench/datasets/release_audit.py b/cancer_workbench/datasets/release_audit.py
+new file mode 100644
+index 0000000..0c8d5b4
+--- /dev/null
++++ b/cancer_workbench/datasets/release_audit.py
+@@ -0,0 +1,329 @@
++"""Read-only BTXRD archive audit. No extraction, acquisition, training or network."""
++
++import csv
++import hashlib
++import io
++import json
++import re
++import stat
++import xml.etree.ElementTree as ET
++from collections import Counter, defaultdict
++from pathlib import Path, PurePosixPath
++from zipfile import BadZipFile, ZipFile
++
++NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
++LABEL_FLAGS = {(False, False, False): "normal", (True, True, False): "benign",
++               (True, False, True): "malignant"}
++MAX_MEMBER = 20_000_000
++SUBTYPES = {"osteochondroma", "multiple osteochondromas", "simple bone cyst", "giant cell tumor",
++            "osteofibroma", "synovial osteochondroma", "other bt", "osteosarcoma", "other mt"}
++EVIDENCE_COLUMNS = ("image_id", "center", "tumor", "benign", "malignant", "sha256",
++                    "patient_id", "grouping_reference", "lesion_id", "reference_standard",
++                    "reference_evidence", "review_status", "review_flags")
++
++
++def _member_bytes(archive, member):
++    if archive.getinfo(member).file_size > MAX_MEMBER:
++        raise ValueError("Tabular, annotation or EXIF input exceeds the 20 MB member limit")
++    return archive.read(member)
++
++
++def _safe_members(archive):
++    infos = archive.infolist()
++    names = [i.filename for i in infos]
++    if len(names) != len(set(names)):
++        raise ValueError("ZIP has duplicate member paths")
++    for info in infos:
++        name = info.filename.replace("\\", "/")
++        if (PurePosixPath(name).is_absolute() or ".." in PurePosixPath(name).parts
++                or re.match(r"^[A-Za-z]:", name)
++                or stat.S_ISLNK(info.external_attr >> 16)):
++            raise ValueError("ZIP contains an unsafe path or symbolic link")
++    return names
++
++
++def _xlsx_rows(data):
++    """Read the workbook's first worksheet; reject formulas and ambiguous headers."""
++    with ZipFile(io.BytesIO(data)) as book:
++        names = _safe_members(book)
++        workbook = ET.fromstring(_member_bytes(book, "xl/workbook.xml"))
++        sheets = workbook.findall("x:sheets/x:sheet", NS)
++        if not sheets:
++            raise ValueError("XLSX has no worksheet")
++        rel_id = sheets[0].get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
++        rels = ET.fromstring(_member_bytes(book, "xl/_rels/workbook.xml.rels"))
++        matches = [r for r in rels if r.get("Id") == rel_id]
++        if len(matches) != 1 or matches[0].get("TargetMode") == "External":
++            raise ValueError("XLSX first worksheet relationship is invalid")
++        target = matches[0].get("Target", "")
++        sheet_path = target.lstrip("/") if target.startswith("/") else "xl/" + target
++        if ".." in PurePosixPath(sheet_path).parts or sheet_path not in names:
++            raise ValueError("XLSX first worksheet path is invalid")
++        strings = []
++        if "xl/sharedStrings.xml" in names:
++            shared = ET.fromstring(_member_bytes(book, "xl/sharedStrings.xml"))
++            strings = ["".join(t.text or "" for t in s.findall(".//x:t", NS))
++                       for s in shared.findall("x:si", NS)]
++        sheet = ET.fromstring(_member_bytes(book, sheet_path))
++        grid = []
++        for row in sheet.findall(".//x:sheetData/x:row", NS):
++            values = {}
++            for cell in row.findall("x:c", NS):
++                if cell.find("x:f", NS) is not None:
++                    raise ValueError("XLSX formulas require a reviewed values-only export")
++                match = re.fullmatch(r"([A-Z]+)[0-9]+", cell.get("r", ""))
++                if not match:
++                    raise ValueError("XLSX has an invalid cell reference")
++                col = 0
++                for char in match.group(1):
++                    col = col * 26 + ord(char) - 64
++                value = cell.find("x:v", NS)
++                raw = value.text if value is not None and value.text is not None else ""
++                if cell.get("t") == "s":
++                    index = int(raw)
++                    if not 0 <= index < len(strings):
++                        raise ValueError("XLSX shared-string index is invalid")
++                    raw = strings[index]
++                elif cell.get("t") == "inlineStr":
++                    raw = "".join(t.text or "" for t in cell.findall(".//x:t", NS))
++                if col in values:
++                    raise ValueError("XLSX repeats a cell")
++                values[col] = raw
++            if any(str(v).strip() for v in values.values()):
++                grid.append(values)
++    if not grid:
++        raise ValueError("XLSX first worksheet is empty")
++    fields = [grid[0].get(i, "").strip() for i in range(1, max(grid[0]) + 1)]
++    if not all(fields) or len(fields) != len(set(fields)):
++        raise ValueError("Table needs nonempty unique headers")
++    if any(any(i > len(fields) and str(v).strip() for i, v in r.items()) for r in grid[1:]):
++        raise ValueError("XLSX data extends beyond its header width")
++    return fields, [{f: r.get(i, "") for i, f in enumerate(fields, 1)} for r in grid[1:]]
++
++
++def _table(data, suffix):
++    if suffix.lower() == ".xlsx":
++        return _xlsx_rows(data)
++    reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
++    fields = reader.fieldnames or []
++    if not fields or not all(fields) or len(fields) != len(set(fields)):
++        raise ValueError("Table needs nonempty unique headers")
++    rows = list(reader)
++    if any(None in r or any(v is None for v in r.values()) for r in rows):
++        raise ValueError("CSV rows do not match the header width")
++    return fields, rows
++
++
++def _image_id(value):
++    name = str(value).strip()
++    if (not name or "/" in name or "\\" in name or name[0] in "=+-@"
++            or any(ord(char) < 32 for char in name)):
++        raise ValueError("image_id must be a nonempty filename")
++    return name if name.lower().endswith((".jpg", ".jpeg")) else name + ".jpeg"
++
++
++def _label(row):
++    flags = []
++    for name in ("tumor", "benign", "malignant"):
++        value = str(row[name]).strip().lower()
++        if value not in {"0", "0.0", "false", "1", "1.0", "true"}:
++            return "invalid_flags"
++        flags.append(value in {"1", "1.0", "true"})
++    return LABEL_FLAGS.get(tuple(flags), "conflicting_flags")
++
++
++def _split_audit(train_list, validation_list, image_ids, duplicates):
++    if not train_list and not validation_list:
++        return {"checked": False}
++    if not train_list or not validation_list:
++        raise ValueError("Supply both training and validation lists")
++    lists, digests = [], []
++    for path in (Path(train_list), Path(validation_list)):
++        data = path.read_bytes()
++        digests.append(hashlib.sha256(data).hexdigest())
++        fields, rows = _table(data, path.suffix)
++        if "image_id" not in fields:
++            raise ValueError("Split lists require image_id")
++        ids = [_image_id(r["image_id"]) for r in rows]
++        if len({Path(n).stem for n in ids}) != len(ids):
++            raise ValueError("Split list repeats an image stem")
++        lists.append(ids)
++    train, val = [{Path(n).stem for n in group} for group in lists]
++    release = {Path(n).stem: n for n in image_ids}
++    if len(release) != len(image_ids):
++        raise ValueError("Release has ambiguous image stems")
++    mismatches = sorted(n for group in lists for n in group
++                        if Path(n).stem in release and release[Path(n).stem] != n)
++    cross = [g for g in duplicates if {Path(n).stem for n in g} & train
++             and {Path(n).stem for n in g} & val]
++    return {"checked": True, "train_count": len(train), "validation_count": len(val),
++            "train_list_sha256": digests[0], "validation_list_sha256": digests[1],
++            "overlap_image_stems": sorted(train & val),
++            "unknown_image_stems": sorted((train | val) - release.keys()),
++            "release_image_stems_omitted": sorted(release.keys() - (train | val)),
++            "extension_mismatch_count": len(mismatches),
++            "exact_duplicate_groups_crossing_lists": cross,
++            "patient_independence_established": False}
++
++
++def audit_btxrd_release(path, *, expected_md5=None, train_list=None,
++                        validation_list=None, inspect_exif=False, include_evidence_rows=False):
++    """Return structural findings only; never attest patient or medical validity."""
++    if expected_md5 is not None and not re.fullmatch(r"[a-fA-F0-9]{32}", expected_md5):
++        raise ValueError("Expected MD5 must contain 32 hexadecimal characters")
++    if inspect_exif:
++        try:
++            from PIL import Image, ExifTags
++        except ImportError as exc:
++            raise ValueError("EXIF tag counting needs optional Pillow; values are never exported") from exc
++    md5, sha = hashlib.md5(), hashlib.sha256()
++    with Path(path).open("rb") as stream:
++        for block in iter(lambda: stream.read(1 << 20), b""):
++            md5.update(block)
++            sha.update(block)
++    if expected_md5 and md5.hexdigest() != expected_md5.lower():
++        raise ValueError("Archive MD5 does not match the supplied reference")
++    try:
++        with ZipFile(path) as archive:
++            names = _safe_members(archive)
++            if len(names) > 50_000 or sum(i.file_size for i in archive.infolist()) > 2_000_000_000:
++                raise ValueError("Archive exceeds this audit's 50,000-member / 2 GB uncompressed limit")
++            if archive.testzip() is not None:
++                raise ValueError("Archive CRC check failed")
++            metadata = [n for n in names if PurePosixPath(n).name.lower() in {"dataset.xlsx", "dataset.csv"}]
++            if len(metadata) != 1:
++                raise ValueError("Archive must have exactly one dataset.xlsx or dataset.csv")
++            fields, rows = _table(_member_bytes(archive, metadata[0]), Path(metadata[0]).suffix)
++            if not {"image_id", "center", "tumor", "benign", "malignant"}.issubset(fields):
++                raise ValueError("BTXRD metadata is missing required columns")
++            ids = [_image_id(r["image_id"]) for r in rows]
++            if len(ids) != len(set(ids)):
++                raise ValueError("Metadata repeats image_id")
++            by_id = dict(zip(ids, rows))
++            by_stem = {Path(n).stem: n for n in ids}
++            if len(by_stem) != len(ids):
++                raise ValueError("Metadata has ambiguous image stems")
++            labels = {n: _label(r) for n, r in by_id.items()}
++            images = [n for n in names if n.lower().endswith((".jpg", ".jpeg"))]
++            annotations = [n for n in names if n.lower().endswith(".json")]
++            image_names = [PurePosixPath(n).name for n in images]
++            annotation_ids = [PurePosixPath(n).stem for n in annotations]
++            if len(image_names) != len(set(image_names)) or len(annotation_ids) != len(set(annotation_ids)):
++                raise ValueError("Archive has ambiguous image or annotation filenames")
++            digests, image_digests = defaultdict(list), {}
++            exif_counts, exif_nonempty = Counter(), Counter()
++            for member in images:
++                h = hashlib.sha256()
++                with archive.open(member) as stream:
++                    for block in iter(lambda: stream.read(1 << 20), b""):
++                        h.update(block)
++                image_name = PurePosixPath(member).name
++                image_digests[image_name] = h.hexdigest()
++                digests[h.hexdigest()].append(image_name)
++                if inspect_exif:
++                    with Image.open(io.BytesIO(_member_bytes(archive, member))) as image:
++                        exif = image.getexif()
++                        exif_counts.update(str(ExifTags.TAGS.get(k, k)) for k in exif)
++                        exif_nonempty.update(str(ExifTags.TAGS.get(k, k)) for k in exif if exif.get(k))
++            shapes, annotation_labels, bad_json, bad_paths = Counter(), Counter(), [], []
++            subtype_mismatches = []
++            subtype_checked = SUBTYPES.issubset(fields)
++            for member in annotations:
++                name = PurePosixPath(member).name
++                try:
++                    data = json.loads(_member_bytes(archive, member))
++                    if not isinstance(data, dict) or not isinstance(data.get("shapes"), list):
++                        raise ValueError("Invalid annotation structure")
++                    if any(not isinstance(s, dict) for s in data["shapes"]):
++                        raise ValueError("Invalid annotation shape")
++                except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
++                    bad_json.append(name)
++                    continue
++                embedded = PurePosixPath(str(data.get("imagePath") or "").replace("\\", "/")).stem
++                if not embedded or embedded != PurePosixPath(member).stem:
++                    bad_paths.append(name)
++                shapes.update(str(s.get("shape_type")) for s in data["shapes"])
++                annotation_labels.update(str(s.get("label")) for s in data["shapes"])
++                image_id = by_stem.get(PurePosixPath(member).stem)
++                if subtype_checked and image_id:
++                    row = by_id[image_id]
++                    expected = {k for k in SUBTYPES if str(row[k]).strip().lower() in {"1", "1.0", "true"}}
++                    observed = {str(s.get("label")).strip().lower() for s in data["shapes"]}
++                    if expected != observed:
++                        subtype_mismatches.append({"image_id": image_id, "metadata_subtypes": sorted(expected),
++                                                   "annotation_labels": sorted(observed)})
++    except (BadZipFile, ET.ParseError, IndexError, KeyError) as exc:
++        raise ValueError("Archive or spreadsheet structure is unreadable") from exc
++    duplicates = sorted(sorted(g) for g in digests.values() if len(g) > 1)
++    tumor_ids = {Path(n).stem for n, lab in labels.items() if lab in {"benign", "malignant"}}
++    centers = defaultdict(Counter)
++    for n, r in by_id.items():
++        centers[str(r["center"]).strip().removesuffix(".0")][labels[n]] += 1
++    report = {
++        "dataset_id": "btxrd", "audit_scope": "offline_structure_and_declared_metadata",
++        "archive": {"bytes": Path(path).stat().st_size, "md5": md5.hexdigest(), "sha256": sha.hexdigest(),
++                    "reference_md5_checked": expected_md5 is not None, "crc_check": "passed"},
++        "metadata": {"file": Path(metadata[0]).name, "fields": fields, "rows": len(rows)},
++        "image_count": len(images), "annotation_count": len(annotations),
++        "class_counts": dict(Counter(labels.values())),
++        "center_class_counts": {c: dict(v) for c, v in sorted(centers.items())},
++        "joins": {"image_ids_missing_file": sorted(set(ids) - set(image_names)),
++                  "image_files_missing_row": sorted(set(image_names) - set(ids)),
++                  "tumor_ids_missing_annotation": sorted(tumor_ids - set(annotation_ids)),
++                  "annotation_ids_without_tumor": sorted(set(annotation_ids) - tumor_ids)},
++        "exact_duplicates": {"groups": duplicates,
++                             "pair_count": sum(len(g) * (len(g) - 1) // 2 for g in duplicates),
++                             "conflicting_label_groups": [g for g in duplicates if len({labels.get(n) for n in g}) > 1],
++                             "cross_center_groups": [g for g in duplicates if len({str(by_id.get(n, {}).get("center")) for n in g}) > 1]},
++        "annotations": {"shape_types": dict(shapes), "labels": dict(annotation_labels),
++                        "invalid_json_or_structure": bad_json, "image_path_mismatch": bad_paths,
++                        "subtype_label_sets_checked": subtype_checked,
++                        "subtype_label_set_mismatch": subtype_mismatches},
++        "split_lists": _split_audit(train_list, validation_list, ids, duplicates),
++        "exif": {"checked": inspect_exif, "tag_presence_counts": dict(exif_counts),
++                 "nonempty_raw_tag_counts": dict(exif_nonempty), "values_exported": False},
++        "ready_for_training": False, "patient_grouping_verified": False,
++        "reference_standard_verified": False, "medical_validation_established": False,
++        "limitations": ["No patient or lesion identity is inferred from metadata, hashes or split lists.",
++                        "Labels, reference standards, permissions and scientific protocol need independent review.",
++                        "Exact-byte checks miss re-encoding, crops, other views and other patient overlap.",
++                        "Annotation geometry, pixel privacy and EXIF values are not reviewed."]}
++    if include_evidence_rows:
++        flags = defaultdict(set)
++        for group in duplicates:
++            conflict = len({labels.get(n) for n in group}) > 1
++            for name in group:
++                flags[name].add("exact_duplicate_label_conflict" if conflict else "exact_duplicate_family")
++        for mismatch in subtype_mismatches:
++            flags[mismatch["image_id"]].add("subtype_label_set_mismatch")
++        for name in ids:
++            if name not in image_digests:
++                flags[name].add("image_file_missing")
++            if labels[name] in {"invalid_flags", "conflicting_flags"}:
++                flags[name].add(labels[name])
++            if Path(name).stem in report["joins"]["tumor_ids_missing_annotation"]:
++                flags[name].add("tumor_annotation_missing")
++        evidence = []
++        for name in sorted(ids):
++            source = by_id[name]
++            row = {column: "" for column in EVIDENCE_COLUMNS}
++            row.update(image_id=name, center=str(source["center"]).strip().removesuffix(".0"),
++                       sha256=image_digests.get(name, ""), review_status="unreviewed",
++                       review_flags=";".join(sorted(flags[name])))
++            for column in ("tumor", "benign", "malignant"):
++                value = str(source[column]).strip().lower()
++                row[column] = {"0": "0", "0.0": "0", "false": "0",
++                               "1": "1", "1.0": "1", "true": "1"}.get(value, "")
++            evidence.append(row)
++        report["evidence_rows"] = evidence
++    return report
++
++
++def prepare_btxrd_evidence_template(path, *, expected_md5=None):
++    """Measured file identities with blank custodian evidence; no cohort or groups."""
++    report = audit_btxrd_release(path, expected_md5=expected_md5, include_evidence_rows=True)
++    if not report["evidence_rows"]:
++        raise ValueError("Cannot prepare an evidence template from empty metadata")
++    if any(row["center"] not in {"1", "2", "3"} for row in report["evidence_rows"]):
++        raise ValueError("Evidence template requires original BTXRD centers 1, 2 or 3")
++    return report["evidence_rows"]
+diff --git a/docs/reports/A-offline-release-review.md b/docs/reports/A-offline-release-review.md
+new file mode 100644
+index 0000000..4ed7db1
+--- /dev/null
++++ b/docs/reports/A-offline-release-review.md
+@@ -0,0 +1,34 @@
++# Offline BTXRD release and evidence review candidate
++
++This is an unmerged integration candidate against main `c13a74a15fdd636249899a587a239cb000107e6d`. It ports the independently checked local archive/evidence utilities into the shared package without changing model training, evaluation, scoring, registry state or acquisition code. The new modules are `datasets/release_audit.py`, `datasets/evidence.py` and `datasets/btxrd_review.py`.
++
++## Local commands
++
++```sh
++python3 -B -m cancer_workbench btxrd-review audit BTXRD.zip --expected-md5 59132a5036d030580ccade8add8f13df
++python3 -B -m cancer_workbench btxrd-review template BTXRD.zip --expected-md5 59132a5036d030580ccade8add8f13df > evidence-template.csv
++python3 -B -m cancer_workbench btxrd-review check BTXRD.zip evidence-template.csv --expected-md5 59132a5036d030580ccade8add8f13df
++```
++
++The paths are placeholders for already-local files. These commands make no network request, extract no images, create no partitions, and do not launch or train a model. A completed audit/check returns a structured report even when its status is `blocked`; exit code zero does not establish scientific eligibility. The audit additionally accepts paired `--train-list` / `--validation-list` CSV/XLSX files. Optional `--inspect-exif` uses Pillow to count tags without returning their values. The core remains standard-library only.
++
++The [original Figshare record](https://api.figshare.com/v2/articles/27865398) supplies the release MD5. The [source paper](https://www.nature.com/articles/s41597-024-04311-y) permits different views of one lesion and describes mixed diagnostic-reference methods. Neither a file checksum nor complete declared text establishes patient identity or label truth.
++
++## Behavior and boundaries
++
++- The archive audit checks CRC/digests, XLSX/CSV structure, exact-byte image families, table/image/annotation joins, annotation subtype-label sets and optional source split lists. It rejects unsafe paths, ambiguous IDs and spreadsheet formulas. Limits are 50,000 archive members, 2 GB uncompressed content and 20 MB per table/annotation/EXIF input.
++- The template contains source IDs/flags and measured image hashes; all patient, lesion and diagnostic-reference fields start blank. Review flags are advisory and never filter records automatically. Image pixels, demographics, EXIF values and local input paths are omitted.
++- The return checker detects source-field/hash/coverage drift, incomplete evidence/review status, exact-copy patient conflicts and source-label conflicts inside one declared lesion. It returns no supplied patient IDs or reference values. Complete declarations reach only `declared_evidence_requires_review`; all patient/medical/training-readiness attestations remain false.
++- The existing shared manifest importer and audit remain the canonical dataset path. A synthetic bridge test confirms that blank patient IDs from the template still fail that audit. This candidate does not import the separate foundation's split planner, alter the shared manifest schema, or automatically insert reviewed evidence into training.
++
++## Verification
++
++The combined suite discovers 131 synthetic software tests: 117 pass and 14 skip in plain Python; 118 pass and 13 skip with optional Pillow available. The 25 added tests cover archive/evidence behavior and the shared missing-patient audit boundary. Optional ML/Torch checks remain skipped in this environment. Catalog validation still reports 16 models and 14 datasets.
++
++The candidate's `check` command was also run on the already-local original release and 3,746-row evidence template. Its result is checked against the earlier independent foundation report: source fields/hashes match, every patient/lesion/reference field remains missing, the four contradictory exact-copy labels remain blockers, and no cohort is created. No image-model training, model-weight acquisition, cluster workload, medical-performance reproduction or clinical validation was performed.
++
++The original release has 21 exact duplicate pairs, two contradictory label pairs, seven exact pairs crossing the authors' public classification split lists, 27 split-list extension mismatches, and a subtype-label-set difference at IMG001276.jpeg. These independent offline findings do not replace custodian grouping evidence or diagnostic-reference review. The source images' privacy/rights review remains open; this candidate contains no image export.
++
++## Review before merge
++
++Review the new modules and CLI schema, reconcile with any newer main or unpushed team branch, rerun the required environment checks, and keep the team hub's candidate status aligned with PROGRESS. No catalog promotion or medical eligibility follows from merging this utility. Patient/lesion mapping, per-row reference evidence, endpoint/protocol approval, label adjudication and an independent test plan remain open.
+diff --git a/tests/test_btxrd_evidence_review.py b/tests/test_btxrd_evidence_review.py
+new file mode 100644
+index 0000000..30b7e64
+--- /dev/null
++++ b/tests/test_btxrd_evidence_review.py
+@@ -0,0 +1,146 @@
++"""Synthetic evidence-return checks; no mapping or diagnosis is authenticated."""
++
++import copy
++import csv
++import hashlib
++import json
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from zipfile import ZipFile
++
++from cancer_workbench.datasets.evidence import check_btxrd_evidence
++from cancer_workbench.datasets.release_audit import prepare_btxrd_evidence_template, EVIDENCE_COLUMNS
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++class EvidenceCheck(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name)
++        self.archive = self.root / "source.zip"
++        self.write_release()
++
++    def write_release(self, duplicate=False):
++        with ZipFile(self.archive, "w") as z:
++            z.writestr("dataset.csv", "image_id,center,tumor,benign,malignant\nA.jpeg,1,1,1,0\nB.jpeg,1,0,0,0\nC.jpg,2,1,0,1\n")
++            for name in ("A.jpeg", "B.jpeg", "C.jpg"):
++                z.writestr("images/" + name, b"A" if duplicate and name == "B.jpeg" else name[0].encode())
++            for name in ("A.jpeg", "C.jpg"):
++                z.writestr("Annotations/" + Path(name).stem + ".json", json.dumps({
++                    "imagePath": name, "shapes": [{"shape_type": "polygon", "label": "synthetic"}]}))
++
++    def completed_rows(self):
++        rows = prepare_btxrd_evidence_template(self.archive)
++        for index, row in enumerate(rows):
++            row.update(patient_id=f"PRIVATE-SYNTHETIC-PATIENT-{index}", grouping_reference="PRIVATE-SYNTHETIC-MAP",
++                       lesion_id=f"synthetic-lesion-{index}", reference_standard="synthetic-test-standard",
++                       reference_evidence="PRIVATE-SYNTHETIC-REFERENCE", review_status="reviewed")
++        return rows
++
++    def test_blank_template_is_source_bound_but_evidence_blocked(self):
++        rows = prepare_btxrd_evidence_template(self.archive)
++        result = check_btxrd_evidence(self.archive, rows, expected_md5=hashlib.md5(self.archive.read_bytes()).hexdigest())
++        self.assertTrue(result["source_binding_verified"])
++        self.assertTrue(result["archive_reference_md5_checked"])
++        self.assertEqual(result["status"], "blocked")
++        self.assertEqual(result["missing_evidence_counts"], {k: 3 for k in (
++            "patient_id", "grouping_reference", "lesion_id", "reference_standard", "reference_evidence")})
++        self.assertFalse(result["ready_for_training"])
++        self.assertFalse(result["cohort_created"])
++
++    def test_source_flags_hashes_and_review_flags_cannot_be_silently_rewritten(self):
++        original = self.completed_rows()
++        for field, value in {"center": "3", "tumor": "0", "benign": "0", "malignant": "1",
++                             "sha256": "0" * 64, "review_flags": "silently-cleared"}.items():
++            rows = copy.deepcopy(original)
++            rows[0][field] = value
++            result = check_btxrd_evidence(self.archive, rows)
++            self.assertFalse(result["source_binding_verified"], field)
++            self.assertTrue(any(f["code"] == "source_field_drift" and f.get("field") == field for f in result["findings"]))
++        rows = copy.deepcopy(original)
++        rows[0].update(center="1.0", tumor="true", benign="1.0", malignant="false", sha256=rows[0]["sha256"].upper())
++        self.assertTrue(check_btxrd_evidence(self.archive, rows)["source_binding_verified"])
++
++    def test_missing_unknown_and_duplicate_rows_break_source_binding(self):
++        original = self.completed_rows()
++        unknown = copy.deepcopy(original)
++        unknown[0]["image_id"] = "not-released.jpeg"
++        for rows, code in ((original[:-1], "release_image_missing"),
++                           (unknown, "unknown_image_id"),
++                           (original + [original[0]], "duplicate_image_id")):
++            result = check_btxrd_evidence(self.archive, rows)
++            self.assertFalse(result["source_binding_verified"])
++            self.assertIn(code, {f["code"] for f in result["findings"]})
++
++    def test_complete_declarations_remain_unverified_and_values_are_not_exported(self):
++        rows = self.completed_rows()
++        result = check_btxrd_evidence(self.archive, rows)
++        self.assertEqual(result["status"], "declared_evidence_requires_review")
++        self.assertTrue(result["source_binding_verified"])
++        self.assertNotIn("PRIVATE-SYNTHETIC", json.dumps(result))
++        self.assertFalse(result["patient_grouping_verified"])
++        self.assertFalse(result["reference_standard_verified"])
++        self.assertFalse(result["medical_validation_established"])
++        self.assertEqual(result["evidence_content_sha256"], check_btxrd_evidence(self.archive, list(reversed(rows)))["evidence_content_sha256"])
++
++    def test_placeholder_and_image_identifiers_are_not_completed_evidence(self):
++        original = self.completed_rows()
++        for field, value in (("patient_id", "Unknown"), ("lesion_id", "A"), ("patient_id", "C.jpg"),
++                             ("reference_standard", "pending"), ("reference_evidence", "N/A")):
++            rows = copy.deepcopy(original)
++            rows[0][field] = value
++            result = check_btxrd_evidence(self.archive, rows)
++            self.assertEqual(result["status"], "blocked")
++            self.assertEqual(result["missing_evidence_counts"].get(field), 1)
++
++    def test_exact_copy_conflicts_survive_reviewed_status(self):
++        self.write_release(duplicate=True)
++        result = check_btxrd_evidence(self.archive, self.completed_rows())
++        codes = {f["code"] for f in result["findings"]}
++        self.assertIn("source_exact_duplicate_label_conflict", codes)
++        self.assertIn("exact_duplicate_patient_mapping_conflict", codes)
++        self.assertEqual(result["status"], "blocked")
++
++    def test_multiple_lesions_can_differ_but_one_declared_lesion_cannot(self):
++        rows = self.completed_rows()
++        for row in rows:
++            row["patient_id"] = "one-synthetic-patient"
++        result = check_btxrd_evidence(self.archive, rows)
++        self.assertEqual(result["status"], "declared_evidence_requires_review")
++        for row in rows:
++            row["lesion_id"] = "one-synthetic-lesion"
++        result = check_btxrd_evidence(self.archive, rows)
++        self.assertIn("declared_lesion_source_label_conflict", {f["code"] for f in result["findings"]})
++
++    def test_schema_and_empty_source_are_rejected(self):
++        rows = self.completed_rows()
++        rows[0]["unexpected-private-column"] = "PRIVATE-SYNTHETIC-VALUE"
++        with self.assertRaisesRegex(ValueError, "template columns"):
++            check_btxrd_evidence(self.archive, rows)
++        with ZipFile(self.archive, "w") as z:
++            z.writestr("dataset.csv", "image_id,center,tumor,benign,malignant\n")
++        with self.assertRaisesRegex(ValueError, "empty source metadata"):
++            check_btxrd_evidence(self.archive, [])
++
++    def test_cli_report_has_no_local_paths_or_supplied_reference_values(self):
++        path = self.root / "returned.csv"
++        with path.open("w", newline="") as stream:
++            writer = csv.DictWriter(stream, fieldnames=EVIDENCE_COLUMNS)
++            writer.writeheader()
++            writer.writerows(self.completed_rows())
++        run = subprocess.run([sys.executable, "-B", "-m", "cancer_workbench", "btxrd-review", "check",
++                              str(self.archive), str(path)], cwd=ROOT, capture_output=True, text=True)
++        self.assertEqual(run.returncode, 0, run.stderr)
++        report = json.loads(run.stdout)
++        self.assertEqual(report["status"], "declared_evidence_requires_review")
++        self.assertNotIn(str(self.root), run.stdout)
++        self.assertNotIn("PRIVATE-SYNTHETIC", run.stdout)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/tests/test_btxrd_release_audit.py b/tests/test_btxrd_release_audit.py
+new file mode 100644
+index 0000000..8b489db
+--- /dev/null
++++ b/tests/test_btxrd_release_audit.py
+@@ -0,0 +1,227 @@
++"""Synthetic archive checks; these tests do not establish medical validity."""
++
++import hashlib
++import csv
++import io
++import json
++import subprocess
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++from xml.sax.saxutils import escape
++from zipfile import ZipFile
++
++from cancer_workbench.datasets.release_audit import audit_btxrd_release, prepare_btxrd_evidence_template, SUBTYPES
++from cancer_workbench.datasets.audit import audit_dataset
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def manifest_rows(rows):
++    labels = {("0", "0", "0"): "normal", ("1", "1", "0"): "benign", ("1", "0", "1"): "malignant"}
++    return [{"sample_id": r["image_id"], "patient_id": r["patient_id"], "partition": "unassigned",
++             "label": labels.get(tuple(r[k] for k in ("tumor", "benign", "malignant")), ""),
++             "sha256": r["sha256"]} for r in rows]
++
++
++def workbook(rows, *, formula=False):
++    stream = io.BytesIO()
++    sheet = '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
++    for row_num, row in enumerate(rows, 1):
++        sheet += f'<row r="{row_num}">'
++        for index, value in enumerate(row):
++            col = chr(65 + index)
++            if formula and row_num == 2 and index == 0:
++                sheet += f'<c r="{col}{row_num}"><f>1+1</f><v>2</v></c>'
++            else:
++                sheet += f'<c r="{col}{row_num}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
++        sheet += '</row>'
++    sheet += '</sheetData></worksheet>'
++    with ZipFile(stream, "w") as book:
++        book.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>')
++        book.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>')
++        book.writestr("xl/worksheets/sheet1.xml", sheet)
++    return stream.getvalue()
++
++
++def release(path, *, metadata=None, images=None, extras=None, formula=False):
++    rows = metadata or [["image_id", "center", "tumor", "benign", "malignant"],
++                        ["A.jpeg", "1", "1", "1", "0"],
++                        ["B.jpeg", "1", "0", "0", "0"],
++                        ["C.jpg", "2", "1", "0", "1"]]
++    with ZipFile(path, "w") as archive:
++        archive.writestr("BTXRD/dataset.xlsx", workbook(rows, formula=formula))
++        for name, data in (images or {"A.jpeg": b"synthetic-identical", "B.jpeg": b"synthetic-identical",
++                                     "C.jpg": b"synthetic-distinct"}).items():
++            archive.writestr("BTXRD/images/" + name, data)
++        for name in ("A", "C"):
++            archive.writestr("BTXRD/Annotations/" + name + ".json",
++                             json.dumps({"imagePath": name + (".jpg" if name == "C" else ".jpeg"),
++                                         "shapes": [{"shape_type": "polygon", "label": "synthetic"}]}))
++        for name, data in (extras or {}).items():
++            archive.writestr(name, data)
++
++
++class ReleaseAudit(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.root = Path(self.tmp.name)
++        self.path = self.root / "input.zip"
++
++    def test_archive_joins_conflicting_exact_labels_and_split_leakage(self):
++        release(self.path)
++        train, val = self.root / "train.xlsx", self.root / "val.xlsx"
++        train.write_bytes(workbook([["image_id"], ["A.jpeg"], ["C.jpeg"]]))
++        val.write_bytes(workbook([["image_id"], ["B.jpeg"]]))
++        digest = hashlib.md5(self.path.read_bytes()).hexdigest()
++        result = audit_btxrd_release(self.path, expected_md5=digest, train_list=train, validation_list=val)
++        self.assertEqual(result["archive"]["sha256"], hashlib.sha256(self.path.read_bytes()).hexdigest())
++        self.assertTrue(result["archive"]["reference_md5_checked"])
++        self.assertEqual(result["class_counts"], {"benign": 1, "normal": 1, "malignant": 1})
++        self.assertTrue(all(not v for v in result["joins"].values()))
++        self.assertEqual(result["exact_duplicates"]["conflicting_label_groups"], [["A.jpeg", "B.jpeg"]])
++        self.assertEqual(result["split_lists"]["exact_duplicate_groups_crossing_lists"], [["A.jpeg", "B.jpeg"]])
++        self.assertEqual(result["split_lists"]["extension_mismatch_count"], 1)
++        self.assertEqual(result["split_lists"]["train_list_sha256"], hashlib.sha256(train.read_bytes()).hexdigest())
++        self.assertIs(result["ready_for_training"], False)
++        self.assertIs(result["patient_grouping_verified"], False)
++        self.assertNotIn("evidence_rows", result)
++        self.assertNotIn(str(self.root), json.dumps(result))
++
++    def test_checksum_mismatch_is_rejected(self):
++        release(self.path)
++        with self.assertRaisesRegex(ValueError, "MD5 does not match"):
++            audit_btxrd_release(self.path, expected_md5="0" * 32)
++
++    def test_unsafe_archive_is_rejected_without_extracting(self):
++        release(self.path, extras={"../outside.txt": b"synthetic"})
++        with self.assertRaisesRegex(ValueError, "unsafe path"):
++            audit_btxrd_release(self.path)
++        self.assertFalse((self.root.parent / "outside.txt").exists())
++
++    def test_ambiguous_image_names_are_rejected(self):
++        release(self.path, extras={"other/A.jpeg": b"other"})
++        with self.assertRaisesRegex(ValueError, "ambiguous image"):
++            audit_btxrd_release(self.path)
++
++    def test_duplicate_metadata_ids_are_rejected(self):
++        release(self.path, metadata=[["image_id", "center", "tumor", "benign", "malignant"],
++                                     ["A", "1", "0", "0", "0"], ["A.jpeg", "1", "0", "0", "0"]])
++        with self.assertRaisesRegex(ValueError, "repeats image_id"):
++            audit_btxrd_release(self.path)
++
++    def test_formula_cache_is_not_trusted(self):
++        release(self.path, formula=True)
++        with self.assertRaisesRegex(ValueError, "formulas"):
++            audit_btxrd_release(self.path)
++
++    def test_data_beyond_headers_is_not_silently_dropped(self):
++        release(self.path, metadata=[["image_id", "center", "tumor", "benign", "malignant"],
++                                     ["A.jpeg", "1", "0", "0", "0", "unheaded-value"]])
++        with self.assertRaisesRegex(ValueError, "header width"):
++            audit_btxrd_release(self.path)
++
++    def test_subtype_label_set_difference_is_reported_without_adjudication(self):
++        subtypes = sorted(SUBTYPES)
++        row = ["A.jpeg", "1", "1", "1", "0"] + [int(k in {"osteochondroma", "synovial osteochondroma"}) for k in subtypes]
++        with ZipFile(self.path, "w") as archive:
++            archive.writestr("dataset.xlsx", workbook([["image_id", "center", "tumor", "benign", "malignant"] + subtypes, row]))
++            archive.writestr("images/A.jpeg", b"synthetic")
++            archive.writestr("Annotations/A.json", json.dumps({"imagePath": "A.jpeg", "shapes": [
++                {"shape_type": "polygon", "label": "synovial osteochondroma"}]}))
++        result = audit_btxrd_release(self.path)
++        self.assertEqual(result["annotations"]["subtype_label_set_mismatch"], [{
++            "image_id": "A.jpeg", "metadata_subtypes": ["osteochondroma", "synovial osteochondroma"],
++            "annotation_labels": ["synovial osteochondroma"]}])
++        self.assertFalse(result["reference_standard_verified"])
++
++    def test_unknown_flags_and_missing_joins_are_findings_not_normal_labels(self):
++        release(self.path, metadata=[["image_id", "center", "tumor", "benign", "malignant"],
++                                     ["A.jpeg", "1", "unknown", "0", "0"],
++                                     ["D.jpeg", "1", "1", "1", "0"]])
++        result = audit_btxrd_release(self.path)
++        self.assertEqual(result["class_counts"], {"invalid_flags": 1, "benign": 1})
++        self.assertEqual(result["joins"]["image_ids_missing_file"], ["D.jpeg"])
++        self.assertEqual(result["joins"]["tumor_ids_missing_annotation"], ["D"])
++
++    def test_cli_is_portable_and_does_not_add_local_paths(self):
++        release(self.path)
++        run = subprocess.run([sys.executable, "-B", "-m", "cancer_workbench", "btxrd-review", "audit", str(self.path)],
++                             cwd=ROOT, capture_output=True, text=True)
++        self.assertEqual(run.returncode, 0, run.stderr)
++        result = json.loads(run.stdout)
++        self.assertEqual(result["image_count"], 3)
++        self.assertNotIn(str(self.root), run.stdout)
++        self.assertIs(result["medical_validation_established"], False)
++
++    def test_exif_values_are_never_exported(self):
++        try:
++            from PIL import Image
++        except ImportError:
++            self.skipTest("optional Pillow not installed")
++        image = Image.new("RGB", (8, 8))
++        exif = Image.Exif()
++        exif[0x013B] = "PRIVATE-SYNTHETIC-AUTHOR"
++        buffer = io.BytesIO()
++        image.save(buffer, format="JPEG", exif=exif)
++        release(self.path, images={"A.jpeg": buffer.getvalue(), "B.jpeg": buffer.getvalue(),
++                                   "C.jpg": buffer.getvalue()})
++        result = audit_btxrd_release(self.path, inspect_exif=True)
++        self.assertEqual(result["exif"]["tag_presence_counts"]["Artist"], 3)
++        self.assertNotIn("PRIVATE-SYNTHETIC-AUTHOR", json.dumps(result))
++        self.assertIs(result["exif"]["values_exported"], False)
++
++    def test_evidence_template_has_measured_hashes_and_blank_identity_evidence(self):
++        release(self.path)
++        rows = prepare_btxrd_evidence_template(self.path)
++        self.assertEqual(len(rows), 3)
++        self.assertEqual(rows[0]["sha256"], hashlib.sha256(b"synthetic-identical").hexdigest())
++        for row in rows:
++            for field in ("patient_id", "grouping_reference", "lesion_id", "reference_standard", "reference_evidence"):
++                self.assertEqual(row[field], "")
++            self.assertEqual(row["review_status"], "unreviewed")
++            self.assertNotIn("split", row)
++        self.assertIn("exact_duplicate_label_conflict", rows[0]["review_flags"])
++        self.assertIn("exact_duplicate_label_conflict", rows[1]["review_flags"])
++        self.assertNotIn(str(self.root), json.dumps(rows))
++
++    def test_evidence_template_cannot_bypass_missing_patient_gate(self):
++        release(self.path)
++        rows = prepare_btxrd_evidence_template(self.path)
++        report = audit_dataset({"id": "btxrd", "classes": ["normal", "benign", "malignant"]}, manifest_rows(rows))
++        self.assertIs(report["ready_for_training"], False)
++        codes = {finding["code"] for finding in report["findings"]}
++        self.assertIn("missing_patient_id", codes)
++        self.assertTrue(all(row["partition"] == "unassigned" for row in manifest_rows(rows)))
++
++    def test_evidence_template_does_not_turn_unknown_flags_into_normal(self):
++        release(self.path, metadata=[["image_id", "center", "tumor", "benign", "malignant"],
++                                     ["A.jpeg", "1", "unknown", "0", "0"]])
++        rows = prepare_btxrd_evidence_template(self.path)
++        self.assertEqual(rows[0]["tumor"], "")
++        self.assertIn("invalid_flags", rows[0]["review_flags"])
++        report = audit_dataset({"id": "btxrd", "classes": ["normal", "benign", "malignant"]}, manifest_rows(rows))
++        self.assertIs(report["ready_for_training"], False)
++        self.assertIn("unknown_label", {finding["code"] for finding in report["findings"]})
++
++    def test_evidence_cli_outputs_csv_with_true_extensions_and_no_paths(self):
++        release(self.path)
++        run = subprocess.run([sys.executable, "-B", "-m", "cancer_workbench", "btxrd-review", "template", str(self.path)],
++                             cwd=ROOT, capture_output=True, text=True)
++        self.assertEqual(run.returncode, 0, run.stderr)
++        rows = list(csv.DictReader(io.StringIO(run.stdout)))
++        self.assertEqual({r["image_id"] for r in rows}, {"A.jpeg", "B.jpeg", "C.jpg"})
++        self.assertTrue(all(r["patient_id"] == "" for r in rows))
++        self.assertNotIn(str(self.root), run.stdout)
++
++    def test_spreadsheet_formula_like_image_id_is_rejected(self):
++        release(self.path, metadata=[["image_id", "center", "tumor", "benign", "malignant"],
++                                     ["=1+1.jpeg", "1", "0", "0", "0"]])
++        with self.assertRaisesRegex(ValueError, "image_id"):
++            prepare_btxrd_evidence_template(self.path)
++
++
++if __name__ == "__main__":
++    unittest.main()

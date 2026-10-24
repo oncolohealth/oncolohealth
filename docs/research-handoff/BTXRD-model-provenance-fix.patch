@@ -1,0 +1,152 @@
+diff --git a/PROGRESS.md b/PROGRESS.md
+index dc58c50..b87a47e 100644
+--- a/PROGRESS.md
++++ b/PROGRESS.md
+@@ -3,6 +3,12 @@
+ Legend: `[x]` done and verified · `[~]` partial or stub with a contract · `[ ]` not started · 🔒 blocked (reason given)
+ Evidence states (`cataloged → access_obtained → runnable → locally_reproduced → externally_evaluated`) change only through a reviewed PR to `catalog/*.json`.
+ 
++## Local model-root provenance repair candidate
++
++This isolated candidate against inspected main `c13a74a15fdd636249899a587a239cb000107e6d` corrects result provenance when a frozen encoder uses a custom model folder. The helper accepts an explicit root; adapter results read from the same root used for loading. Missing custom provenance returns unknown rather than a default-folder identity; malformed custom JSON fails before an embedding call. No weight authentication or medical validation is implied.
++
++Nine synthetic regression tests use temporary provenance files and mocked embeddings. Plain-Python verification discovers 115 tests: 102 pass and 13 optional ML checks skip. Catalog validation remains 16 models and 14 datasets. This is an unmerged local candidate; no shared main, unavailable team branch, weights, image files, training, scoring or cluster state were modified. The image-hash/cache-binding defect remains open. See [the scoped repair report](docs/reports/C-model-root-provenance.md).
++
+ ## How to work concurrently
+ 
+ 1. Pick a workstream below and put your name next to its **Owner** cell.
+diff --git a/cancer_workbench/adapters/encoder.py b/cancer_workbench/adapters/encoder.py
+index 8e07f40..73b7ae5 100644
+--- a/cancer_workbench/adapters/encoder.py
++++ b/cancer_workbench/adapters/encoder.py
+@@ -58,8 +58,10 @@ def preprocessing_hash(encoder_id: str, variant: str = "pad") -> str:
+     return hashlib.sha256(json.dumps(preprocessing(encoder_id, variant), sort_keys=True).encode()).hexdigest()[:12]
+ 
+ 
+-def revision(encoder_id: str) -> str | None:
+-    prov = MODELS_DIR / encoder_id / "PROVENANCE.json"
++def revision(encoder_id: str, models_dir: Path | None = None) -> str | None:
++    """Read an asserted revision from the requested model root; never fall back."""
++    root = MODELS_DIR if models_dir is None else Path(models_dir)
++    prov = root / encoder_id / "PROVENANCE.json"
+     return json.loads(prov.read_text())["source"].get("revision") if prov.exists() else None
+ 
+ 
+@@ -173,7 +175,8 @@ class FrozenEncoderAdapter:
+         return np.concatenate(chunks).astype(np.float32) if chunks else np.zeros((0, self.spec["dim"]), np.float32)
+ 
+     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
++        model_revision = revision(self.encoder_id, self.root.parent)
+         emb = self.embed([Path(inputs["image_path"])], batch_size=1)[0]
+         return {"type": "embedding", "dim": int(emb.shape[0]), "embedding": emb.tolist(), "encoder": self.encoder_id,
+-                "revision": revision(self.encoder_id), "preprocessing": preprocessing(self.encoder_id, self.variant),
++                "revision": model_revision, "preprocessing": preprocessing(self.encoder_id, self.variant),
+                 "note": "Frozen-encoder features, not a diagnosis."}
+diff --git a/docs/reports/C-model-root-provenance.md b/docs/reports/C-model-root-provenance.md
+new file mode 100644
+index 0000000..6f7a6e4
+--- /dev/null
++++ b/docs/reports/C-model-root-provenance.md
+@@ -0,0 +1,9 @@
++# Model-root provenance repair candidate
++
++When an encoder adapter was configured with a custom models directory, it loaded from that directory but looked up result revision metadata under the default models directory. This candidate makes `revision` accept an optional model root and makes adapter results use their configured root. Existing one-argument helper calls retain their default-root behavior.
++
++Missing provenance in the requested custom folder remains unknown (`None`); the helper does not borrow the default folder's identity. Malformed custom JSON raises before an embedding call. Assertions in a provenance file still do not authenticate weight bytes, permissions, model eligibility or a scientifically valid result.
++
++The candidate changes only the adapter helper/result path, nine synthetic tests, this report and the candidate progress record. Tests use temporary JSON and mocked vectors; no weights, medical images, live inference, training or remote resources are involved. They cover default compatibility, custom Path/string roots, missing/malformed custom metadata, result identities, pre-call refusal and separate encoder folders.
++
++Verification on this candidate: 115 tests discovered, 102 passed, 13 optional ML checks skipped; catalog validation stays at 16 models and 14 datasets. Full ML/Torch execution and independent receiving-branch review remain pending. The image-content/cache-binding defect, custom preprocessing review, missing patient/lesion mapping and per-row diagnostic references remain unresolved. This isolated source candidate is unmerged and unpushed.
+diff --git a/tests/test_encoder_provenance.py b/tests/test_encoder_provenance.py
+new file mode 100644
+index 0000000..4f58ca2
+--- /dev/null
++++ b/tests/test_encoder_provenance.py
+@@ -0,0 +1,87 @@
++"""SYNTHETIC provenance fixtures and mocked embeddings; no model or image load."""
++
++import json
++from pathlib import Path
++import tempfile
++import unittest
++from unittest.mock import patch
++
++from cancer_workbench.adapters import encoder
++
++
++class SyntheticVector:
++    shape = (768,)
++
++    def tolist(self):
++        return [0.0] * 768
++
++
++class EncoderProvenanceTests(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.default = Path(self.temp.name) / "default"
++        self.custom = Path(self.temp.name) / "custom"
++        self.write(self.default, "rad-dino", "a" * 40)
++        self.write(self.custom, "rad-dino", "b" * 40)
++        self.patch = patch.object(encoder, "MODELS_DIR", self.default)
++        self.patch.start()
++        self.addCleanup(self.patch.stop)
++
++    def write(self, root, model, revision):
++        folder = root / model
++        folder.mkdir(parents=True, exist_ok=True)
++        path = folder / "PROVENANCE.json"
++        path.write_text(json.dumps({"source": {"revision": revision}}))
++        return path
++
++    def run_synthetic(self, root):
++        adapter = encoder.FrozenEncoderAdapter("rad-dino", models_dir=root)
++        with patch.object(adapter, "embed", return_value=[SyntheticVector()]):
++            result = adapter.run({"image_path": "synthetic-unused.jpeg"})
++        self.assertEqual(adapter.root, Path(root) / "rad-dino")
++        self.assertEqual(result["type"], "embedding")
++        self.assertEqual(result["dim"], 768)
++        return result
++
++    def test_default_revision_helper_remains_compatible(self):
++        self.assertEqual(encoder.revision("rad-dino"), "a" * 40)
++
++    def test_explicit_root_revision_uses_custom_folder(self):
++        self.assertEqual(encoder.revision("rad-dino", models_dir=self.custom), "b" * 40)
++
++    def test_string_root_revision_uses_custom_folder(self):
++        self.assertEqual(encoder.revision("rad-dino", str(self.custom)), "b" * 40)
++
++    def test_absent_custom_provenance_never_borrows_default(self):
++        (self.custom / "rad-dino/PROVENANCE.json").unlink()
++        self.assertIsNone(encoder.revision("rad-dino", self.custom))
++
++    def test_malformed_custom_provenance_fails_without_fallback(self):
++        (self.custom / "rad-dino/PROVENANCE.json").write_text("not json")
++        with self.assertRaises(json.JSONDecodeError):
++            encoder.revision("rad-dino", self.custom)
++
++    def test_result_revision_matches_adapter_loading_root(self):
++        self.assertEqual(self.run_synthetic(self.custom)["revision"], "b" * 40)
++
++    def test_result_does_not_borrow_default_when_custom_provenance_missing(self):
++        (self.custom / "rad-dino/PROVENANCE.json").unlink()
++        self.assertIsNone(self.run_synthetic(self.custom)["revision"])
++
++    def test_result_fails_on_malformed_custom_provenance(self):
++        (self.custom / "rad-dino/PROVENANCE.json").write_text("not json")
++        adapter = encoder.FrozenEncoderAdapter("rad-dino", models_dir=self.custom)
++        with patch.object(adapter, "embed", return_value=[SyntheticVector()]) as embed:
++            with self.assertRaises(json.JSONDecodeError):
++                adapter.run({"image_path": "synthetic-unused.jpeg"})
++            embed.assert_not_called()
++
++    def test_revision_is_scoped_to_requested_encoder_subdirectory(self):
++        self.write(self.custom, "resnet50-a1-in1k", "c" * 40)
++        self.assertEqual(encoder.revision("rad-dino", self.custom), "b" * 40)
++        self.assertEqual(encoder.revision("resnet50-a1-in1k", self.custom), "c" * 40)
++
++
++if __name__ == "__main__":
++    unittest.main()

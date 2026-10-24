@@ -1,0 +1,31 @@
+# Weekend next actions
+
+The researcher-first platform has three reuse paths: call an eligible specialist, adapt an eligible pretrained model, or distill from a permitted teacher. Dataset evidence and training assistance run through all three. Gemma 4 31B IT is the proposed large-machine reasoning coordinator; no coordinator weights have been acquired or tested here. The shared [team hub](https://docs.google.com/document/d/15NZoxoJoxgVSUdxn5RBD7qvqjMuigAJ_Xu2MFSK_3bA) and [private code repository](https://github.com/oncolohealth/oncolohealth) are the collaboration points; the builds still need reconciliation.
+
+## What is ready
+
+- The original [BTXRD release](https://api.figshare.com/v2/articles/27865398) is stored locally and its published checksum matches. An independent offline audit joined all 3,746 image rows and 1,867 tumor annotations.
+- The portable foundation now has a reusable `btxrd-audit` command and a [machine-readable report](BTXRD-audit.json). It reproduces the checks directly from local files, including the authors' split lists, and reports one subtype-label-set difference at IMG001276.jpeg. Its suite passes 72 synthetic software tests with optional Pillow installed; the core audit works without that dependency.
+- The release contains 21 exact duplicate pairs, including two pairs with contradictory normal/benign labels. Seven exact pairs cross the authors' public classification train/validation lists. Some source JPEGs retain EXIF fields that need privacy review before any export. The [full audit and evidence limits](BTXRD-readiness.md) contain the details.
+- The local OncoCopilot intake now quarantines contradictory exact copies and keeps all external-source images outside development. Its corrected draft has 2,494 train, 440 validation, and 808 external-source images. It is explicitly exploratory, and the 84-test software suite passes. No image model was trained in this local build.
+- The latest inspected shared-repository snapshot passes 106 software tests with 13 optional-dependency skips. Its own exploratory image-level results show a substantial source-shift drop; they are repository reports, not patient-independent performance.
+
+## First team decisions
+
+1. **Choose one endpoint.** Decide whether the first comparison is three-class normal/benign/malignant, tumor versus normal, or benign versus malignant. Name the unit of evaluation: patient or lesion/case, then image where justified. Record exclusion rules before fitting.
+2. **Resolve the evidence blocker.** Request a de-identified image-to-patient and image-to-lesion/case map from the BTXRD custodians, plus per-image diagnostic-reference categories. Ask them to adjudicate the two contradictory exact pairs. The release has no such fields; do not infer identity from filename, age, center, or image similarity. No outreach has yet been sent from this audit.
+
+   The [evidence handoff](BTXRD-evidence-handoff.md) supplies the real image-ID/hash template and the exact questions, ready for review. Use the new evidence-return check after any edits: it detects source drift and missing/duplicate rows, then reports evidence gaps without publishing supplied identity/reference values. The actual template matches all 3,746 source rows but remains blocked with zero cohort/split creation; filling placeholders does not satisfy the checks.
+3. **Review data rights and privacy.** Confirm the original release terms for the intended inference, adaptation, and sharing use. Review the source JPEG EXIF and clean only permitted derivatives. Keep source images out of the team document and Git repository.
+4. **Freeze the comparison.** Choose two eligible baselines, the same cohort and label mapping, model-specific preprocessing, a validation-only selection policy, patient-clustered metrics, and one locked test plan. The [proposed protocol](BTXRD-readiness.md) is a starting point. The shared build currently explores RAD-DINO versus ResNet-50; the separate local build scripts MedSigLIP versus ConvNeXt. These are different experiments until reconciled.
+5. **Integrate one code path.** Port reviewed fixes and contracts into the shared repository with a clear test and provenance record. The local OncoCopilot build, the original foundation, and shared repository should not become three competing sources of truth.
+
+   A [tested integration patch](BTXRD-shared-integration.md) now ports the offline audit/evidence utilities into the inspected shared snapshot. Review/rebase it against the receiving branch, reconcile the unpushed team work, and complete the full supported environment checks before merge. It has not changed shared main or trained a model.
+
+   The [baseline review](BTXRD-baseline-input-review.md) documents the original input/provenance defects. Separate local repair candidates now address [custom-folder revision lookup](BTXRD-model-provenance-fix.md) and [image-byte/cache binding](BTXRD-feature-cache-fix.md). Review/rebase against the receiving branch, reject legacy unbound caches and complete supported runtime checks before any authorized recomputation. Keep actual weight/configuration verification and custom preprocessing review explicit.
+
+If the patient/lesion map or reference standards cannot be obtained, keep BTXRD work as an explicitly image-level, source-shift **research probe**. Do not present it as a patient-independent cancer detector. Select another dataset with genuine patient grouping for the first defensible medical comparison while continuing the platform's data, model, and coordinator engineering.
+
+All three local patches now compose in any of six orders on inspected main. Their combined suite with NumPy/Pillow passes 149 tests with 11 optional ML skips; no medical files, weights or real model execution were involved. The latest hub additionally reports an unpushed Experiments-screen branch at `96f2fb2`; its source and reported tests remain unverified here. Next: reconcile that receiving branch, authenticate actual weight/configuration identities and complete full ML/Torch checks before merge or authorized execution.
+
+No NPS workload, data upload, model-weight acquisition, or training run has been started from this workspace. A specific execution instruction and an approved protocol are needed before consuming cluster resources.

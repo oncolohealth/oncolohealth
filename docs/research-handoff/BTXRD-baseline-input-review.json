@@ -1,0 +1,158 @@
+{
+  "scope": "Pinned publisher configuration and inspected source review; synthetic behavior only",
+  "shared_source_commit": "c13a74a15fdd636249899a587a239cb000107e6d",
+  "shared_source_files": {
+    "cancer_workbench/adapters/encoder.py": "768d85a7a228dbebcfede4362e3deabb2b3c39959201012890f34ce4a277ce08",
+    "cancer_workbench/learning/features.py": "6d47182d67d564d5248ecd372c5a9751a349670d30bb9dfb7d612a6af1a93dcf",
+    "cancer_workbench/experiments/btxrd_baseline.py": "0eeef38a39ca8200fe96e0338586e34d20ecfb59ebea2ca33d6d73c2528e320e",
+    "cancer_workbench/experiments/btxrd_source_shift.py": "d6cf9fc8b1b247ba053b8ddaf2e13ed2544e5c87f464cacf260c01ff08e86a17"
+  },
+  "primary_sources": [
+    {
+      "source_url": "https://huggingface.co/microsoft/rad-dino/blob/110cbc18d5133582e320b43d53bf5c44e410c936/preprocessor_config.json",
+      "content_sha256": "c537fc995c30e2353f07253899618d60e9eae3d5f82473778602c007c6523b56",
+      "configuration": {
+        "_valid_processor_keys": [
+          "images",
+          "do_resize",
+          "size",
+          "resample",
+          "do_center_crop",
+          "crop_size",
+          "do_rescale",
+          "rescale_factor",
+          "do_normalize",
+          "image_mean",
+          "image_std",
+          "do_convert_rgb",
+          "return_tensors",
+          "data_format",
+          "input_data_format"
+        ],
+        "crop_size": {
+          "height": 518,
+          "width": 518
+        },
+        "do_center_crop": true,
+        "do_convert_rgb": true,
+        "do_normalize": true,
+        "do_rescale": true,
+        "do_resize": true,
+        "image_mean": [
+          0.5307,
+          0.5307,
+          0.5307
+        ],
+        "image_processor_type": "BitImageProcessor",
+        "image_std": [
+          0.2583,
+          0.2583,
+          0.2583
+        ],
+        "resample": 3,
+        "rescale_factor": 0.00392156862745098,
+        "size": {
+          "shortest_edge": 518
+        }
+      }
+    },
+    {
+      "source_url": "https://huggingface.co/timm/resnet50.a1_in1k/blob/767268603ca0cb0bfe326fa87277f19c419566ef/config.json",
+      "content_sha256": "ff00d936f02c3b5f9f80a169d651ed28f9b6dc9cb1fd0464f92da4761caaac50",
+      "configuration": {
+        "architecture": "resnet50",
+        "num_classes": 1000,
+        "num_features": 2048,
+        "pretrained_cfg": {
+          "tag": "a1_in1k",
+          "custom_load": false,
+          "input_size": [
+            3,
+            224,
+            224
+          ],
+          "test_input_size": [
+            3,
+            288,
+            288
+          ],
+          "fixed_input_size": false,
+          "interpolation": "bicubic",
+          "crop_pct": 0.95,
+          "test_crop_pct": 1.0,
+          "crop_mode": "center",
+          "mean": [
+            0.485,
+            0.456,
+            0.406
+          ],
+          "std": [
+            0.229,
+            0.224,
+            0.225
+          ],
+          "num_classes": 1000,
+          "pool_size": [
+            7,
+            7
+          ],
+          "first_conv": "conv1",
+          "classifier": "fc",
+          "origin_url": "https://github.com/huggingface/pytorch-image-models",
+          "paper_ids": "arXiv:2110.00476"
+        }
+      }
+    },
+    {
+      "source_url": "https://huggingface.co/microsoft/rad-dino/blob/110cbc18d5133582e320b43d53bf5c44e410c936/README.md",
+      "content_sha256": "b2e30be71810db49214d14994ee83ba49e47ec5b9fede2ede12589e9f252ccda"
+    }
+  ],
+  "weights_downloaded": false,
+  "medical_data_read": false,
+  "model_inference_performed": false,
+  "training_performed": false,
+  "shared_source_modified": false,
+  "medical_validation_established": false,
+  "patient_grouping_verified": false,
+  "reference_standard_verified": false,
+  "review_status": "Reproducibility findings require receiving-branch review; not an applied fix",
+  "characterization": {
+    "tests_discovered": 6,
+    "with_pillow": {
+      "passed": 6,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0
+    },
+    "plain_python": {
+      "passed": 4,
+      "skipped": 2,
+      "failures": 0,
+      "errors": 0
+    },
+    "source_fingerprint_mismatch_rejected": true,
+    "interpretation": "Observed limitations reproduced; no implementation fix or medical validation"
+  },
+  "findings": [
+    {
+      "code": "feature_cache_not_bound_to_source_bytes",
+      "status": "synthetically_reproduced",
+      "applied_fix": false
+    },
+    {
+      "code": "custom_model_root_uses_default_provenance",
+      "status": "synthetically_reproduced_with_mocked_embeddings",
+      "applied_fix": false
+    },
+    {
+      "code": "publisher_size_and_normalization_match",
+      "status": "configuration_values_compared"
+    },
+    {
+      "code": "custom_crop_pipeline_not_reference_processor_equivalence",
+      "status": "source_review_and_synthetic_pixel_checks"
+    }
+  ],
+  "characterization_script_sha256": "f21ae33d6ef6ffb6f38e66d8bc8167b5b6b66033a1637ebfaf71e7f2f24a80b3"
+}

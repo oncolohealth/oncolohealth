@@ -1,0 +1,71 @@
+{
+  "base_commit": "c13a74a15fdd636249899a587a239cb000107e6d",
+  "status": "local_unmerged_repair_candidate",
+  "patch_sha256": "03dd64f988e972af04c8b87f7e5d1b77b9fe8553db2bd1edd6cece45bbbf3cc4",
+  "files": {
+    "PROGRESS.md": {
+      "base_sha256": "c459967b082afa4c07bf982156935dac310f1e93362b2a751fd8e2b486cb1e25",
+      "candidate_sha256": "2bb146242fe982ec88e0b7b9302b9f2e8b1a347e5262a83ceccad7580127d033"
+    },
+    "cancer_workbench/adapters/encoder.py": {
+      "base_sha256": "768d85a7a228dbebcfede4362e3deabb2b3c39959201012890f34ce4a277ce08",
+      "candidate_sha256": "01a6cab37df85c2a66a23f7d6435f59403a0fb257ac4b4d8243874fc8dd1aa6b"
+    },
+    "docs/reports/C-model-root-provenance.md": {
+      "base_sha256": null,
+      "candidate_sha256": "d8db24aa824eb69293a8397ed3c383f9f58575cdf639a4a45653971359f67e0e"
+    },
+    "tests/test_encoder_provenance.py": {
+      "base_sha256": null,
+      "candidate_sha256": "259d0c80e07501f3df31935b0548de1da71e20df07f83d151bb773a566166928"
+    }
+  },
+  "source_changed_on_shared_main": false,
+  "pushed": false,
+  "merged": false,
+  "medical_validation_established": false,
+  "weights_or_medical_data_downloaded": false,
+  "model_inference_or_training_performed": false,
+  "limits": [
+    "Provenance text is still an assertion; actual weight bytes are not authenticated",
+    "Source-image feature-cache binding remains open",
+    "Unavailable receiving branch not inspected",
+    "Full ML/Torch execution not tested",
+    "Patient/lesion grouping and per-row diagnostic references remain missing"
+  ],
+  "patch_verification": {
+    "whitespace_and_apply_check": true,
+    "fresh_application_equals_candidate": true,
+    "earlier_audit_patch_applies_in_both_orders": true,
+    "both_orders_produce_identical_source_trees": true
+  },
+  "verification": {
+    "standalone_plain_python": {
+      "discovered": 115,
+      "passed": 102,
+      "skipped": 13,
+      "failures": 0,
+      "errors": 0
+    },
+    "combined_with_earlier_audit_patch_and_pillow": {
+      "discovered": 140,
+      "passed": 127,
+      "skipped": 13,
+      "failures": 0,
+      "errors": 0
+    },
+    "original_source_negative_control": {
+      "discovered": 9,
+      "passed": 1,
+      "assertion_failures": 3,
+      "api_errors": 5,
+      "interpretation": "Expected failures on original source confirm regression sensitivity"
+    },
+    "catalog": {
+      "models": 16,
+      "datasets": 14,
+      "validated": true
+    },
+    "full_ml_torch_execution_performed": false
+  }
+}

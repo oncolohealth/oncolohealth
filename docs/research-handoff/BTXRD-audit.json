@@ -1,0 +1,326 @@
+{
+  "input_references": {
+    "archive_release": "https://doi.org/10.6084/m9.figshare.27865398.v1",
+    "archive_checksum_record": "https://api.figshare.com/v2/articles/27865398",
+    "classification_training_list": "https://github.com/SHUNHANYAO/BTXRD/blob/master/classification%20task/Distribution/train.xlsx",
+    "classification_validation_list": "https://github.com/SHUNHANYAO/BTXRD/blob/master/classification%20task/Distribution/val.xlsx"
+  },
+  "dataset_id": "btxrd",
+  "audit_scope": "offline_structure_and_declared_metadata",
+  "archive": {
+    "bytes": 840474929,
+    "md5": "59132a5036d030580ccade8add8f13df",
+    "sha256": "e7c800c3b4e090262b160525a0765f9d93bcc53d639c03806a3ac47b0ded3373",
+    "reference_md5_checked": true,
+    "crc_check": "passed"
+  },
+  "metadata": {
+    "file": "dataset.xlsx",
+    "fields": [
+      "image_id",
+      "center",
+      "age",
+      "gender",
+      "hand",
+      "ulna",
+      "radius",
+      "humerus",
+      "foot",
+      "tibia",
+      "fibula",
+      "femur",
+      "hip bone",
+      "ankle-joint",
+      "knee-joint",
+      "hip-joint",
+      "wrist-joint",
+      "elbow-joint",
+      "shoulder-joint",
+      "tumor",
+      "benign",
+      "malignant",
+      "osteochondroma",
+      "multiple osteochondromas",
+      "simple bone cyst",
+      "giant cell tumor",
+      "osteofibroma",
+      "synovial osteochondroma",
+      "other bt",
+      "osteosarcoma",
+      "other mt",
+      "upper limb",
+      "lower limb",
+      "pelvis",
+      "frontal",
+      "lateral",
+      "oblique"
+    ],
+    "rows": 3746
+  },
+  "image_count": 3746,
+  "annotation_count": 1867,
+  "class_counts": {
+    "malignant": 342,
+    "benign": 1525,
+    "normal": 1879
+  },
+  "center_class_counts": {
+    "1": {
+      "malignant": 235,
+      "benign": 1110,
+      "normal": 1593
+    },
+    "2": {
+      "benign": 214,
+      "malignant": 76,
+      "normal": 259
+    },
+    "3": {
+      "benign": 201,
+      "malignant": 31,
+      "normal": 27
+    }
+  },
+  "joins": {
+    "image_ids_missing_file": [],
+    "image_files_missing_row": [],
+    "tumor_ids_missing_annotation": [],
+    "annotation_ids_without_tumor": []
+  },
+  "exact_duplicates": {
+    "groups": [
+      [
+        "IMG000245.jpeg",
+        "IMG000683.jpeg"
+      ],
+      [
+        "IMG000415.jpeg",
+        "IMG000497.jpeg"
+      ],
+      [
+        "IMG000430.jpeg",
+        "IMG000765.jpeg"
+      ],
+      [
+        "IMG000591.jpeg",
+        "IMG003456.jpeg"
+      ],
+      [
+        "IMG000707.jpeg",
+        "IMG003346.jpeg"
+      ],
+      [
+        "IMG001673.jpeg",
+        "IMG001683.jpeg"
+      ],
+      [
+        "IMG001721.jpeg",
+        "IMG001799.jpeg"
+      ],
+      [
+        "IMG001722.jpeg",
+        "IMG001836.jpeg"
+      ],
+      [
+        "IMG001733.jpeg",
+        "IMG001766.jpeg"
+      ],
+      [
+        "IMG001734.jpeg",
+        "IMG001789.jpeg"
+      ],
+      [
+        "IMG001873.jpeg",
+        "IMG003324.jpeg"
+      ],
+      [
+        "IMG001948.jpeg",
+        "IMG002166.jpeg"
+      ],
+      [
+        "IMG001950.jpeg",
+        "IMG002173.jpeg"
+      ],
+      [
+        "IMG001951.jpeg",
+        "IMG002167.jpeg"
+      ],
+      [
+        "IMG001952.jpeg",
+        "IMG002168.jpeg"
+      ],
+      [
+        "IMG001953.jpeg",
+        "IMG002169.jpeg"
+      ],
+      [
+        "IMG001954.jpeg",
+        "IMG002170.jpeg"
+      ],
+      [
+        "IMG001955.jpeg",
+        "IMG002171.jpeg"
+      ],
+      [
+        "IMG001956.jpeg",
+        "IMG002172.jpeg"
+      ],
+      [
+        "IMG003668.jpeg",
+        "IMG003686.jpeg"
+      ],
+      [
+        "IMG003669.jpeg",
+        "IMG003685.jpeg"
+      ]
+    ],
+    "pair_count": 21,
+    "conflicting_label_groups": [
+      [
+        "IMG000591.jpeg",
+        "IMG003456.jpeg"
+      ],
+      [
+        "IMG000707.jpeg",
+        "IMG003346.jpeg"
+      ]
+    ],
+    "cross_center_groups": []
+  },
+  "annotations": {
+    "shape_types": {
+      "rectangle": 2324,
+      "polygon": 2318
+    },
+    "labels": {
+      "other mt": 92,
+      "osteosarcoma": 596,
+      "synovial osteochondroma": 110,
+      "giant cell tumor": 188,
+      "simple bone cyst": 412,
+      "other bt": 252,
+      "osteochondroma": 1612,
+      "multiple osteochondromas": 1288,
+      "osteofibroma": 92
+    },
+    "invalid_json_or_structure": [],
+    "image_path_mismatch": [],
+    "subtype_label_sets_checked": true,
+    "subtype_label_set_mismatch": [
+      {
+        "image_id": "IMG001276.jpeg",
+        "metadata_subtypes": [
+          "osteochondroma",
+          "synovial osteochondroma"
+        ],
+        "annotation_labels": [
+          "synovial osteochondroma"
+        ]
+      }
+    ]
+  },
+  "split_lists": {
+    "checked": true,
+    "train_count": 2995,
+    "validation_count": 751,
+    "train_list_sha256": "ab6b81f2fc8805bf20998e31c220fb052e87d2bc0bf53dcb2fb9ee623dfabdfd",
+    "validation_list_sha256": "f2153bf241d9d3240e2d90c013739466026da10857e0567cee8593139fd0702a",
+    "overlap_image_stems": [],
+    "unknown_image_stems": [],
+    "release_image_stems_omitted": [],
+    "extension_mismatch_count": 27,
+    "exact_duplicate_groups_crossing_lists": [
+      [
+        "IMG000245.jpeg",
+        "IMG000683.jpeg"
+      ],
+      [
+        "IMG000430.jpeg",
+        "IMG000765.jpeg"
+      ],
+      [
+        "IMG000591.jpeg",
+        "IMG003456.jpeg"
+      ],
+      [
+        "IMG001948.jpeg",
+        "IMG002166.jpeg"
+      ],
+      [
+        "IMG001952.jpeg",
+        "IMG002168.jpeg"
+      ],
+      [
+        "IMG001955.jpeg",
+        "IMG002171.jpeg"
+      ],
+      [
+        "IMG003668.jpeg",
+        "IMG003686.jpeg"
+      ]
+    ],
+    "patient_independence_established": false
+  },
+  "exif": {
+    "checked": true,
+    "tag_presence_counts": {
+      "Orientation": 245,
+      "ExifOffset": 110,
+      "ProcessingSoftware": 20,
+      "Software": 58,
+      "DateTime": 60,
+      "59932": 25,
+      "Artist": 4,
+      "XPAuthor": 4,
+      "ImageWidth": 18,
+      "ImageLength": 18,
+      "BitsPerSample": 18,
+      "PhotometricInterpretation": 18,
+      "ResolutionUnit": 53,
+      "SamplesPerPixel": 18,
+      "XResolution": 53,
+      "YResolution": 53,
+      "GPSInfo": 2,
+      "Make": 3,
+      "Model": 3,
+      "PrintImageMatching": 1,
+      "ImageDescription": 1,
+      "YCbCrPositioning": 1
+    },
+    "nonempty_raw_tag_counts": {
+      "Orientation": 245,
+      "ExifOffset": 110,
+      "ProcessingSoftware": 20,
+      "Software": 58,
+      "DateTime": 60,
+      "59932": 25,
+      "Artist": 4,
+      "XPAuthor": 4,
+      "ImageWidth": 18,
+      "ImageLength": 18,
+      "BitsPerSample": 18,
+      "PhotometricInterpretation": 18,
+      "ResolutionUnit": 53,
+      "SamplesPerPixel": 18,
+      "XResolution": 53,
+      "YResolution": 53,
+      "GPSInfo": 2,
+      "Make": 3,
+      "Model": 3,
+      "PrintImageMatching": 1,
+      "ImageDescription": 1,
+      "YCbCrPositioning": 1
+    },
+    "values_exported": false
+  },
+  "ready_for_training": false,
+  "patient_grouping_verified": false,
+  "reference_standard_verified": false,
+  "medical_validation_established": false,
+  "limitations": [
+    "No patient or lesion identity is inferred from metadata, hashes or split lists.",
+    "Labels, reference standards, permissions and scientific protocol need independent review.",
+    "Exact-byte checks miss re-encoding, crops, other views and other patient overlap.",
+    "Annotation geometry, pixel privacy and EXIF values are not reviewed."
+  ]
+}
