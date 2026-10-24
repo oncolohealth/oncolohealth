@@ -445,3 +445,37 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
 - [x] CBIS-DDSM grouping verified: the TCIA collection page says each participant has several patient IDs (6,671 IDs, 1,566 participants), and the CSVs' `patient_id` column holds exactly the 1,566 `P_xxxxx` values the group regex extracts. Dataset finding: the official train/test split was made separately for mass and calcification cases, so 31 participants have rows in both a train and a test CSV. The sarcoma spreadsheet's 51 `STS_xxx` IDs match the TCIA PatientIDs.
 - [x] Suite: **271 discovered**; ML environment 267 pass with 4 opt-in skips; plain Python 226 pass, 45 skips. Acquisition and subset tests also pass on Python 3.11, 3.12 and 3.13.
 - [ ] Next: review the TCGA/GDC open-access terms; review RTSTRUCT ROI names and the sarcoma outcome columns; review the CBIS-DDSM pathology reference standard per row.
+
+## Inam: current-source integration and independent CPU checks (2026-10-24)
+
+- [x] Combined Inam's published-evidence panel with the pending identity guard,
+  coordinator profiles and execution-review work, preserving original commits
+  and authors. Integrated main through `94f99eb`, including Sebastian's processor,
+  JPEG, subset acquisition and network fixes. Separate review branch:
+  `codex/research-integration-followup`; pre-report integration `50f024f`.
+  Only appended progress records conflicted; both sides were retained. Pending
+  PRs #2–4 remain reviews, not approvals or a shared-main merge.
+- [x] Installed the eight pinned ML dependencies in a task-only CPU environment;
+  official CPU wheel SHA-256 checks and actual imports pass. Full current suite:
+  **305 discovered, 301 pass, four opt-in actual-weight skips**. System Python:
+  **305 discovered, 257 pass, 48 skips**. Catalog: **16 models, 17 datasets**.
+  JavaScript syntax/whitespace checks and eight scripted coordinator cases pass.
+  Reasoning quality is unscored; no live coordinator was called.
+- [x] Three independent synthetic native-crop comparisons against timm and the
+  transformers PIL/Torchvision backends pass. The default tensor backend has a
+  measured two-gray-level sharp-edge difference on this finite fixture set;
+  exact/universal equivalence is not claimed. All three tests detect the old
+  JPEG draft-decoding regression at `66562ea`. No new encoder production edit.
+- [x] Current restarted backend displays the evidence panel and reopens the
+  earlier synthetic draft with original source identity, saved-snapshot limits
+  and no execution authorization/dispatch. No console warnings/errors. Earlier
+  phone/light-mode QA and API CSV checks remain distinct preceding checkpoints.
+- [x] Prepared an unsent custodian evidence-request draft and a scientific-review
+  decision worksheet. No medical data, actual weights, fitting, cloud workload
+  or outreach used here. Sebastian's own actual-weight/MPS checks are recorded
+  in his report and are not repeated or claimed as ours.
+- [ ] Publish/review this separate integration candidate; named scientific
+  decisions, genuine grouping/reference evidence, a real coordinator endpoint
+  and specific medical execution scope remain task-specific next steps.
+  Current report: `docs/reports/F-current-integration-review.md`. Earlier source,
+  environment and test-count paragraphs above are historical checkpoints.
