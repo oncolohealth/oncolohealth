@@ -38,6 +38,8 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] 30 synthetic unit tests passing (`python3 -m unittest discover -s tests`)
 - [x] Default-tier download: 13 artifacts fetched and checksum-verified (HF sha256 / Zenodo md5 / figshare md5; the 3 TCIA series are trust-on-first-use sha256), 6.35 GB used including extracted copies
 - [ ] Review each `PROVENANCE.json`, then PR evidence_state `cataloged → access_obtained`
+- [x] Local app (`python3 -m cancer_workbench app`): catalog + router, downloads with live progress/cancel/budget, dataset inventory + audit + grouped splits, multi-model assistant chat with visible tool calls, editable PROGRESS checklist. Standard library only, localhost-only, per-launch token
+- [ ] Install the `ml` extra (`uv venv; uv pip install -e ".[ml]"`): needed before any model can run on an image
 - [ ] `git init` + first commit + shared remote (waiting on the user)
 
 ## Milestone 1: Bone X-ray workflow (BTXRD)
@@ -83,8 +85,10 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [ ] Demo: bone specialist call + incompatible-input rejection + honest failure
 
 ### G: Interface
-- [ ] API/state contract around `route_models`, `execute_specialist`, `audit_dataset`, `run_turn`
-- [ ] Researcher flow mock (clearly labeled mock data)
+- [~] API/state contract: `cancer_workbench/app/api.py` wraps routing, acquisition, audit/splits, coordinator, progress
+- [ ] "Analyze an image" screen: upload a radiograph → validated adapter call → native result envelope. Blocked until C ships an adapter and E a trained head; until then the app and assistant must say no model can run
+- [ ] Experiment runs screen (plans, states, records), once B/E land
+- [ ] Visual QA pass in a real browser (light + dark, phone width)
 
 ### H: Review
 - [ ] Review of this foundation: interfaces, gaps, smallest next experiment

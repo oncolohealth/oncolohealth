@@ -1,4 +1,4 @@
-"""CLI: python -m cancer_workbench <fetch|catalog|route|coordinator> ..."""
+"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator> ..."""
 from __future__ import annotations
 
 import argparse
@@ -90,11 +90,23 @@ def _coordinator(argv: list[str]) -> int:
     return rc
 
 
+def _app(argv: list[str]) -> int:
+    from .app.server import serve
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench app")
+    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--no-browser", action="store_true")
+    a = ap.parse_args(argv)
+    serve(a.port, open_browser=not a.no_browser)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator}
+    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "app": _app}
     if not argv or argv[0] not in commands:
-        print(__doc__ + "\n  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
+        print(__doc__ + "\n  app          open the local researcher app in your browser\n"
+              "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
               "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints")
         return 0 if not argv else 2
     if argv[0] == "fetch":

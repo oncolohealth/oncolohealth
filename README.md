@@ -7,6 +7,14 @@ A researcher-focused workspace: **question → evidence → eligible data → co
 ## Quick start (no installs needed for the core)
 
 ```fish
+python3 -m cancer_workbench app                  # opens the researcher app at http://127.0.0.1:8765
+```
+
+The app has five screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Assistant** chats with or compares any OpenAI-compatible model. **Progress** shows the team checklist. It runs on localhost only and needs nothing installed. It can't run a model on an image yet: see PROGRESS.md (C/E/G).
+
+Command-line equivalents:
+
+```fish
 python3 -m unittest discover -s tests            # synthetic software tests
 python3 -m cancer_workbench catalog validate
 python3 -m cancer_workbench fetch list           # catalog, tiers, sizes, local status

@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import sys
 from pathlib import Path
+from typing import Callable
 
 from ..common.paths import DATA_DIR, MODELS_DIR
 from ..registry.store import Catalog, load_catalog
@@ -74,19 +75,24 @@ def write_provenance(record: dict, plans: list[FilePlan], files: list[dict]) -> 
     return path
 
 
-def fetch(record: dict, plans: list[FilePlan], *, extract: bool = True) -> Path:
+def fetch(record: dict, plans: list[FilePlan], *, extract: bool = True, quiet: bool = False,
+          on_progress: Callable[[str, int, int | None], None] | None = None) -> Path:
+    """Download every planned file. `on_progress(relpath, bytes_done, bytes_total)` is called per chunk."""
     root = target_dir(record)
     files = []
     for p in plans:
         dest = root / p.relpath
-        print(f"[{record['id']}] {p.relpath}", file=sys.stderr)
-        download(p.url, dest, size=p.size, md5=p.md5, sha256=p.sha256, headers=p.headers)
+        if not quiet:
+            print(f"[{record['id']}] {p.relpath}", file=sys.stderr)
+        cb = (lambda done, total, rel=p.relpath: on_progress(rel, done, total)) if on_progress else None
+        download(p.url, dest, size=p.size, md5=p.md5, sha256=p.sha256, headers=p.headers, quiet=quiet, progress=cb)
         h = hash_file(dest)
         files.append({"path": p.relpath, "url": p.url, "integrity": p.integrity, **h})
         if extract and p.extract:
             out = dest.with_suffix("")
             if not out.exists():
-                print(f"  extracting -> {out.relative_to(root)}", file=sys.stderr)
+                if not quiet:
+                    print(f"  extracting -> {out.relative_to(root)}", file=sys.stderr)
                 safe_extract_zip(dest, out)
     return write_provenance(record, plans, files)
 

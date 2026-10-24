@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import Callable
 
 CHUNK = 1 << 20
 USER_AGENT = "cancer-workbench-fetch/0.1"
@@ -73,6 +74,7 @@ def download(
     sha256: str | None = None,
     headers: dict[str, str] | None = None,
     quiet: bool = False,
+    progress: Callable[[int, int | None], None] | None = None,
 ) -> Path:
     """Download `url` to `dest`, resuming a partial `.part` file, then verify it.
 
@@ -102,6 +104,8 @@ def download(
             while chunk := resp.read(CHUNK):
                 f.write(chunk)
                 done += len(chunk)
+                if progress:
+                    progress(done, total)
                 if not quiet and total:
                     print(f"\r  {dest.name}: {done / 1e6:,.0f}/{total / 1e6:,.0f} MB", end="", file=sys.stderr)
     if not quiet:
