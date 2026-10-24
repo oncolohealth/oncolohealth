@@ -620,3 +620,11 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
 .specialist-form { display: grid; gap: 8px; }
 .specialist-form .btn { justify-self: start; }
 .specialist-result:not(:empty) { margin-top: 10px; }
+
+/* Phone width: keep every screen inside 390 px */
+.items .txt { min-width: 0; overflow-wrap: anywhere; }
+.table-scroll { overflow-x: auto; }
+@media (max-width: 480px) {
+  #catalog-table th, #catalog-table td { padding-left: 7px; padding-right: 7px; }
+  .pill, .tier-rows li > .num { white-space: normal; overflow-wrap: anywhere; }
+}
