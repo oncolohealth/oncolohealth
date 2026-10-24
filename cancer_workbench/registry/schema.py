@@ -29,7 +29,7 @@ def _common(rec: dict) -> list[str]:
         errs.append(f"acquisition.tier {acq.get('tier')!r} not in {sorted(TIERS)}")
     if acq.get("tier") == "manual" and not acq.get("instructions"):
         errs.append("manual-tier records need acquisition.instructions")
-    return errs + _subset(acq)
+    return errs + _subset(acq) + _supporting(acq)
 
 
 def _subset(acq: dict) -> list[str]:
@@ -48,6 +48,22 @@ def _subset(acq: dict) -> list[str]:
         content = acq.get("filters", {}).get("content", [])
         if not any(c.get("op") == "=" and c.get("content") == {"field": "access", "value": "open"} for c in content):
             errs.append("gdc filters must include access = open")
+    return errs
+
+
+def _supporting(acq: dict) -> list[str]:
+    files = acq.get("supporting", [])
+    if not isinstance(files, list):
+        return ["acquisition.supporting must be a list"]
+    errs = []
+    for i, f in enumerate(files):
+        rel = f.get("relpath", "") if isinstance(f, dict) else ""
+        if not isinstance(f, dict) or not str(f.get("url", "")).startswith("https://"):
+            errs.append(f"acquisition.supporting[{i}] needs an https url")
+        elif not rel or rel.startswith("/") or ".." in rel.split("/"):
+            errs.append(f"acquisition.supporting[{i}].relpath must be a relative path inside the record")
+        elif not isinstance(f.get("size"), int):
+            errs.append(f"acquisition.supporting[{i}] needs its size in bytes")
     return errs
 
 

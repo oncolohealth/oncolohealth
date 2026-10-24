@@ -188,7 +188,8 @@ class SubsetFetchTests(unittest.TestCase):
                                                           integrity="size_only", group=g)]) for g in ("P1", "P2", "P3", "P4")],
             shared=[FilePlan(url=f"{self.srv.url}/P1", relpath="README", integrity="size_only")])
         self.record = {"id": "synthetic-subset", "_kind": "dataset", "name": "SYNTHETIC", "license": {"id": "none"},
-                       "acquisition": {"tier": "optional", "fetcher": "fake", "subset": {"unit": "patient", "required": True}}}
+                       "acquisition": {"tier": "optional", "fetcher": "fake", "subset": {"unit": "patient", "required": True},
+                                       "supporting": [{"url": f"{self.srv.url}/P2", "relpath": "labels/table.csv", "size": len("SYNTHETIC-P2")}]}}
         self.patches = [mock.patch.dict(sources.LISTERS, {"fake": lambda acq, query=None: listing}),
                         mock.patch.object(fetch_mod, "target_dir", return_value=self.root)]
         for p in self.patches:
@@ -214,11 +215,18 @@ class SubsetFetchTests(unittest.TestCase):
         self.assertFalse(set(first["selection"]["groups"]) & set(second["selection"]["groups"]))
         prov = json.loads((self.root / "PROVENANCE.json").read_text())
         paths = {f["path"] for f in prov["files"]}
-        self.assertEqual(paths, {"README"} | {f"{g}/s.bin" for g in first["selection"]["groups"] + second["selection"]["groups"]})
+        self.assertEqual(paths, {"README", "labels/table.csv"} | {f"{g}/s.bin" for g in first["selection"]["groups"] + second["selection"]["groups"]})
         self.assertEqual([s["mode"] for s in prov["selections"]], ["sample", "sample"])
         self.assertEqual(prov["selections"][1]["skipped_on_disk"], 2)
         self.assertEqual(prov["selections"][0]["seed"], 5)
-        self.assertTrue(all(f.get("group") for f in prov["files"] if f["path"] != "README"))
+        self.assertTrue(all(f.get("group") for f in prov["files"] if f["path"] not in ("README", "labels/table.csv")))
+
+    def test_supporting_files_come_with_ids_and_whole_fetches(self):
+        row = fetch_mod.plan([self.record], {self.record["id"]: {"mode": "ids", "ids": ["P3"]}})[0]
+        self.assertEqual([p.relpath for p in row["plans"]], ["labels/table.csv", "README", "P3/s.bin"])
+        self.assertEqual(row["plans"][0].integrity, "size_only")
+        whole = {"fetcher": "url", "files": [{"url": "https://x/a", "relpath": "a"}], "supporting": [{"url": "https://x/b", "relpath": "b", "size": 1}]}
+        self.assertEqual([p.relpath for p in sources.resolve(whole)], ["a", "b"])
 
     def test_api_plan_validates_subset_keys(self):
         with self.assertRaises(api.ApiError):
@@ -241,6 +249,13 @@ class SchemaTests(unittest.TestCase):
         self.assertTrue(self.errs({"tier": "optional", "fetcher": "isic", "subset": {"unit": "patient"}}))
         gdc = {"tier": "optional", "fetcher": "gdc", "subset": {"unit": "patient", "required": True}, "filters": {"content": []}}
         self.assertTrue(any("access = open" in e for e in self.errs(gdc)))
+
+    def test_supporting_rules(self):
+        ok = {"url": "https://x/a.csv", "relpath": "labels/a.csv", "size": 3}
+        self.assertEqual(self.errs({"tier": "optional", "fetcher": "url", "files": [], "supporting": [ok]}), [])
+        for bad in ({**ok, "url": "http://x/a.csv"}, {**ok, "relpath": "../a.csv"}, {**ok, "relpath": "/etc/a"}, {**ok, "size": None}, "a.csv"):
+            with self.subTest(bad=bad):
+                self.assertTrue(self.errs({"tier": "optional", "fetcher": "url", "files": [], "supporting": [bad]}))
 
 
 if __name__ == "__main__":

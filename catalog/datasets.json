@@ -230,13 +230,13 @@
       "modality": ["ct", "mri", "pet"],
       "anatomy": ["soft_tissue"],
       "counts": {"patients": 51, "series": 612, "ct_series": 51, "mr_series": 204, "pet_series": 51, "rtstruct_series": 306, "status": "from TCIA API metadata, 2026-10-24"},
-      "labels": {"region_level": "RTSTRUCT tumor contours", "note": "Clinical data, if any, is on the collection page and is not fetched by the series API."},
-      "unresolved": ["ROI names inside the RTSTRUCT series have not been reviewed", "outcome labels and their reference standard not reviewed"],
+      "labels": {"region_level": "RTSTRUCT tumor contours", "patient_level": "clinical/INFOclinical_STS.xlsx from the collection page (sheets 'Clinical Information' and 'Outcome vector'): histology, grade, treatment, metastasis and survival follow-up; its 51 STS_xxx IDs match the TCIA PatientIDs", "note": "The clinical spreadsheet is fetched with every subset; its outcome columns have not been reviewed."},
+      "unresolved": ["ROI names inside the RTSTRUCT series have not been reviewed", "outcome labels in INFOclinical_STS.xlsx and their reference standard not reviewed"],
       "license": {"id": "cc-by-3.0", "url": "http://creativecommons.org/licenses/by/3.0/"},
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Vallières et al. 2015; doi:10.7937/K9/TCIA.2015.7GO2GSKS",
-      "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "Soft-tissue-Sarcoma", "extract": true, "subset": {"unit": "patient", "required": true}, "approx_bytes": 9870434084}
+      "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "Soft-tissue-Sarcoma", "extract": true, "subset": {"unit": "patient", "required": true}, "supporting": [{"url": "https://www.cancerimagingarchive.net/wp-content/uploads/INFOclinical_STS.xlsx", "relpath": "clinical/INFOclinical_STS.xlsx", "size": 12595}], "approx_bytes": 9870434084}
     },
     {
       "id": "cbis-ddsm",
@@ -244,14 +244,14 @@
       "summary": "Curated DDSM screening mammograms with ROI crops and masks; fetch whole patients as a seeded sample or by ID. 163 GB in total, so only subsets fit here.",
       "modality": ["mammography"],
       "anatomy": ["breast"],
-      "counts": {"series": 6775, "tcia_patient_ids": 6671, "patient_groups": 1566, "status": "from TCIA API metadata, 2026-10-24"},
-      "labels": {"note": "Pathology (benign/malignant) and BI-RADS descriptors are CSV files on the collection page; the series API does not fetch them."},
-      "unresolved": ["patient grouping: TCIA PatientIDs encode case, side and view (e.g. Calc-Test_P_00038_LEFT_CC); the P_xxxxx case number is used as the patient group, not verified against the release documentation", "CSV label files not fetched yet"],
+      "counts": {"series": 6775, "tcia_patient_ids": 6671, "patient_groups": 1566, "participants": 1566, "abnormality_rows": 3568, "status": "from TCIA API metadata and the description CSVs, 2026-10-24. Patient grouping verified: the collection page says each participant has several patient IDs (6,671 IDs, 1,566 participants), and the CSVs' patient_id column holds exactly the 1,566 P_xxxxx values the group regex extracts"},
+      "labels": {"lesion_level": "labels/*_case_description_*.csv from the collection page: 3,568 abnormality rows (calc train 1,546, calc test 326, mass train 1,318, mass test 378) with pathology MALIGNANT / BENIGN / BENIGN_WITHOUT_CALLBACK, BI-RADS assessment, density, subtlety and the DICOM paths of each image, crop and mask", "note": "Fetched with every subset. The official train/test split was made separately for mass and calcification cases, so 31 participants have rows in both a train and a test file."},
+      "unresolved": ["pathology reference standard per row not reviewed", "31 participants cross the official mass/calc train/test split; a patient-level split must regroup them"],
       "license": {"id": "cc-by-3.0", "url": "http://creativecommons.org/licenses/by/3.0/"},
       "access": "open",
       "evidence_state": "cataloged",
       "citation": "Lee et al. 2017; doi:10.7937/K9/TCIA.2016.7O02S9CY",
-      "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "CBIS-DDSM", "extract": true, "subset": {"unit": "patient", "required": true, "group_regex": "P_\\d{5}"}, "approx_bytes": 163512966728}
+      "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "CBIS-DDSM", "extract": true, "subset": {"unit": "patient", "required": true, "group_regex": "P_\\d{5}"}, "supporting": [{"url": "https://www.cancerimagingarchive.net/wp-content/uploads/calc_case_description_train_set.csv", "relpath": "labels/calc_case_description_train_set.csv", "size": 925310}, {"url": "https://www.cancerimagingarchive.net/wp-content/uploads/calc_case_description_test_set.csv", "relpath": "labels/calc_case_description_test_set.csv", "size": 190388}, {"url": "https://www.cancerimagingarchive.net/wp-content/uploads/mass_case_description_train_set.csv", "relpath": "labels/mass_case_description_train_set.csv", "size": 772727}, {"url": "https://www.cancerimagingarchive.net/wp-content/uploads/mass_case_description_test_set.csv", "relpath": "labels/mass_case_description_test_set.csv", "size": 217038}], "approx_bytes": 163512966728}
     }
   ]
 }

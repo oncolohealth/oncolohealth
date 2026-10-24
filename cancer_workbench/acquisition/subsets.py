@@ -14,6 +14,7 @@ A selection is `{"mode": "sample", "count": N, "seed": S}` or `{"mode": "ids", "
 optionally with `"query"`. Sampling shuffles every group with `random.Random(seed)` and takes the
 first N groups that are not already on disk, so asking for N more continues the same order.
 The chosen groups, the seed and a hash of the listing are recorded in PROVENANCE.json.
+Files in `acquisition.supporting` (label tables the API does not serve) come with every selection.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ import random
 import time
 from pathlib import Path
 
-from .sources import LISTERS, AccessError, FilePlan, Listing, Unit
+from .sources import LISTERS, AccessError, FilePlan, Listing, Unit, supporting_plans
 
 CACHE_SECONDS = 900
 MAX_COUNT = 100_000
@@ -151,7 +152,7 @@ def resolve_subset(acq: dict, raw: dict, root: Path) -> tuple[list[FilePlan], di
     units, summary = choose(lst, sel, root)
     summary["unit"] = subset.get("unit")
     plans, seen = [], set()
-    for p in lst.shared + [p for u in units for p in u.plans]:
+    for p in supporting_plans(acq) + lst.shared + [p for u in units for p in u.plans]:
         if p.relpath not in seen:
             seen.add(p.relpath)
             plans.append(p)

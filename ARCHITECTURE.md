@@ -36,7 +36,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `adapters/encoder.py` | `FrozenEncoderAdapter` (RAD-DINO, ResNet-50): shared pad-to-square preprocessing by default, plus `VARIANTS` `pad_pstretch` (per-image 1st–99th percentile stretch) and `native_crop` (shortest-edge resize + center crop) for the source-shift check; safetensors-only loading; `ml` extra, import explicitly | done |
 | `acquisition/sources.py` | Per-publisher resolvers (Hugging Face, Zenodo, figshare, TCIA, plain URL) → `FilePlan`s; subset listers (TCIA, Zenodo, figshare, ISIC, GDC, S3) → `Unit`s | done |
 | `acquisition/subsets.py` | Choose part of a source: whole groups by seeded sample (skipping groups on disk) or by ID; cached listings; checklist summaries | done |
-| `acquisition/download.py` | Resumable download, checksum verification, safe zip extraction, cross-host auth stripping | done |
+| `acquisition/download.py` | Resumable download, checksum verification, safe zip extraction, cross-host auth stripping, IPv6/IPv4 fallback with short connect timeouts | done |
 | `acquisition/fetch.py` | Plan/fetch catalog records, write `PROVENANCE.json`; `fetch` CLI | done |
 | `acquisition/budget.py` | Storage budget (40 GB default, `CW_STORAGE_BUDGET_GB`) | done |
 | `datasets/manifest.py` | Manifest CSV contract (`FIELDS`, `PARTITIONS`), read/write | done |
@@ -100,7 +100,7 @@ Common fields: `id`, `name`, `license`, `access`, `evidence_state`, `acquisition
 Models add `kind`, `tasks`, `modality`, `anatomy`, `input`, `outputs`, `inference_permission`, and optionally `adapter`.
 Datasets add `modality`, `anatomy`, `counts`, `labels`, and optionally `unresolved`.
 
-`acquisition.tier` is one of `default`, `optional`, `gated`, `big_machine`, `manual`. `acquisition.fetcher` selects a resolver in `acquisition/sources.py`. Manual-tier records must have `instructions`. An optional `acquisition.subset` block (`unit`, `required`, plus per-fetcher `modalities`, `group_regex`, `candidates`, `query`, `max_listing`) makes a record fetchable in part; its format is documented in `acquisition/subsets.py`. `isic`, `gdc` and `s3` records are subset-only, and `gdc` filters must include `access = open`.
+`acquisition.tier` is one of `default`, `optional`, `gated`, `big_machine`, `manual`. `acquisition.fetcher` selects a resolver in `acquisition/sources.py`. Manual-tier records must have `instructions`. An optional `acquisition.subset` block (`unit`, `required`, plus per-fetcher `modalities`, `group_regex`, `candidates`, `query`, `max_listing`) makes a record fetchable in part; its format is documented in `acquisition/subsets.py`. `acquisition.supporting` lists files the publisher serves outside the fetcher's API (label tables, clinical spreadsheets) as `{url, relpath, size}`; they are fetched with every download, whole or subset. `isic`, `gdc` and `s3` records are subset-only, and `gdc` filters must include `access = open`.
 
 ### Evidence ladder (`common.types.EvidenceState`)
 

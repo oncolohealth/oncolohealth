@@ -173,7 +173,7 @@ def resolve_tcia(acq: dict) -> list[FilePlan]:
     return plans
 
 
-def resolve_url(acq: dict) -> list[FilePlan]:
+def _url_plans(files: list[dict]) -> list[FilePlan]:
     return [
         FilePlan(
             url=f["url"],
@@ -184,8 +184,17 @@ def resolve_url(acq: dict) -> list[FilePlan]:
             integrity="publisher_checksum" if (f.get("md5") or f.get("sha256")) else "size_only",
             extract=bool(f.get("extract")),
         )
-        for f in acq["files"]
+        for f in files
     ]
+
+
+def resolve_url(acq: dict) -> list[FilePlan]:
+    return _url_plans(acq["files"])
+
+
+def supporting_plans(acq: dict) -> list[FilePlan]:
+    """Files served outside the fetcher's API (label tables, clinical spreadsheets), fetched with every download."""
+    return _url_plans(acq.get("supporting", []))
 
 
 def _subset_only(acq: dict) -> list[FilePlan]:
@@ -208,7 +217,7 @@ def resolve(acq: dict) -> list[FilePlan]:
     fetcher = acq.get("fetcher")
     if fetcher not in RESOLVERS:
         raise AccessError(f"no automatic fetcher for {fetcher!r}; see the record's `instructions`")
-    return RESOLVERS[fetcher](acq)
+    return RESOLVERS[fetcher](acq) + supporting_plans(acq)
 
 
 # ---------- subset listings ----------
