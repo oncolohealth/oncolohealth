@@ -1,0 +1,17 @@
+{
+  "_comment": "Reviewed BTXRD near-duplicate candidates (runs/btxrd-near-duplicates-20261024T071231Z, ranks 22-37 and 42, the top 16 new pairs plus one more benign/normal pair). Only 'same_image' pairs are merged into a duplicate_group by build_manifest. Same-patient views are not grouped: that would be inferred patient grouping, which Hub D04 rules out. Reviewed 2026-10-24 by Claude Code for Sebastian, by side-by-side inspection and pixel comparison; pending a second human look.",
+  "same_image": [
+    {"a": "IMG002677", "b": "IMG002686", "evidence": "Identical 2360x1250 size, full-frame pixel correlation 0.997 at 256 px width; the only visible difference is a text label burned into IMG002677. Embedding cosine: RAD-DINO 1.0, ResNet-50 0.9924. Both normal. Crossed the image-stratified split before this record."}
+  ],
+  "pending": [
+    {"a": "IMG000155", "b": "IMG000157", "reason": "Same hip and pose by eye; 552 vs 535 px wide at equal height. Best crop alignment corr 0.957, best rescale 0.971: either one radiograph processed twice or two exposures moments apart. Needs a person. Both malignant."}
+  ],
+  "separate_exposures": {
+    "note": "Different positioning, marker placement or side: separate radiographs, likely of one patient. Not grouped (no inferred patients).",
+    "pairs": [["IMG002882", "IMG002884"], ["IMG001939", "IMG001940"], ["IMG001035", "IMG001153"], ["IMG001996", "IMG001997"],
+              ["IMG002618", "IMG003337"], ["IMG002618", "IMG002620"], ["IMG002349", "IMG002352"], ["IMG001148", "IMG001160"],
+              ["IMG002489", "IMG002493"], ["IMG000557", "IMG000558"], ["IMG000626", "IMG002623"], ["IMG000384", "IMG002854"],
+              ["IMG002159", "IMG002160"], ["IMG002010", "IMG002012"], ["IMG000495", "IMG001923"]]
+  },
+  "label_notes": "IMG000626 (benign) / IMG002623 (normal) are a left and a right knee; IMG000384 (benign) / IMG002854 (normal) and IMG000495 (benign) / IMG001923 (normal) are different exposures. These labels need not conflict, but they show near-identical images can carry different labels."
+}

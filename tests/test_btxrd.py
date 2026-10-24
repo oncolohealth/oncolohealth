@@ -124,6 +124,21 @@ class BtxrdTests(unittest.TestCase):
         self.assertEqual(rows["IMG000001"]["duplicate_group"], "")
         self.assertEqual(btxrd.build_manifest(self.root, hash_files=False)[1]["duplicate_group"], "")
 
+    def test_reviewed_same_image_pairs_join_exact_groups_and_clear_conflicts(self):
+        img = self.root / "images"
+        (img / "IMG000003.jpg").write_bytes((img / "IMG000002.jpeg").read_bytes())  # exact copy, conflicting labels
+        reviewed = self.root / "reviewed.json"
+        reviewed.write_text(json.dumps({"same_image": [{"a": "IMG000001", "b": "IMG000002", "evidence": "SYNTHETIC"},
+                                                       {"a": "IMG000005", "b": "IMG999999", "evidence": "not in this endpoint"}]}))
+        rows = {r["sample_id"]: r for r in btxrd.build_manifest(self.root, reviewed_pairs=reviewed)}
+        group = {rows[s]["duplicate_group"] for s in ("IMG000001", "IMG000002", "IMG000003")}
+        self.assertEqual(group, {"reviewed:IMG000001+IMG000002+IMG000003"})
+        self.assertTrue(all("reviewed_same_image" in rows[s]["audit_flags"] for s in ("IMG000001", "IMG000002", "IMG000003")))
+        self.assertEqual(rows["IMG000001"]["label"], "")  # normal joined a benign/malignant group
+        self.assertEqual(rows["IMG000005"]["duplicate_group"], "")
+        unreviewed = {r["sample_id"]: r for r in btxrd.build_manifest(self.root, reviewed_pairs=None)}
+        self.assertEqual(unreviewed["IMG000001"]["duplicate_group"], "")
+
     def test_endpoints(self):
         tvn = btxrd.build_manifest(self.root, "tumor_vs_normal", hash_files=False)
         self.assertEqual({r["label"] for r in tvn}, {"normal", "tumor", ""})

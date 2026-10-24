@@ -11,7 +11,8 @@ build_manifest(raw_dir, endpoint, hash_files) -> list[dict]
     source metadata as extra columns. Rows whose indicators are missing or
     contradictory keep an empty label and an audit flag instead of a guessed class.
     With hash_files, byte-identical images get a shared duplicate_group, and a
-    duplicate set whose labels disagree loses its labels.
+    duplicate set whose labels disagree loses its labels. Pairs reviewed as the
+    same radiograph in catalog/reviews/btxrd-same-image.json join one group too.
 """
 from __future__ import annotations
 
@@ -20,11 +21,12 @@ import json
 from pathlib import Path
 
 from ..acquisition.download import hash_file
-from ..common.paths import DATA_DIR
+from ..common.paths import CATALOG_DIR, DATA_DIR
 from .xlsx import read_sheet, sheet_names
 
 RAW_DIR = DATA_DIR / "btxrd" / "BTXRD" / "BTXRD"
 MANIFEST_PATH = DATA_DIR / "btxrd" / "manifest.csv"
+REVIEWED_PAIRS = CATALOG_DIR / "reviews" / "btxrd-same-image.json"
 RELEASE = "figshare:27865398/v1"
 
 SITES = ("hand", "ulna", "radius", "humerus", "foot", "tibia", "fibula", "femur", "hip bone",
@@ -152,7 +154,8 @@ def describe_release(raw_dir: Path = RAW_DIR) -> dict:
     }
 
 
-def build_manifest(raw_dir: Path = RAW_DIR, endpoint: str = "three_class", hash_files: bool = True) -> list[dict]:
+def build_manifest(raw_dir: Path = RAW_DIR, endpoint: str = "three_class", hash_files: bool = True,
+                   reviewed_pairs: Path | None = REVIEWED_PAIRS) -> list[dict]:
     """Manifest rows for `endpoint` (see ENDPOINTS). `file` is relative to `raw_dir`."""
     if endpoint not in ENDPOINTS:
         raise ValueError(f"endpoint must be one of {sorted(ENDPOINTS)}")
@@ -192,7 +195,46 @@ def build_manifest(raw_dir: Path = RAW_DIR, endpoint: str = "three_class", hash_
             "annotation_shapes": len(ann.get("shapes", [])) if ann else 0,
             "audit_flags": ";".join(_row_flags(r, derived, ann)),
         })
-    return _mark_exact_duplicates(out)
+    out = _mark_exact_duplicates(out)
+    if reviewed_pairs is not None and Path(reviewed_pairs).exists():
+        out = _merge_reviewed_pairs(out, json.loads(Path(reviewed_pairs).read_text()).get("same_image", []))
+    return out
+
+
+def _merge_reviewed_pairs(rows: list[dict], pairs: list[dict]) -> list[dict]:
+    """Join reviewed same-radiograph pairs (and any exact-duplicate group they touch) into one duplicate_group.
+
+    Only pairs a person reviewed as the same image belong here; similar views of one patient do not.
+    """
+    by_id = {r["sample_id"]: r for r in rows}
+    parent: dict[str, str] = {}
+
+    def find(x):
+        while parent.setdefault(x, x) != x:
+            x = parent[x]
+        return x
+
+    for pair in pairs:
+        a, b = pair["a"], pair["b"]
+        if a in by_id and b in by_id:  # an endpoint may drop one side (e.g. normals for benign_vs_malignant)
+            parent[find(a)] = find(b)
+    members: dict[str, list[dict]] = collections.defaultdict(list)
+    for sid in parent:
+        members[find(sid)].append(by_id[sid])
+    for group in members.values():
+        exact = {r["duplicate_group"] for r in group if r["duplicate_group"]}
+        group += [r for r in rows if r["duplicate_group"] in exact and r not in group]  # exact copies of any member
+        ids = {r["sample_id"] for r in group}
+        name = "reviewed:" + "+".join(sorted(ids))
+        conflict = len({r["label_derived"] for r in group}) > 1
+        for r in group:
+            r["duplicate_group"] = name
+            flags = [f for f in r["audit_flags"].split(";") if f] + ["reviewed_same_image"]
+            if conflict:
+                r["label"] = ""
+                flags.append("duplicate_label_conflict")
+            r["audit_flags"] = ";".join(dict.fromkeys(flags))
+    return rows
 
 
 def _mark_exact_duplicates(rows: list[dict]) -> list[dict]:
