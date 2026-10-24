@@ -215,3 +215,8 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | A coordinator tool | `coordinator/tools.py::default_toolbox` | JSON schema + handler returning observed data |
 | An app endpoint | function in `app/api.py` + entry in a route table | call it from `app/static/app.js` via `api()` |
 | A CLI command | `__main__.py` | add to `commands` |
+
+
+## Candidate offline release/evidence review
+
+`datasets/release_audit.py` audits an already-local BTXRD ZIP and prepares an evidence template. `datasets/evidence.py` binds returned records to source bytes and reports declared evidence gaps without exporting supplied identity/reference values. `datasets/btxrd_review.py` owns the `btxrd-review audit|template|check` CLI. These are independent utilities; they do not replace the current manifest/audit path, alter training/evaluation, or create a cohort. See [the candidate contract and verification](docs/reports/A-offline-release-review.md).

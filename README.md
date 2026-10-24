@@ -1,3 +1,7 @@
+# Overnight integration handoff
+
+Read [the complete handoff](docs/research-handoff/README.md) and [the noon–2 PM plan](docs/research-handoff/Team-integration-plan.md). This review branch contains the actual combined release/evidence, model-folder provenance and feature-cache fixes. Its reference source archive also preserves the standalone foundation and Gemma OncoCopilot implementations. Main is not merged by this upload; the actual unpushed team branch still needs reconciliation.
+
 # Cancer AI research workbench
 
 A researcher-focused workspace: **question → evidence → eligible data → compatible model → reproducible experiment → measured result**. Background and scientific ground rules: [Cancer-AI-Research-Context.md](Cancer-AI-Research-Context.md). Status and task checklist: [PROGRESS.md](PROGRESS.md).

@@ -321,3 +321,20 @@ Historical verification from the incoming branch's source checkout:
   check: a synthetic draft previewed on the Experiments screen and saved history
   loaded, with no console errors. Phone width and light theme of that screen are
   not yet checked.
+
+
+## Research handoff verification history
+
+The following records the earlier c13a74a-based handoff. The active rebase preserves newer main's measured model/processor/image/payload/head provenance and UI; the older narrow cache repair is superseded where contracts overlap. Final combined verification follows after reconciliation.
+
+### Earlier offline BTXRD review candidate
+
+
+- [x] Candidate against main `c13a74a15fdd636249899a587a239cb000107e6d`: read-only ZIP audit, evidence-template CSV and evidence-return check under `datasets/`, exposed through `btxrd-review`. See [A-offline-release-review.md](docs/reports/A-offline-release-review.md).
+- [x] Combined synthetic suite: 131 discovered, 117 pass / 14 skip in plain Python; 118 pass / 13 skip with optional Pillow. Catalog remains 16 models / 14 datasets. Optional ML/Torch tests are not claimed as run.
+- [x] Real local evidence-check result compared with the independent foundation report: 3,746 source-bound rows, missing patient/lesion/reference evidence and four conflicting source-copy labels; no cohort created.
+- [ ] Review/rebase the candidate, test the full supported environment, and merge only after review. This is a local proposal; shared main and the unpushed team branch are not changed. No acquisition, training, catalog promotion or medical validation is established.
+
+## Organization handoff publication
+
+The review branch consolidates all three local patches and provides readable research/evidence reports plus complete standalone source snapshots under `docs/research-handoff/`. The combined code passes 149 tests with 11 optional ML skips (160 discovered) with NumPy/Pillow. A proposed Gemma 4 31B coordinator profile is the shipped example default; no endpoint/model run is established. Main and the unavailable unpushed team branch remain unreconciled. Follow the integration plan before real execution.

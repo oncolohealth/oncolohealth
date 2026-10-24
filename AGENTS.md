@@ -18,3 +18,7 @@ When work in this repository changes its progress, update the Team Hub's "Local 
 - Read the current tab before editing, change only that tab, and keep other people's edits intact. Other sections of the Hub belong to their authors.
 
 Background and scientific ground rules: [Cancer-AI-Research-Context.md](Cancer-AI-Research-Context.md). Repository status: [PROGRESS.md](PROGRESS.md). Code map: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Complete research and code handoff
+
+Read `docs/research-handoff/README.md` and `docs/research-handoff/Team-integration-plan.md` before continuing. They distinguish directly verified audit/tests, reported team-branch work and unresolved scientific evidence. The shared root is the receiving implementation; standalone source trees in the archive are reference components for selective integration. Do not mark fixes merged merely because they were uploaded to a review branch. Preserve patient/lesion and per-row reference-standard blockers and the explicit execution scope.
