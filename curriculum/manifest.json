@@ -1,0 +1,51 @@
+{
+  "adapters_installed": [
+    "frozen-encoder:rad-dino",
+    "frozen-encoder:resnet50-a1-in1k"
+  ],
+  "admission": "none: every candidate is review.status 'pending' and admitted_to_training false; export_curriculum returns only reviewed train candidates",
+  "candidates": 37,
+  "candidates_file_sha256": "ec8108605d961e0382cd072d60eeec671b812b423583c19a9e7e8eddfac4e5ca",
+  "captured_at": "2026-10-24T23:05:27+00:00",
+  "capturer": "Sebastian with Claude Code (Claude Opus 5.5)",
+  "counts": {
+    "family": {
+      "dataset-audit": 8,
+      "failure-handling": 9,
+      "research-reading": 4,
+      "reuse-path": 3,
+      "specialist-kinds": 7,
+      "training-recipe": 6
+    },
+    "split": {
+      "development": 5,
+      "evaluation_reserved": 6,
+      "train_candidate": 26
+    },
+    "state": {
+      "pending_review": 37
+    }
+  },
+  "environment_note": "run_specialist and route_models results depend on which adapters this process could install; recapture elsewhere marks responses stale if results differ",
+  "reconcile_with": "Jordi's 44 training + 12 development candidates (140 offline catalog calls) and the original 83/21 pilot are not on this machine; de-duplicate by lineage before any admission",
+  "sources": {
+    "files": {
+      "catalog/cards.json": "354a62898c9af012ebb4e4c2d149e5c33a18ac1cffbcd448cc75cab17af09d21",
+      "catalog/datasets.json": "ad0ad3ba9e9220b1de19639690de86aa12fcb2f27061fe66c28d0f37a95192e7",
+      "catalog/models.json": "c2b6df0b2e83b96f377f81705a166f5fd910ffeab5aaa1ea4b0fb44f66432783",
+      "catalog/workflows.json": "027edee15605a98ca0bf7d3d60920c6ada2e587676f65d33c10d161a387c062c"
+    },
+    "git": {
+      "commit": "048b6fb9a2868e9dbc36a3c412d35352aaa3fbe1",
+      "dirty": false
+    }
+  },
+  "tool_calls": 53,
+  "tools": [
+    "search_catalog",
+    "get_record",
+    "route_models",
+    "run_specialist",
+    "get_workflow"
+  ]
+}
