@@ -1,6 +1,6 @@
 # F: Evaluation protocol and executable checks
 
-Owner: Codex, taking over unclaimed F utilities and protocol drafting. This is
+Owner: Inam Qasimi, taking over unclaimed F utilities and protocol drafting. This is
 a **review draft**, aligned with source commit
 `7d4bf64c47946439691bcaa02883aebb2ec296d2`; it does not resolve the lead's open
 endpoint decision (Hub Q02) or approve a medical model. New tests use synthetic
@@ -120,9 +120,13 @@ guarantee. Report patient counts and invalid draws; small/sparse subgroups can
 remain uninterpretable. No p-value, multiplicity correction or equivalence
 claim is implemented.
 
-The older `metrics.py` bootstrap still uses images when groups are absent and
-does not report invalid-draw counts. It is unchanged in this patch and requires
-further input/non-finite/bootstrap hardening. The existing baseline does not
+The legacy `metrics.py` API still uses image resampling when groups are absent,
+with an explicit warning. The follow-up now validates labels, probabilities,
+class order, groups and options; reports missing-class/non-finite draw counts;
+and withholds intervals with fewer than two groups/valid draws or under 80%
+valid draws. Single-class ranking and missing-class aggregate metrics are
+explicit nulls. Its percentile intervals remain exploratory safeguards, not a
+guarantee of coverage. The existing baseline does not
 automatically call the new utilities; patient/source enrichment and a reviewed
 protocol must precede that integration.
 
@@ -142,7 +146,7 @@ new development cycle, not a correction to a reported test score.
 
 ## Verification and remaining work
 
-22 new stdlib synthetic evaluation tests cover aggregation, cross-split and
+The initial 22 stdlib synthetic evaluation tests cover aggregation, cross-split and
 pretraining overlap, namespace handling, paired identity/direction, tied scores,
 cluster resampling, undefined metrics and reproducibility. One test includes
 1,134 exhaustive four-row cases against independent pair-count AUC and
@@ -154,3 +158,21 @@ mapping or a defensible independent cohort; reference-standard adjudication;
 near-duplicate/source/pretraining inventory review; a reviewed protocol and
 untouched evaluation set; measured resource records. No catalog evidence state
 or real model execution permission was changed.
+
+
+## Merged-checkout follow-up
+
+Owner: Inam Qasimi. The metric hardening follow-up is based on merged main
+`bff6ea4`, including Sebastian's Images workspace and saved-head/scoring work.
+Public report keys are preserved; `bootstrap`, `warnings` and an explicit AP
+quantity definition are added. Single-class ranking metrics and full-class
+multiclass aggregates with missing classes are now null, and the baseline
+summary renders them as `undefined`.
+
+Threshold selection requires both development classes, finite bounded scores
+and a valid rule/target. The no-positive-predictions ROC point uses a finite
+threshold just above the maximum observed score rather than clipping infinity
+to 1; clipping changes predictions when a score equals 1. A threshold can
+therefore be slightly above 1. Its provenance as development data remains a
+protocol responsibility; the function cannot infer where supplied rows came
+from. Existing saved thresholds and predictions are not recalculated.

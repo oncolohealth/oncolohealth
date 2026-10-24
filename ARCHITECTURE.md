@@ -53,8 +53,8 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `experiments/explore.py` | Images screen backend: `list_runs`, `review` (stored val/test predictions joined with the split, stdlib), `head_for` (load or verified refit of a run's head), `score` (live encoder + head on chosen images; refuses training images). Bypasses `execute_specialist` on purpose; not in the coordinator tool box | done (`score`/`head_for` need `ml`) |
 | `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing hash | done (`ml` extra) |
 | `learning/heads.py` | `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals, `save_head`/`load_head` (plain-array `.npz`, no pickle) | done (`ml` extra; distillation not implemented) |
-| `evaluation/metrics.py` | `binary_report`, `multiclass_report` (bootstrap CIs), `calibration` | done (`ml` extra) |
-| `evaluation/thresholds.py` | `choose_threshold` on development data (`youden`, `sensitivity>=X`) | done (`ml` extra) |
+| `evaluation/metrics.py` | Validated binary/multiclass reports, calibration; grouped bootstrap draw accounting and explicit undefined results | done (`ml` extra) |
+| `evaluation/thresholds.py` | Validated development-only Youden/sensitivity selection, including a finite no-positive-prediction threshold | done (`ml` extra) |
 | `evaluation/aggregate.py` | Binary patient max/mean aggregation; declared IDs and consistent labels/partition required | done (stdlib) |
 | `evaluation/leakage.py` | Declared split and namespaced pretraining overlap; unresolved coverage stays explicit | done (stdlib; no pixel or identity inference) |
 | `evaluation/comparison.py` | Binary ROC-AUC/AP, paired patient-cluster bootstrap differences and invalid-draw accounting | done (stdlib; not wired into baseline) |
@@ -172,6 +172,7 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_datasets.py` | Audit findings, grouped splits |
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
 | `test_experiment_plan.py` | Three draft paths, reviewed rights, audit and budget refusal; synthetic records |
+| `test_metric_validation.py` | Invalid metric inputs, missing classes, bootstrap accounting, threshold edge cases and undefined summary rendering |
 | `test_evaluation_protocol.py` | Patient aggregation, declared/pretraining overlap, paired comparisons and 1,134 metric oracle cases |
 | `test_learning_eval.py` | Split protocols, heads (incl. save/load round trip), metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |

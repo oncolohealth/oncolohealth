@@ -1,7 +1,7 @@
 # B: Experiment draft contract
 
 Implemented against `experiments/__init__.py` at source commit
-`7d4bf64c47946439691bcaa02883aebb2ec296d2`. Owner: Codex, taking over the
+`7d4bf64c47946439691bcaa02883aebb2ec296d2`. Owner: Inam Qasimi, taking over the
 unclaimed B planning work. The callable and its two output states are preserved.
 
 `plan_experiment(path, model, dataset_audit=None, budget=None)` is a pure library

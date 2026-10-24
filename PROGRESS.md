@@ -16,13 +16,13 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 | WS | Focus | Module(s) | Depends on | Owner |
 |---|---|---|---|---|
 | A | Dataset & evidence curator | `datasets/`, `acquisition/`, `catalog/datasets.json` | none | |
-| B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | Codex (planner + protocol draft) |
+| B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | Inam Qasimi (planner + protocol draft) |
 | C | Registry & specialist adapters | `registry/`, `routing/`, `adapters/`, `catalog/models.json` | none | |
 | D | Coordinator & retrieval | `coordinator/`, `retrieval/`, `curriculum/` | C (tool schemas) | |
 | E | Transfer learning & distillation | `learning/` | A (manifest), F (metrics) | |
-| F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Codex (utilities + protocol draft) |
+| F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Inam Qasimi (utilities + protocol draft) |
 | G | Researcher UI & API | `api/` (new), `ui/` (new) | C, D interfaces | |
-| H | Independent review | `docs/reports/H-*` | all | Codex (source check only; independent review pending) |
+| H | Independent review | `docs/reports/H-*` | all | Inam Qasimi (source check only; independent review pending) |
 
 ## Phase 0: Foundation (done in this session)
 
@@ -76,7 +76,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 ### F: Evaluation
 - [~] Review draft `docs/reports/F-evaluation-protocol.md`: actual baseline recipe, patient aggregation policy, paired grouped CIs, calibration, development-only choices and overlap review. Endpoint/patient/reference-standard evidence still unresolved; protocol not approved
 - [x] Stdlib `evaluation/aggregate.py`, `leakage.py`, `comparison.py`: explicit binary patient aggregation, declared split/pretraining overlap and paired patient-cluster ROC-AUC/AP differences. 22 new synthetic tests, including 1,134 small metric oracle cases; no patient identities inferred
-- [~] Existing ML `evaluation/metrics.py` and `thresholds.py`: implemented but still need input/non-finite/invalid-bootstrap-draw hardening (see H source check); new utilities are not automatically wired into the baseline
+- [x] F metric/threshold follow-up against merged main `bff6ea4`: validated inputs/groups, explicit undefined metrics, invalid-bootstrap draw accounting and null-safe baseline summaries; 24 synthetic regression tests pass. Patient aggregate/paired utilities remain separate from the baseline
 - [x] Empty error-review template `docs/reports/F-error-review-template.csv` and subgroup policy in F protocol; no real cases reviewed
 
 ### D: Coordinator
@@ -142,4 +142,14 @@ Historical verification from the incoming branch's source checkout:
 - Integrated `origin/codex/experiment-evaluation` at `d718b41195543c3bd7c1ef590c222dd3f9f53e4b` with main's existing Images screen, saved heads and scoring recovery. Resolved documentation conflicts by retaining both workstreams' additions.
 - `.venv/bin/python -m unittest discover -s tests`: **98 tests, all passing**, including the optional ML tests. `python3 -m unittest discover -s tests`: **98 tests, OK with 7 optional ML tests skipped**.
 - `.venv/bin/python -m cancer_workbench catalog validate`: **16 models, 14 datasets valid**. `git diff --check` is clean. These checks establish software behavior only; no medical workload or catalog promotion was performed during the merge.
-- Team Hub checklist synchronization remains blocked: opening the document redirects to Google sign-in. The B/F completion items and current verification results above await synchronization after access is restored.
+- The connected Team Hub has since been read and already records the merge and 98-test results. The follow-up synchronized B/F verification and attribution in the Local build checklist; attribution-only corrections were also applied to the earlier contribution check-ins.
+
+
+## Inam Qasimi: merged-main evaluation follow-up (2026-10-24)
+
+- Based on clean merged main `bff6ea43ca8996d1a6959ebbb1a1bea5bc274089` at `/home/inamqasimi/Documents/BETA_TEST`.
+- B/F ownership and source-check attribution corrected to Inam Qasimi. `.mailmap` maps the earlier assistant author identity for Git reporting; future branch commits use the repository's configured human email. Existing shared commit objects are unchanged.
+- `docs/reports/F-metric-hardening.md` describes the fix, compatibility changes and verification. Scientific endpoint/patient/source evidence and independent review remain unresolved. E/C/D source findings remain open.
+- Verified with a temporary test environment: NumPy 2.5.4, scikit-learn 1.9.1 and SciPy 1.18.1. **122 tests: 121 pass, 1 skipped** (Torch preprocessing unavailable), including all 24 new tests. Before this change, merged main ran **98 tests: 97 pass, 1 skipped** in the same environment and emitted single-class metric warnings; the patched suite does not emit those warnings.
+- Plain `python3`: **122 tests: 93 pass, 29 skipped** because optional scikit-learn/Torch tests are unavailable; the newly added plain-Python summary tests pass. Before this change: **98 tests: 91 pass, 7 skipped**.
+- Catalog remains 16 models and 14 datasets. No UI/learning/coordinator/adapter/catalog/shared-contract changes, medical data downloads, inference, training or evidence promotions.

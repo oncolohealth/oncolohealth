@@ -1,8 +1,7 @@
 # H: Local source check and next integration work
 
 Source reviewed: `7d4bf64c47946439691bcaa02883aebb2ec296d2`, local checkout
-`/home/inamqasimi/Documents/BETA_TEST`. Codex reviewed source and implemented
-the B/F additions in this change. This is not an independent review of those
+`/home/inamqasimi/Documents/BETA_TEST` (the original source location). Source review and the B/F additions in the original change are owned by Inam Qasimi. This is not an independent review of those
 new additions. No medical data, cached embeddings, downloaded weights or
 reported training run outputs were available in this checkout to reproduce
 the collaborator's baseline results.
@@ -12,7 +11,7 @@ the collaborator's baseline results.
 The earlier Team Hub takeover handoff was prepared before source access. The
 actual repo already contains encoders, train-only feature standardization,
 validation-selected logistic heads, an exploratory baseline, a local app and
-coordinator tools. Those are existing team work, not new Codex implementations.
+coordinator tools. Those are existing team work, not new Inam Qasimi implementations.
 The F protocol now describes the actual lbfgs/C-grid recipe rather than the
 earlier handoff's suggested optimizer. B/F additions fill previously stubbed
 interfaces; they do not replace the existing training pipeline.
@@ -43,3 +42,13 @@ one comparison of the existing two frozen encoders, with matched membership,
 development-only choices, paired differences and explicit limitations. A live
 Qwen endpoint, new model downloads and a GPU are not prerequisites for those
 software fixes.
+
+
+## Follow-up against merged main bff6ea4
+
+The current checkout is `/home/inamqasimi/Documents/BETA_TEST` (initially pulled into its `oncolohealth/` subfolder, then moved up).
+Sebastian's Images workspace, saved heads and background scoring are present.
+Inam Qasimi's F metric/threshold input and invalid-bootstrap-draw finding is
+addressed in the follow-up, with synthetic tests and undefined-summary support.
+The E pre-fit leakage and C/D adapter/schema findings remain open. This is a
+maintenance follow-up by the same contributor, not independent review.

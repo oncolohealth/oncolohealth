@@ -155,7 +155,13 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
 
 
 def _fmt_ci(v, ci):
+    if v is None:
+        return "undefined"
     return f"{v:.3f} ({ci[0]:.3f}-{ci[1]:.3f})" if ci else f"{v:.3f}"
+
+
+def _fmt_metric(v):
+    return "undefined" if v is None else f"{v:.2f}"
 
 
 def summary(results: list[dict]) -> str:
@@ -165,10 +171,10 @@ def summary(results: list[dict]) -> str:
         t = r["test"]
         if "roc_auc" in t:
             auc = _fmt_ci(t["roc_auc"], t["roc_auc_ci95"])
-            dec = f"sens {t['sensitivity']:.2f}, spec {t['specificity']:.2f} ({t['positive_class']} positive)"
+            dec = f"sens {_fmt_metric(t['sensitivity'])}, spec {_fmt_metric(t['specificity'])} ({t['positive_class']} positive)"
         else:
             auc = _fmt_ci(t["macro_roc_auc"], t["macro_roc_auc_ci95"]) + " macro"
-            dec = f"bal. acc {t['balanced_accuracy']:.2f}; recall " + ", ".join(f"{c} {v:.2f}" for c, v in t["recall"].items())
+            dec = f"bal. acc {_fmt_metric(t['balanced_accuracy'])}; recall " + ", ".join(f"{c} {_fmt_metric(v)}" for c, v in t["recall"].items())
         lines.append(f"| {r['protocol']} | {r['endpoint']} | {r['encoder']} | {t['n']} | {auc} | {dec} |")
     lines += ["", "CIs resample images, so they are too narrow if images share patients."]
     return "\n".join(lines) + "\n"
