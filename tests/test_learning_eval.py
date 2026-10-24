@@ -41,7 +41,7 @@ class SplitProtocolTests(unittest.TestCase):
     def test_endpoint_rows(self):
         self.assertEqual({r["label"] for r in endpoint_rows(self.ROWS, "tumor_vs_normal")}, {"normal", "tumor"})
         self.assertEqual(len(endpoint_rows(self.ROWS, "benign_vs_malignant")), 60)
-        quarantined = [dict(self.ROWS[0], label="", label_derived="")]
+        quarantined = [dict(self.ROWS[0], label="", label_derived=""), dict(self.ROWS[1], label="")]
         self.assertEqual(endpoint_rows(quarantined, "three_class"), [])
 
 

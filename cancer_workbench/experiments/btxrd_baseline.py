@@ -40,9 +40,9 @@ def make_split(rows: list[dict], protocol: str, seed: str = "0") -> list[dict]:
 
 
 def endpoint_rows(rows: list[dict], endpoint: str) -> list[dict]:
-    """Relabel three-class rows for `endpoint`; drop quarantined rows and rows outside the cohort."""
+    """Relabel three-class rows for `endpoint`; drop unlabeled (quarantined) rows and rows outside the cohort."""
     mapping = ENDPOINTS[endpoint]
-    return [dict(r, label=mapping[r["label_derived"]]) for r in rows if r["label_derived"] and mapping[r["label_derived"]]]
+    return [dict(r, label=mapping[r["label_derived"]]) for r in rows if r["label"] and mapping[r["label_derived"]]]
 
 
 def _git_revision() -> str:

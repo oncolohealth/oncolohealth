@@ -10,6 +10,8 @@ build_manifest(raw_dir, endpoint, hash_files) -> list[dict]
     One row per radiograph following datasets/manifest.py, partition "unassigned",
     source metadata as extra columns. Rows whose indicators are missing or
     contradictory keep an empty label and an audit flag instead of a guessed class.
+    With hash_files, byte-identical images get a shared duplicate_group, and a
+    duplicate set whose labels disagree loses its labels.
 """
 from __future__ import annotations
 
@@ -190,4 +192,27 @@ def build_manifest(raw_dir: Path = RAW_DIR, endpoint: str = "three_class", hash_
             "annotation_shapes": len(ann.get("shapes", [])) if ann else 0,
             "audit_flags": ";".join(_row_flags(r, derived, ann)),
         })
-    return out
+    return _mark_exact_duplicates(out)
+
+
+def _mark_exact_duplicates(rows: list[dict]) -> list[dict]:
+    """Byte-identical images share a duplicate_group so splits keep them together; conflicting labels are cleared.
+
+    This uses file identity only. It is not patient grouping and finds no near-duplicates.
+    """
+    by_hash: dict[str, list[dict]] = collections.defaultdict(list)
+    for r in rows:
+        if r["sha256"]:
+            by_hash[r["sha256"]].append(r)
+    for digest, group in by_hash.items():
+        if len(group) < 2:
+            continue
+        conflict = len({r["label_derived"] for r in group}) > 1
+        for r in group:
+            r["duplicate_group"] = f"sha256:{digest[:16]}"
+            flags = [f for f in r["audit_flags"].split(";") if f] + ["exact_duplicate"]
+            if conflict:
+                r["label"] = ""
+                flags.append("duplicate_label_conflict")
+            r["audit_flags"] = ";".join(flags)
+    return rows

@@ -113,6 +113,17 @@ class BtxrdTests(unittest.TestCase):
         self.assertIn("unknown_label", codes)
         self.assertEqual(rep["file_checks"]["hash_mismatch"], 0)
 
+    def test_exact_duplicates_grouped_and_conflicts_cleared(self):
+        img = self.root / "images"
+        (img / "IMG000003.jpg").write_bytes((img / "IMG000002.jpeg").read_bytes())  # benign == malignant copy
+        rows = {r["sample_id"]: r for r in btxrd.build_manifest(self.root)}
+        a, b = rows["IMG000002"], rows["IMG000003"]
+        self.assertTrue(a["duplicate_group"] and a["duplicate_group"] == b["duplicate_group"])
+        self.assertEqual((a["label"], b["label"]), ("", ""))
+        self.assertIn("duplicate_label_conflict", b["audit_flags"])
+        self.assertEqual(rows["IMG000001"]["duplicate_group"], "")
+        self.assertEqual(btxrd.build_manifest(self.root, hash_files=False)[1]["duplicate_group"], "")
+
     def test_endpoints(self):
         tvn = btxrd.build_manifest(self.root, "tumor_vs_normal", hash_files=False)
         self.assertEqual({r["label"] for r in tvn}, {"normal", "tumor", ""})
