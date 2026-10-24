@@ -47,6 +47,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/config.py` | Named profiles from `configs/coordinator.json` or `configs/coordinator.example.json` | done |
 | `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist` | done |
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
+| `coordinator/evaluation.py`, `scripts/evaluate_coordinator.py` | Versioned public development workflows, observed trace checks, partial failure capture; offline scripted mode and explicitly selected live profile | done (live evaluation pending) |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
 | `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (library only; never executes) |
 | `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, heads, records; `baseline` CLI | done (`ml` extra) |
@@ -192,6 +193,8 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_evaluation_protocol.py` | Patient aggregation, declared/pretraining overlap, paired comparisons and 1,134 metric oracle cases |
 | `test_learning_eval.py` | Split protocols, heads (incl. save/load round trip), metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
+| `test_coordinator_evaluation.py` | Trace checks, fabricated completion failure, partial provider failure, step limits and fixture versions |
+| `test_hosted_profile.py` | Fake hosted tool round trip, credential requirement, optional workspace header, profile preservation and redirect boundaries |
 | `test_app.py` | `PROGRESS.md` editing, API functions, uploads, media path checks, run replay, server Host and token guards (including scoring recovery) |
 | `test_scoring.py` | Scoring progress across success/refusal/error, concurrent-batch refusal, failure preservation, recovery snapshots, bounded history and API input resolution |
 | `helpers.py` | `LocalServer` fixture |

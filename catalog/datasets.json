@@ -8,7 +8,7 @@
       "modality": ["xray"],
       "anatomy": ["bone"],
       "counts": {"images": 3746, "normal_images": 1879, "tumor_images": 1867, "benign_images": 1525, "malignant_images": 342, "patients": "unknown: release has no patient or lesion id", "status": "audited (dataset.xlsx metadata, 2026-10-23)"},
-      "labels": {"image_level": ["normal", "tumor"], "tumor_level": ["benign", "malignant"], "annotations": ["bounding_box", "polygon"], "annotation_format": "LabelMe 5.4.1 JSON, one file per tumor image", "reference_standard": "unresolved: audit whether histopathology confirms every tumor label"},
+      "labels": {"image_level": ["normal", "tumor"], "tumor_level": ["benign", "malignant"], "annotations": ["bounding_box", "polygon"], "annotation_format": "LabelMe 5.4.1 JSON, one file per tumor image", "reference_standard": "paper reports histology or confirmation by two radiology experts, with pathology absent for some images; per-image confirmation method remains unresolved (primary paper reviewed 2026-10-24)"},
       "unresolved": ["patient grouping: dataset.xlsx has no patient or lesion id, and the paper says several views can show the same lesion", "device per image (center and anatomic site are in dataset.xlsx)", "label adjudication process", "label errors: 2 byte-identical image pairs are labeled benign in one copy and normal in the other (IMG000591/IMG003456, IMG000707/IMG003346); 21 exact-duplicate pairs in total", "overlap with other public bone X-ray sets"],
       "license": {"id": "cc-by-4.0", "url": "https://creativecommons.org/licenses/by/4.0/"},
       "access": "open",

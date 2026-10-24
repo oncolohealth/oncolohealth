@@ -23,11 +23,17 @@ python3 -m cancer_workbench fetch get --tier default
 python3 -m cancer_workbench route --task feature_extraction --modality xray --anatomy bone
 python3 -m cancer_workbench coordinator profiles
 python3 scripts/demo_observed_results.py       # offline SYNTHETIC software demo; no live LLM
+python3 scripts/evaluate_coordinator.py        # versioned public development trace suite, offline by default
 ```
 
 The offline demo exercises actual catalog/execution calls and a scripted
 coordinator feedback cycle. It needs no medical data or model weights and does
 not demonstrate live model reasoning. See [demo readiness](docs/reports/demo-readiness.md).
+
+[Coordinator evaluation](docs/coordinator-evaluation.md) separates scripted smoke
+checks, optional live trace checks and unscored human answer review. The
+[Claude example profile](docs/claude-profile.md) is locally tested preparation;
+no real hosted call has been verified.
 
 ML work needs the pinned extras: `uv venv; uv pip install -e ".[ml]"` (add `imaging`, `clip` as needed).
 

@@ -221,6 +221,39 @@ Historical verification from the incoming branch's source checkout:
   skips** in the available ML environment; plain Python **146 discovered,
   106 pass, 40 optional-ML skips**. Earlier 139/122/104 counts are checkpoints,
   not the integrated count. No medical artifacts or reported scores reproduced.
-- The Hub reports unpushed `c13a74a` Images changes on the collaborator's machine.
-  They are unavailable in the pushed repository and are not claimed as included.
-  Review against that checkout before merging. No remote branch was pushed.
+- At this checkpoint, `c13a74a` was unavailable. It was subsequently pushed and
+  reconciled in the autonomous refinement below. No remote branch was pushed.
+
+### Autonomous refinement and five pitch alternatives (2026-10-24)
+
+- [x] Fetched and integrated pushed main `c13a74a15fdd636249899a587a239cb000107e6d`,
+  preserving Sebastian's Images preprocessing selection/refit/cache fix and
+  variant UI labels. Two incoming regressions are included. The user checkout
+  remains untouched; all work is on the isolated `codex/demo-readiness` branch.
+- [x] Prepared `claude-research` through the compatible provider. Credentials
+  and optional workspace header come from environment references; missing key
+  refuses before transport and cross-origin redirects refuse. Seven local fake-
+  server/profile tests pass. No real key, live Claude call or sponsor eligibility
+  is claimed. See `docs/claude-profile.md`.
+- [x] Added versioned public coordinator development fixtures and runner, with
+  eight offline smoke cases and six optional live cases. Actual tool results and
+  next-request feedback are checked, errors retain partial traces, and final
+  answer quality stays unscored. Seven regressions pass. No held-out/live model
+  reasoning score or medical execution was produced.
+- [x] Reviewed primary BTXRD/CLAIM sources and re-read Figshare version/license
+  metadata. Corrected baseline equivalence and patient-independence overclaims
+  without altering reported scores. Recorded protocol/reference-standard gaps
+  in `docs/reports/research-evidence-review.md`.
+- [x] Prepared five additional seven-slide editable presentation alternatives:
+  research evidence, product demo, public benefit, cloud collaboration and
+  engineering reliability. Each has intro/evidence/conclusion, 180-second script
+  and alternate opening/close. Added short fallback, Q&A and source/visual check.
+  All 35 slides inspected, spacing fixes rechecked and numeric claims matched.
+- [x] Integrated software checkpoint: **162 discovered, 160 pass, 2 Torch skips**
+  in the available ML environment; plain Python **162 discovered, 122 pass,
+  40 optional-ML skips**. The deck's 155-test chart is explicitly the earlier
+  source-integration/hosted-profile checkpoint. Counts are never summed.
+- [ ] Full Torch checks, independent code/protocol review, live coordinator
+  evaluation and reviewed specialist promotion remain. Genuine patient mapping
+  or an independent cohort, primary endpoint and reference-standard/protocol
+  review require scientific evidence. Public cloud remains unprovisioned.

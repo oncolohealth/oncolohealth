@@ -3,10 +3,11 @@
 Inam Qasimi · October 24, 2026
 
 This follow-up builds on `df45e788b3eebb55e722bdc795f8ce633df1cb2f` and integrates
-latest pushed main `acb8e298e196cb86187d879b00a25bc1c50a2cd9` on a separate
+latest pushed main `c13a74a15fdd636249899a587a239cb000107e6d` on a separate
 `codex/demo-readiness` branch. It addresses remaining source findings
 without downloading data or weights, choosing a scientific endpoint, or
-changing the exploratory Images scoring route.
+promoting the exploratory Images scoring route. Sebastian's pushed variant fix
+is integrated with its tests and UI labels intact.
 
 ## Implemented
 
@@ -42,9 +43,10 @@ handlers are not invoked after invalid input, and that failures preserve their
 observed-result metadata. Existing binary/multiclass saved-head round trips and
 learning tests continue to pass in the available ML environment.
 
-Full integrated suite in the temporary NumPy/scikit-learn environment: **146 tests,
-144 passed, 2 skipped** (Torch preprocessing unavailable). Plain Python:
-**146 tests, 106 passed, 40 optional-ML skips**. The initial full run
+Full integrated suite including the hosted profile and development evaluation
+harness in the temporary NumPy/scikit-learn environment: **162 tests,
+160 passed, 2 skipped** (Torch preprocessing unavailable). Plain Python:
+**162 tests, 122 passed, 40 optional-ML skips**. The initial full run
 could not bind localhost sockets inside the sandbox. After the network grant,
 the full suite passed. These are software checks, not medical findings.
 
@@ -64,9 +66,27 @@ source-shift reports, with a new plain-Python integration regression. Both
 workstreams' documentation and tests are retained. Earlier 139-test counts
 describe the pre-integration checkpoint.
 
-The Hub additionally reports unpushed `c13a74a` Images/preprocessing changes.
-Those unavailable changes are not claimed as integrated or tested here. The
-branch must still be reviewed against that checkout before its eventual merge.
+The previously unavailable `c13a74a` Images/preprocessing change is now pushed
+and integrated. It validates/refits the selected preprocessing variant and keys
+encoder caches by encoder plus variant. Both new source tests are included.
+
+## Further autonomous refinement
+
+- Added a Claude compatibility profile with environment-only credential and
+  workspace-header references, missing-key refusal and redirect boundaries.
+  Seven fake-server/configuration tests pass. No live hosted call occurred.
+- Added a versioned coordinator development harness: eight offline smoke cases,
+  six optional live cases, trace-based checks, partial error capture and unscored
+  human answer review. Seven regressions pass. These public scenarios are not a
+  held-out reasoning benchmark. See `docs/coordinator-evaluation.md`.
+- Rechecked primary BTXRD/CLAIM sources and dataset-license metadata. Corrected
+  unsupported equivalence and patient-independence language in the historical
+  baseline interpretation without modifying its results. Catalog reference-
+  standard wording now states the paper's mixed confirmation and remaining gap.
+- Prepared five additional seven-slide editable pitch alternatives, each with
+  a 180-second script, alternate opening/conclusion and a separate short fallback.
+  All 35 slides were inspected, spacing corrected and numeric claims checked.
+  Decks/scripts are separate chat outputs, not a completed product integration.
 
 ## Remaining limitations
 
@@ -79,7 +99,8 @@ rewritten, and no existing reported scores were reproduced here.
 
 The local app still needs HTTPS/access controls, persistent shared job state and
 storage, and a reviewed server configuration for public cloud use. Tiger Data,
-Vultr, Claude and the Droid SDK are proposed integrations, not implemented ones.
+Vultr and the Droid SDK are proposed integrations. Claude has profile preparation
+and local fake-server checks, with meaningful live use still unverified.
 Live coordinator evaluation, reviewed specialist promotion and an experiment
 runs screen remain open. No cloud resource was provisioned.
 
