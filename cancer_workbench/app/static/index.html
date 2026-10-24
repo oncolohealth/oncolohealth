@@ -121,8 +121,9 @@
       <!-- Images -->
       <section class="screen" id="screen-images" hidden>
         <header class="screen-head">
-          <h1>Images</h1>
-          <p class="lede">Look at dataset and uploaded images, review a baseline run's stored predictions one image at a time, and score selected images live with that run's head.</p>
+          <p class="eyebrow">Image workspace</p>
+          <h1>Review & score images</h1>
+          <p class="lede">Choose a baseline, select images, and follow live scoring from preparation to results.</p>
         </header>
         <p class="explore-banner">Exploratory software output from image-level baselines without patient grouping. Nothing on this screen is a diagnosis or a validated model.</p>
         <form class="img-tools" id="img-tools">
@@ -131,12 +132,33 @@
             <button type="button" data-src="uploads">Uploads</button>
           </div>
           <label>Baseline run<select name="run"></select></label>
-          <label>Result (protocol · endpoint · encoder)<select name="result" disabled></select></label>
+          <label>Protocol · endpoint · encoder<select name="result" disabled></select></label>
         </form>
+        <p class="hint run-context" id="img-run-context">Choose a baseline run to review predictions or score images live.</p>
         <div class="upload-zone" id="upload-zone" hidden>
           <label class="btn primary upload-btn">Upload JPEG or PNG images<input type="file" id="upload-input" accept="image/jpeg,image/png" multiple></label>
           <p class="hint">Or drop files here. Upload de-identified images only. Files stay in <code>data/uploads/</code> on this machine, unchanged, including any embedded metadata. They have no reference label, so a score on them can't be checked.</p>
         </div>
+        <div class="action-bar" id="img-actions">
+          <div class="selection-info"><strong id="img-selected">No images selected</strong><span id="img-ready" class="hint">Select images to start.</span></div>
+          <button class="btn" id="img-select-page" type="button">Select up to 24</button>
+          <button class="btn" id="img-clear" type="button">Clear selection</button>
+          <button class="btn primary" id="img-score" type="button">Score selected live</button>
+        </div>
+        <p class="hint" id="img-ml"></p>
+        <section id="img-scoring" class="scoring-panel" aria-labelledby="img-scoring-title" hidden>
+          <div class="scoring-head"><div><p class="eyebrow">Live scoring</p><h2 id="img-scoring-title">Preparing batch</h2></div><span id="img-elapsed" class="hint"></span></div>
+          <p id="img-scoring-context" class="hint"></p>
+          <ol class="scoring-steps" id="img-scoring-steps" aria-label="Scoring stages"></ol>
+          <div class="scoring-count"><strong id="img-score-count" role="status" aria-live="polite"></strong><span id="img-score-outcomes"></span></div>
+          <progress id="img-score-progress" value="0" max="1" aria-label="Images processed"></progress>
+          <p id="img-score-current" class="hint" role="status"></p>
+          <p id="img-score-error" class="err-text" role="alert" hidden></p>
+          <button id="img-score-reconnect" class="btn small" type="button" hidden>Reconnect to scoring</button>
+          <ul id="img-score-queue" class="score-queue" aria-label="Batch images"></ul>
+        </section>
+        <div id="img-live"></div>
+        <div class="browse-head"><h2>Browse images</h2><span class="hint">Open a thumbnail to inspect · tick an image to select</span></div>
         <form class="img-filters" id="img-filters"></form>
         <p class="img-summary" id="img-summary" aria-live="polite"></p>
         <div class="split-view img-view">
@@ -148,14 +170,6 @@
             <p class="empty">Open an image to see it full size, with its annotations, metadata and predictions.</p>
           </aside>
         </div>
-        <div class="action-bar" id="img-actions">
-          <span id="img-selected">Nothing selected</span>
-          <button class="btn" id="img-select-page" type="button">Select page</button>
-          <button class="btn" id="img-clear" type="button">Clear</button>
-          <button class="btn primary" id="img-score" type="button">Score selected live</button>
-        </div>
-        <p class="hint" id="img-ml"></p>
-        <div id="img-live"></div>
       </section>
 
       <!-- Assistant -->

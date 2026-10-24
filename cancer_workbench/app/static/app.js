@@ -13,7 +13,11 @@ async function api(path, body) {
   }
   const res = await fetch(path, opts);
   const data = await res.json().catch(() => ({ error: `Unexpected response (${res.status})` }));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const error = new Error(data.error || `Request failed (${res.status})`);
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
@@ -385,7 +389,8 @@ loaders.datasets = () => guard(loadDatasets);
 /* ---------------- images ---------------- */
 const PAGE = 48;
 const img = { src: "btxrd", meta: null, rows: [], byId: {}, uploads: [], upById: {}, runs: [], review: null, page: 0,
-  sel: new Map(), live: {}, liveRun: null, open: null, overlay: true, f: { part: "test" } };
+  sel: new Map(), live: {}, liveRun: null, scoring: null, scoreTimer: null, scoreClock: null,
+  batch: [], open: null, overlay: true, f: { part: "test" } };
 const keyOf = (set, id) => `${set}:${id}`;
 const media = (set, file) => `/media/${encodeURIComponent(set)}/${file.split("/").map(encodeURIComponent).join("/")}?t=${encodeURIComponent(TOKEN)}`;
 const fmtP = p => (p == null ? "" : p.toFixed(2));
@@ -395,8 +400,14 @@ function selectedResult() {
   return run && run.results.find(r => r.id === $("#img-tools").result.value) ? { run: run.id, result: $("#img-tools").result.value } : null;
 }
 
+function setRunResults() {
+  const t = $("#img-tools"), run = img.runs.find(r => r.id === t.run.value);
+  t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${r.protocol} · ${r.endpoint} · ${r.encoder}`)} (${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
+  t.result.disabled = !run;
+}
 async function loadImages() {
-  if (!img.meta) {
+  const firstLoad = !img.meta;
+  if (firstLoad) {
     img.meta = await api("/api/images");
     const [{ runs }, set] = await Promise.all([api("/api/runs"), img.meta.sets[0]?.available ? api("/api/images/btxrd") : null]);
     img.runs = runs;
@@ -407,7 +418,29 @@ async function loadImages() {
     $("#img-ml").textContent = miss.length ? `Live scoring is off in this app process: ${miss.join(", ")} not installed. Start it with .venv/bin/python -m cancer_workbench app.` : "";
   }
   await loadUploads();
+  if (firstLoad) await resumeScore();
   renderFilters(); renderImages();
+}
+async function resumeScore() {
+  const { job } = await api("/api/score/current");
+  if (!job) return;
+  img.scoring = job;
+  const t = $("#img-tools");
+  t.run.value = job.run;
+  setRunResults(); t.result.value = job.result;
+  img.review = await api("/api/runs/review", { run: job.run, result: job.result });
+  img.batch = job.keys.map(key => itemFromKey(key) || { key, title: key });
+  for (const it of img.batch) {
+    const item = itemFromKey(it.key);
+    if (item) img.sel.set(it.key, { set: item.set, id: item.id });
+  }
+  if (img.batch.every(it => it.key.startsWith("uploads:"))) {
+    img.src = "uploads"; $("#upload-zone").hidden = false;
+    $$("#img-source button").forEach(b => b.classList.toggle("on", b.dataset.src === img.src));
+  }
+  renderScoring();
+  if (scoringActive()) img.scoreClock = setInterval(updateScoreClock, 1000);
+  await pollScore();
 }
 async function loadUploads() {
   img.uploads = (await api("/api/uploads")).uploads;
@@ -424,16 +457,16 @@ $("#img-source").addEventListener("click", e => {
 });
 $("#img-tools").addEventListener("change", e => guard(async () => {
   const t = $("#img-tools");
-  if (e.target === t.run) {
-    const run = img.runs.find(r => r.id === t.run.value);
-    t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${r.protocol} · ${r.endpoint} · ${r.encoder}`)} (${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
-    t.result.disabled = !run;
-  }
+  if (e.target === t.run) setRunResults();
   img.review = null;
+  img.live = {}; img.liveRun = null; img.scoring = null;
+  $("#img-live").innerHTML = "";
+  $("#img-scoring").hidden = true;
   const sr = selectedResult();
   if (sr) img.review = await api("/api/runs/review", sr);
   img.page = 0;
   renderFilters(); renderImages();
+  if (img.open) openImage(img.open);
 }));
 
 function opts(values, cur, all = "All") {
@@ -514,7 +547,7 @@ function renderImages() {
     const r = it.row, live = img.live[it.key];
     return `<div class="img-card${img.sel.has(it.key) ? " picked" : ""}${img.open === it.key ? " cur" : ""}">
       <button type="button" class="thumb" data-open="${esc(it.key)}" aria-label="Open ${esc(it.title)}"><img loading="lazy" src="${esc(it.url)}" alt=""></button>
-      <label class="pick"><input type="checkbox" data-pick="${esc(it.key)}" ${img.sel.has(it.key) ? "checked" : ""}><span class="mono" title="${esc(it.title)}">${esc(it.title)}</span></label>
+      <label class="pick"><input type="checkbox" data-pick="${esc(it.key)}" aria-label="Select ${esc(it.title)}" ${img.sel.has(it.key) ? "checked" : ""} ${scoringActive() ? "disabled" : ""}><span class="mono" title="${esc(it.title)}">${esc(it.title)}</span></label>
       <div class="tags">${r ? `<span class="tag">${esc(rv ? (it.rv?.label || it.rv?.partition || "") : (r.label || "unlabeled"))}</span>` : ""}
         ${it.rv ? partTag(it.rv) : ""}${predTag(it.rv)}${live?.probs ? `<span class="tag live">live ${esc(live.pred)}</span>` : ""}</div></div>`;
   }).join("") || `<p class="empty">No images match these filters.</p>`;
@@ -544,15 +577,33 @@ $("#img-grid").addEventListener("change", e => {
   updateImgSelection();
 });
 $("#img-grid").addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) openImage(b.dataset.open); });
-$("#img-select-page").addEventListener("click", () => { for (const it of img.pageItems || []) img.sel.set(it.key, { set: it.set, id: it.id }); renderImages(); });
+$("#img-select-page").addEventListener("click", () => {
+  for (const it of img.pageItems || []) {
+    if (img.sel.size >= (img.meta?.max_score ?? 24)) break;
+    img.sel.set(it.key, { set: it.set, id: it.id });
+  }
+  renderImages();
+});
 $("#img-clear").addEventListener("click", () => { img.sel.clear(); renderImages(); });
+function scoringActive() { return img.scoring?.state === "running"; }
 function updateImgSelection() {
-  const n = img.sel.size, max = img.meta?.max_score ?? 24, sr = selectedResult();
-  $("#img-selected").textContent = n ? `${n} selected${n > max ? ` (score at most ${max} at a time)` : ""}` : "Nothing selected";
+  const n = img.sel.size, max = img.meta?.max_score ?? 24, sr = selectedResult(), busy = scoringActive();
+  const shown = (img.pageItems || []).filter(it => img.sel.has(it.key)).length;
+  $("#img-selected").textContent = n ? `${n} of ${max} images selected` : "No images selected";
   const b = $("#img-score");
-  const why = img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Pick a baseline run and result to score with." : !n ? "Select images first." : n > max ? `Select at most ${max} images.` : "";
+  const why = busy ? "Scoring this batch. You can keep browsing images." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Choose a baseline run and result first." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
+  $("#img-ready").textContent = why || `Ready to score${n > shown ? ` · ${n - shown} selected outside this page` : ""}`;
   b.disabled = !!why; b.title = why;
-  $("#img-clear").disabled = !n;
+  b.textContent = busy ? "Scoring…" : n ? `Score ${n} image${n === 1 ? "" : "s"} live` : "Score selected live";
+  $("#img-clear").disabled = busy || !n;
+  const pick = $("#img-select-page");
+  pick.textContent = `Select up to ${max}`;
+  pick.disabled = busy || n >= max || !(img.pageItems || []).some(it => !img.sel.has(it.key));
+  $("#img-tools").run.disabled = busy;
+  $("#img-tools").result.disabled = busy || !sr;
+  $$("[data-pick]", $("#img-grid")).forEach(cb => { cb.disabled = busy; });
+  if ($("#img-delete")) $("#img-delete").disabled = busy;
+  $("#img-run-context").textContent = img.review ? `Stored predictions are available for validation and test images. Live scoring uses ${img.review.encoder} with the selected ${img.review.endpoint.replaceAll("_", " ")} head. Training images will be refused.` : "Choose a baseline run to review predictions or score images live.";
 }
 
 function probBars(probs, classes, pred, threshold) {
@@ -578,7 +629,7 @@ async function openImage(key) {
     ${live ? `<h3>Live score</h3>${liveDetail(live)}` : ""}
     <h3>Details</h3>
     <dl>${meta.filter(([, x]) => x).map(([k, x]) => `<dt>${esc(k)}</dt><dd>${esc(x)}</dd>`).join("")}</dl>
-    ${it.up ? `<div class="actions"><button class="btn danger" id="img-delete">Delete upload</button></div>` : ""}`;
+    ${it.up ? `<div class="actions"><button class="btn danger" id="img-delete" ${scoringActive() ? "disabled" : ""}>Delete upload</button></div>` : ""}`;
   setWidths(box);
   $$("[data-left]", box).forEach(el => { el.style.left = `${el.dataset.left}%`; });
   $("#img-overlay")?.addEventListener("change", e => { img.overlay = e.target.checked; $("#img-svg").classList.toggle("off", !img.overlay); });
@@ -619,32 +670,105 @@ function liveDetail(e) {
     ${e.notes.map(n => `<p class="hint warn-text">${esc(n)}</p>`).join("")}`;
 }
 
-$("#img-score").addEventListener("click", () => {
+$("#img-score").addEventListener("click", async () => {
   const sr = selectedResult();
-  if (!sr) return;
+  if (!sr || scoringActive() || $("#img-score").disabled) return;
   const items = [...img.sel.values()];
-  const b = $("#img-score");
-  b.disabled = true;
-  $("#img-live").innerHTML = `<div class="live"><p class="thinking">Scoring ${items.length} image${items.length === 1 ? "" : "s"} with ${esc(sr.result)}. The first call loads the encoder and can take a minute…</p></div>`;
-  api("/api/score", { ...sr, items })
-    .then(res => {
-      img.liveRun = res;
-      for (const e of res.items) img.live[e.key] = e;
-      renderLive(res);
+  img.batch = items.map(it => itemFromKey(keyOf(it.set, it.id)));
+  img.live = {}; img.liveRun = null;
+  $("#img-live").innerHTML = "";
+  img.scoring = { ...sr, state: "running", stage: "preparing", done: 0, total: items.length, items: [], started: Date.now() / 1000 };
+  renderScoring(); renderImages();
+  if (img.open) openImage(img.open);
+  $("#img-scoring").scrollIntoView({ behavior: "smooth", block: "start" });
+  img.scoreClock = setInterval(updateScoreClock, 1000);
+  try {
+    img.scoring = await api("/api/score/start", { ...sr, items });
+    await pollScore();
+  } catch (err) {
+    img.scoring.state = "failed"; img.scoring.error = err.message;
+    finishScore();
+  }
+});
+function updateScoreClock() {
+  const job = img.scoring;
+  if (!job) return;
+  const seconds = scoringActive() ? Math.max(0, Math.floor(Date.now() / 1000 - job.started)) : Math.round(job.seconds || 0);
+  $("#img-elapsed").textContent = `${seconds}s elapsed`;
+}
+function renderScoring() {
+  const j = img.scoring;
+  if (!j) return;
+  $("#img-scoring").hidden = false;
+  const titles = { preparing: "Checking the selected run", head: "Preparing the classifier", scoring: "Scoring images", done: "Batch complete", failed: "Scoring stopped" };
+  $("#img-scoring-title").textContent = titles[j.state === "failed" ? "failed" : j.stage];
+  $("#img-scoring-context").textContent = `${j.run} / ${j.result}`;
+  const step = j.state === "done" ? 3 : ({ preparing: 0, head: 1, scoring: 2 }[j.stage] ?? -1);
+  $("#img-scoring-steps").innerHTML = ["Check run", "Prepare head", "Score images", "Review results"].map((label, i) => `<li class="${i < step ? "complete" : i === step ? "current" : ""}" ${i === step ? 'aria-current="step"' : ""}><span>${i < step ? "✓" : i + 1}</span>${label}</li>`).join("");
+  $("#img-score-count").textContent = `${j.done} of ${j.total} images processed`;
+  const scored = j.items.filter(e => e.probs).length, refused = j.items.filter(e => e.refused).length, failed = j.items.filter(e => e.error).length;
+  $("#img-score-outcomes").textContent = `${scored} scored · ${refused} refused · ${failed} failed`;
+  $("#img-score-progress").max = j.total;
+  $("#img-score-progress").value = j.done;
+  const current = itemFromKey(j.current || "");
+  $("#img-score-current").textContent = j.state === "done" ? "All images processed. Review scores and any refusals below." : j.state === "failed" ? "Completed image results are kept below. Select images to try again." : j.current ? `Processing ${current?.title || j.current}. The encoder loads on its first image; this can take a minute.` : j.stage === "head" ? "Loading a saved head, or rebuilding and verifying it against this run. This may take a minute." : "Preparing the batch. Progress advances only when an image has been processed.";
+  $("#img-score-error").hidden = !j.error;
+  $("#img-score-error").textContent = j.error || "";
+  $("#img-score-queue").innerHTML = img.batch.map(it => {
+    const e = j.items.find(e => e.key === it.key);
+    const status = e?.refused ? "Refused" : e?.error ? "Failed" : e?.probs ? `Scored · ${e.pred}` : j.current === it.key ? "Processing" : j.state === "failed" ? "Not processed" : "Queued";
+    return `<li><button class="linkish mono" type="button" data-open="${esc(it.key)}">${esc(it.title)}</button><span class="${e?.error || e?.refused ? "err-text" : e?.probs ? "ok-text" : "hint"}">${esc(status)}</span></li>`;
+  }).join("");
+  updateScoreClock(); updateImgSelection();
+}
+async function pollScore() {
+  clearTimeout(img.scoreTimer);
+  $("#img-score-reconnect").hidden = true;
+  try {
+    const previous = img.scoring.done;
+    img.scoring = await api(`/api/score/jobs/${encodeURIComponent(img.scoring.id)}`);
+    const j = img.scoring;
+    if (j.metadata || j.response) {
+      img.liveRun = j.response || { ...j.metadata, seconds: j.seconds, items: j.items };
+      for (const e of j.items) img.live[e.key] = e;
+      if (j.items.length) renderLive(img.liveRun);
+    }
+    renderScoring();
+    if (j.done !== previous) {
       renderImages();
       if (img.open) openImage(img.open);
-    })
-    .catch(err => { $("#img-live").innerHTML = `<div class="live"><p class="err-text">${esc(err.message)}</p></div>`; })
-    .finally(updateImgSelection);
+    }
+    if (scoringActive()) img.scoreTimer = setTimeout(pollScore, 500);
+    else finishScore();
+  } catch (err) {
+    if (err.status === 404 || err.status === 403) {
+      img.scoring.state = "failed"; img.scoring.stage = "failed"; img.scoring.error = err.message;
+      finishScore();
+      return;
+    }
+    $("#img-score-error").hidden = false;
+    $("#img-score-error").textContent = `Progress connection interrupted: ${err.message} The batch may still be running. Reconnect or reload this page to resume following it.`;
+    $("#img-score-reconnect").hidden = false;
+  }
+}
+function finishScore() {
+  clearInterval(img.scoreClock); clearTimeout(img.scoreTimer);
+  renderScoring(); renderImages();
+  if (img.open) openImage(img.open);
+}
+$("#img-score-reconnect").addEventListener("click", pollScore);
+$("#img-score-queue").addEventListener("click", e => {
+  const b = e.target.closest("[data-open]");
+  if (b) { openImage(b.dataset.open); $("#img-detail").scrollIntoView({ behavior: "smooth", block: "nearest" }); }
 });
 function renderLive(res) {
   const labeled = res.items.filter(e => e.correct != null);
   const right = labeled.filter(e => e.correct).length;
   $("#img-live").innerHTML = `<div class="live">
-    <div class="audit-head"><h2>Live scores</h2><span class="badge synthetic">Exploratory</span></div>
+    <div class="audit-head"><h2>${scoringActive() ? "Results so far" : "Live scores"}</h2><span class="badge synthetic">Exploratory</span></div>
     <p class="hint">${esc(res.run)} / ${esc(res.result)}, encoder ${esc(res.encoder)} on ${esc(res.device)}, ${res.seconds} s. ${res.threshold != null ? `${esc(res.positive_class)} when P ≥ ${fmtP(res.threshold)}.` : "Argmax over classes."}
       ${labeled.length ? `${right} of ${labeled.length} labeled images match the reference label${labeled.some(e => e.partition === "val") ? ", including val images, which are optimistic" : ""}.` : ""} ${esc(res.note)}</p>
-    <div class="table-scroll"><table><thead><tr><th></th><th>Image</th><th>In run</th><th>Reference</th><th>Live</th><th>Stored</th><th>Notes</th></tr></thead><tbody>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Live score results"><table><thead><tr><th aria-label="Preview"></th><th>Image</th><th>In run</th><th>Reference</th><th>Live</th><th>Stored</th><th>Notes</th></tr></thead><tbody>
     ${res.items.map(e => {
       const it = itemFromKey(e.key);
       const probs = p => res.classes.map((c, i) => `${esc(c)} ${fmtP(p[i])}`).join("<br>");

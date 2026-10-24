@@ -168,6 +168,19 @@ class ServerGuardTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("budget", json.loads(body))
 
+    def test_scoring_recovery_requires_token_and_unknown_job_is_404(self):
+        from unittest import mock
+        from cancer_workbench.app.scoring import ScoringJobs
+
+        with mock.patch.object(api, "SCORES", ScoringJobs()):
+            self.assertEqual(self._get("/api/score/current")[0], 403)
+            self.assertEqual(self._get("/api/score/jobs/unknown")[0], 403)
+            status, body = self._get("/api/score/current", {"X-CW-Token": "tok"})
+            self.assertEqual((status, json.loads(body)), (200, {"job": None}))
+            status, body = self._get("/api/score/jobs/unknown", {"X-CW-Token": "tok"})
+            self.assertEqual(status, 404)
+            self.assertIn("expired", json.loads(body)["error"])
+
     def test_foreign_host_rejected(self):
         self.assertEqual(self._get("/", {"Host": "attacker.example:80"})[0], 421)
 

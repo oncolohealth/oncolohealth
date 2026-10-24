@@ -27,8 +27,10 @@ from ..registry import load_catalog
 from ..routing import route_models
 from . import progress_md
 from .jobs import JobManager
+from .scoring import ScoringJobs
 
 JOBS = JobManager()
+SCORES = ScoringJobs()
 _HIDDEN = {"_kind"}
 
 
@@ -320,13 +322,18 @@ def delete_upload(body: dict) -> dict:
     return uploads()
 
 
-def live_score(body: dict) -> dict:
-    """Exploratory live scoring with a baseline run's head. Bypasses execute_specialist on purpose; see experiments/explore.py."""
+def _score_items(body: dict) -> list[dict]:
+    """Validate and resolve score inputs before starting any background work."""
     if missing := _ml_missing():
         raise ApiError(f"Live scoring needs the ml extra ({', '.join(missing)} not installed). "
                        "Start the app with `.venv/bin/python -m cancer_workbench app`.", 409)
+    requested = body.get("items")
+    if not isinstance(requested, list) or not 1 <= len(requested) <= explore.MAX_SCORE:
+        raise ApiError(f"Select between 1 and {explore.MAX_SCORE} images.", 409)
+    if any(not isinstance(it, dict) for it in requested):
+        raise ApiError("Each selected image must specify its set and id.")
     files, items = {}, []
-    for it in body.get("items", []):
+    for it in requested:
         name = it.get("set")
         if name == "uploads":
             stem = _upload_stem(it.get("id"))
@@ -345,10 +352,35 @@ def live_score(body: dict) -> dict:
                           "sample_id": sid if name == "btxrd" else None})
         else:
             raise ApiError("Unknown image set.", 404)
+    return items
+
+
+def live_score(body: dict) -> dict:
+    """Synchronous scoring kept for API clients."""
+    items = _score_items(body)
     try:
         return explore.score(body.get("run", ""), body.get("result", ""), items)
     except (ValueError, FileNotFoundError, RuntimeError) as e:
         raise ApiError(str(e), 409)
+
+
+def start_score(body: dict) -> dict:
+    items = _score_items(body)
+    run, result = body.get("run", ""), body.get("result", "")
+    try:
+        # Validate run identity before returning a job to the browser.
+        explore.review(run, result)
+        return SCORES.start(run, result, len(items), lambda progress: explore.score(run, result, items, progress=progress),
+                            keys=[it["key"] for it in items])
+    except (ValueError, FileNotFoundError, RuntimeError) as e:
+        raise ApiError(str(e), 409)
+
+
+def score_job(job_id: str) -> dict:
+    try:
+        return SCORES.get(job_id)
+    except KeyError as e:
+        raise ApiError(e.args[0], 404)
 
 
 # ---------- coordinator ----------
@@ -456,9 +488,10 @@ GET_ROUTES = {
     "/api/jobs": lambda: {"jobs": JOBS.list()}, "/api/manifests": manifests,
     "/api/coordinator/profiles": profiles, "/api/progress": progress,
     "/api/images": image_sets, "/api/runs": runs, "/api/uploads": uploads,
+    "/api/score/current": lambda: {"job": SCORES.current()},
 }
 GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory, "/api/images/": image_set,
-                    "/api/annotation/": annotation}
+                    "/api/annotation/": annotation, "/api/score/jobs/": score_job}
 POST_ROUTES = {
     "/api/route": route, "/api/fetch/plan": fetch_plan, "/api/fetch/start": fetch_start, "/api/fetch/cancel": fetch_cancel,
     "/api/audit": audit, "/api/split": split,
@@ -466,4 +499,5 @@ POST_ROUTES = {
     "/api/coordinator/ping": ping, "/api/coordinator/ask": ask,
     "/api/progress/mark": progress_mark, "/api/progress/owner": progress_owner,
     "/api/runs/review": run_review, "/api/uploads/add": upload, "/api/uploads/delete": delete_upload, "/api/score": live_score,
+    "/api/score/start": start_score,
 }

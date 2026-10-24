@@ -135,8 +135,17 @@ def head_for(run: str, result_id: str):
     return _HEADS[key]
 
 
-def score(run: str, result_id: str, items: list[dict]) -> dict:
-    """Score `items` ({key, path, sample_id?}) live. Refuses images the head was trained on; flags images outside its cohort."""
+def score(run: str, result_id: str, items: list[dict], progress=None) -> dict:
+    """Score images, reporting observed stages and completed items through an optional callback."""
+    t0 = time.monotonic()
+    out, metadata = [], {}
+
+    def report(stage, current=None):
+        if progress:
+            progress({"stage": stage, "current": current, "done": len(out), "items": out,
+                      "metadata": metadata, "seconds": round(time.monotonic() - t0, 2)})
+
+    report("preparing")
     import numpy as np
 
     from ..adapters.encoder import FrozenEncoderAdapter, preprocessing_hash, revision
@@ -146,13 +155,16 @@ def score(run: str, result_id: str, items: list[dict]) -> dict:
     if len(items) > MAX_SCORE:
         raise ValueError(f"Score at most {MAX_SCORE} images at a time.")
     view = review(run, result_id)
+    metadata = {k: view[k] for k in ("run", "result", "encoder", "classes", "threshold", "positive_class", "label")}
+    metadata.update(note=NOTE, device="pending")
+    report("head")
     head, enc, classes = head_for(run, result_id), view["encoder"], view["classes"]
     if head.encoder != {"encoder_id": enc, "revision": str(revision(enc)), "preprocessing_hash": preprocessing_hash(enc)}:
         raise ValueError("The head was trained on features from other weights or preprocessing than the encoder installed now.")
     with _LOCK:
         adapter = _ENCODERS.setdefault(enc, FrozenEncoderAdapter(enc))
-    out, t0 = [], time.monotonic()
     for it in items:
+        report("scoring", it["key"])
         sid = it.get("sample_id") or None
         row = view["rows"].get(sid) if sid else None
         e = {"key": it["key"], "sample_id": sid, "partition": row["partition"] if row else "outside run",
@@ -160,6 +172,7 @@ def score(run: str, result_id: str, items: list[dict]) -> dict:
         out.append(e)
         if sid and sid in head.train_ids:
             e["refused"] = "This image was used to train the head, so a score on it says nothing about the model."
+            report("scoring")
             continue
         if row and row["partition"] == "val":
             e["notes"].append("Validation image: it was used to choose this head's regularization and threshold, so its score is optimistic.")
@@ -172,11 +185,14 @@ def score(run: str, result_id: str, items: list[dict]) -> dict:
                 feat = adapter.embed([Path(it["path"])], batch_size=1)
         except Exception as ex:  # an upload that will not decode, a missing file...
             e["error"] = f"{type(ex).__name__}: {ex}"
+            report("scoring")
             continue
         probs = head.clf.predict_proba((feat.astype(np.float64) - head.mean) / head.scale)[0].tolist()
         e.update(probs=probs, pred=decide(probs, classes, view["threshold"]))
         if e["label"]:
             e["correct"] = e["pred"] == e["label"]
+        metadata["device"] = str(adapter.device)
+        report("scoring")
     return {"label": LABEL, "note": NOTE, "run": run, "result": result_id, "encoder": enc, "device": str(adapter.device),
             "classes": classes, "threshold": view["threshold"], "positive_class": view["positive_class"],
             "seconds": round(time.monotonic() - t0, 2), "items": out}

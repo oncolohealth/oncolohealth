@@ -61,6 +61,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token (header for `/api/`, `?t=` for `/media/` images), 32 MB body cap | done |
 | `app/api.py` | JSON endpoints as plain functions; `GET_ROUTES`, `GET_PARAM_ROUTES`, `POST_ROUTES` | done |
 | `app/jobs.py` | `JobManager`: one background fetch at a time, progress, cancel | done |
+| `app/scoring.py` | `ScoringJobs`: one live UI scoring batch at a time, observed progress and partial results, latest-batch recovery after reload, bounded in-memory history | done |
 | `app/progress_md.py` | Parse and edit `PROGRESS.md` checkboxes and owner cells | done |
 | `app/static/` | `index.html`, `app.js`, `style.css`: no build step, no external assets | done |
 
@@ -131,7 +132,7 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 **Images screen** (replay and live scoring):
 `GET /api/images/btxrd` (manifest rows) + `/media/btxrd/<file>?t=<token>` (pixels, path-checked against the image root) + `/api/annotation/btxrd/<id>` (LabelMe shapes).
 Replay: `POST /api/runs/review` → `explore.review` joins `runs/<id>/splits/<protocol>.csv`, the endpoint cohort and `predictions/<result>.json`; binary verdicts use the stored val threshold (`>=`, as in `binary_report`).
-Live: `POST /api/score` → `explore.score`: `head_for` loads `heads/<result>.npz` or refits from the split + feature cache and keeps it only if it reproduces the stored val probabilities → refuse training images → `FrozenEncoderAdapter.embed` per image → head probabilities. Uploads go to `data/uploads/<sha256[:16]>.<ext>` with a JSON sidecar via `POST /api/uploads/add`.
+Live UI: `POST /api/score/start` validates inputs and starts a `ScoringJobs` worker → `explore.score` reports preparation stages and each processed image → browser polls `GET /api/score/jobs/<id>` for counts, partial results and final output. `GET /api/score/current` restores the latest batch, selected image keys and run context after a page reload, including completed results. Jobs live only in the app process; restart clears them, and history is capped at eight batches. `POST /api/score` keeps the synchronous API for existing clients. Scoring itself is unchanged: `head_for` loads `heads/<result>.npz` or refits from the split + feature cache and keeps it only if it reproduces the stored val probabilities → refuse training images → `FrozenEncoderAdapter.embed` per image → head probabilities. Uploads go to `data/uploads/<sha256[:16]>.<ext>` with a JSON sidecar via `POST /api/uploads/add`.
 
 **App request:**
 browser → `server.Handler` checks the Host header and `X-CW-Token` → looks up the path in `api.*_ROUTES` → plain function → JSON. `api.ApiError` maps to its HTTP status; other exceptions return 500.
@@ -164,7 +165,8 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
 | `test_learning_eval.py` | Split protocols, heads (incl. save/load round trip), metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
-| `test_app.py` | `PROGRESS.md` editing, API functions, uploads, media path checks, run replay, server Host and token guards |
+| `test_app.py` | `PROGRESS.md` editing, API functions, uploads, media path checks, run replay, server Host and token guards (including scoring recovery) |
+| `test_scoring.py` | Scoring progress across success/refusal/error, concurrent-batch refusal, failure preservation, recovery snapshots, bounded history and API input resolution |
 | `helpers.py` | `LocalServer` fixture |
 
 ## Where new work plugs in
