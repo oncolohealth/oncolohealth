@@ -8,7 +8,8 @@ mean/std. Weights load only from local .safetensors files: no pickles, no networ
 
 `VARIANTS` names two alternatives for the source-shift check: a per-image
 contrast stretch before padding, and each encoder's native shortest-edge
-resize and center crop. `pad` stays the default for every caller.
+resize and center crop, which matches the publishers' own processors. `pad`
+stays the default for every caller.
 
 Import this module explicitly; it is not re-exported from `adapters` so the
 core package stays standard-library only.
@@ -44,8 +45,9 @@ VARIANTS = {
     "pad_pstretch": "JPEG draft decode >= target, grayscale, per-image 1st-99th percentile contrast stretch, "
                     "pad to square (black), bicubic resize, replicate to 3 channels",
     # RAD-DINO's processor and timm's test config (crop_pct 1.0 at 288) both resize the shortest edge, then center crop.
-    # Both truncate the long edge; the crop offset is floored by transformers and rounded by torchvision.
-    "native_crop": "JPEG draft decode >= target, grayscale, bicubic resize of the shortest edge to the input size "
+    # Both decode JPEGs at full resolution and truncate the long edge; the crop offset is floored by
+    # transformers and rounded by torchvision.
+    "native_crop": "full-resolution decode, grayscale, bicubic resize of the shortest edge to the input size "
                    "(long edge truncated), center crop to square with the publisher's offset rounding, replicate to 3 channels",
 }
 
@@ -124,7 +126,8 @@ def load_image(path: Path, size: int, variant: str = "pad", crop_offset: str = "
 
     _variant(variant)
     with Image.open(path) as im:
-        im.draft("L", (size, size))  # JPEG: decode at a reduced scale that stays >= the target size
+        if variant != "native_crop":  # native_crop decodes at full resolution, as the publishers do
+            im.draft("L", (size, size))  # JPEG: decode at a reduced scale that stays >= the target size
         im = im.convert("L")
     if variant == "pad_pstretch":
         im = ImageOps.autocontrast(im, cutoff=1)  # before padding, so the black border doesn't count

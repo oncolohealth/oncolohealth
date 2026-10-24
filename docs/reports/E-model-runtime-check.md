@@ -69,20 +69,28 @@ ResNet-50 now matches timm exactly. RAD-DINO matches transformers to within one
 `pad` and `pad_pstretch` are unaffected. The native-crop preprocessing hash now
 includes the crop offset.
 
-**On real JPEGs** a remaining difference appears. All pipelines decode JPEGs
-with Pillow's `draft` at a reduced scale (at least the target size), which is
-the documented policy. The publishers decode at full resolution. On the 16
-smoke images:
+**On real JPEGs** one more difference showed up. Every variant decoded JPEGs
+with Pillow's `draft` at a reduced scale (at least the target size), while the
+publishers decode at full resolution. On the 16 smoke images, with draft:
 
-| Encoder | Max pixel diff | Mean pixel diff | Embedding cosine min / mean | Max diff without draft |
-|---|---|---|---|---|
-| RAD-DINO | 2.13 | 0.0043 | 0.9984 / 0.9998 | 0.030 |
-| ResNet-50 | 2.21 | 0.0091 | 0.9883 / 0.9944 | 0.000 |
+| Encoder | Max pixel diff | Mean pixel diff | Embedding cosine min / mean |
+|---|---|---|---|
+| RAD-DINO | 2.13 | 0.0043 | 0.9984 / 0.9998 |
+| ResNet-50 | 2.21 | 0.0091 | 0.9883 / 0.9944 |
 
-With draft disabled, the difference disappears (two gray levels at most for
-RAD-DINO). Grayscale versus RGB contributes nothing measurable: the 8 RGB images
-are gray. So `native_crop` is publisher-equivalent except for draft decoding.
-Whether to drop draft for that variant (slower decode of large JPEGs) is open.
+Disabling draft removed the whole difference. Grayscale versus RGB contributed
+nothing measurable: the 8 RGB images are gray. **`native_crop` now decodes at
+full resolution**; `pad` and `pad_pstretch` keep draft decoding. On the same 16
+images:
+
+| Encoder | Max pixel diff | Mean pixel diff | Embedding cosine min / mean |
+|---|---|---|---|
+| RAD-DINO | 0.030 (two gray levels) | 0.00003 | 0.99999 / 1.00000 |
+| ResNet-50 | 0 | 0 | 1.0 / 1.0 |
+
+So `native_crop` is publisher-equivalent on these images. A synthetic test
+checks that only `native_crop` skips draft, and the opt-in comparison includes
+a large synthetic JPEG that fails if draft comes back.
 
 ## Measured tiny extraction
 
@@ -90,19 +98,32 @@ Whether to drop draft for that variant (slower decode of large JPEGs) is open.
 (seed 0; centers 1/2/3: 6/5/5; 2.7 MB). It removed labels and demographics and
 ran the normal bound extraction for both encoders and all three variants on MPS
 with batch size 16. All six caches validated against their measured bindings.
-Output: `runs/extraction-smoke-20261024T191018Z/` (git-ignored; `report.json`,
-`selection.csv`, six `.npz` files of 71 to 153 KB).
+The runner times each variant separately: model load, a cold and a warm pass,
+and single-threaded decode plus preprocessing alone.
 
-| Encoder | Model load | Warm throughput | Bound extraction, 16 images, incl. load | Projected full BTXRD (3,746) |
+Two runs after the full-resolution change (`runs/extraction-smoke-20261024T191927Z/`
+and `runs/extraction-smoke-20261024T192106Z/`; git-ignored, each with
+`report.json`, `selection.csv` and six `.npz` files):
+
+| Encoder | Variant | Warm throughput | Decode + preprocess per image | Projected full BTXRD (3,746) |
 |---|---|---|---|---|
-| RAD-DINO | 4.2 s | 2.6 images/s | 7.8–7.9 s | about 24 min |
-| ResNet-50 | 0.9 s | 36 images/s | 1.3–1.7 s | about 2 min |
+| RAD-DINO | pad | 2.5–2.6 images/s | 5–13 ms | 24–25 min |
+| | pad_pstretch | 2.3–2.4 images/s | 8–10 ms | about 27 min |
+| | native_crop | 2.2–2.4 images/s | 12–16 ms | 26–28 min |
+| ResNet-50 | pad | 34–35 images/s | 5 ms | about 2 min |
+| | pad_pstretch | 35–43 images/s | 4–6 ms | about 2 min |
+| | native_crop | 31–38 images/s | 7–8 ms | about 2 min |
 
-An earlier identical run measured 2.1 images/s for RAD-DINO (about 29 min), so
-expect roughly 25–30 min per RAD-DINO variant on this laptop. This matches the
-earlier report of about 25 min. Measuring the image hashes for 16 images took
-under 0.3 s. The process peaked at about 610 MB of resident memory. macOS does
-not count MPS buffers fully in that number, so it understates total memory.
+Full-resolution decoding costs `native_crop` a few milliseconds per image. That
+is small next to RAD-DINO's roughly 400 ms per image, and the throughput
+differences between variants are within run-to-run noise. Expect roughly 25–30
+min per RAD-DINO variant on this laptop, matching the earlier report of about
+25 min. Model load took 4–6 s for RAD-DINO the first time (about 1 s once the
+file is cached) and under 2 s for ResNet-50. Measuring the image hashes for 16
+images took under 0.3 s. Peak resident memory was 440–650 MB across runs. macOS
+does not count MPS buffers fully in that number, so it understates total memory.
+The earlier draft-decoding run stays in `runs/extraction-smoke-20261024T191018Z/`
+as the before record.
 
 ## Reproduce
 
@@ -113,8 +134,8 @@ CW_MODEL_TESTS=1 .venv/bin/python -m unittest tests.test_model_loading -v
 
 The real-weight tests feed only synthetic images and are skipped unless
 `CW_MODEL_TESTS=1` is set, so CI and plain Python stay fast. Suite counts:
-249 discovered. In the ML environment, 245 pass and the 4 opt-in tests skip;
-with `CW_MODEL_TESTS=1`, all 249 pass. Plain Python passes 205 with 44 skips.
+250 discovered. In the ML environment, 246 pass and the 4 opt-in tests skip;
+with `CW_MODEL_TESTS=1`, all 250 pass. Plain Python passes 205 with 45 skips.
 
 ## Limits
 
@@ -122,6 +143,6 @@ Hashes match what was downloaded, and the weights match the publisher checksum
 at that time. That is not a signature or proof of training provenance. Agreement
 with the publisher processors is measured on 6 synthetic shapes and 16 real
 images, not the whole release. The timing is from one laptop, small batches and
-one run each (plus the earlier run). It is an estimate, not a resource promise
+two runs per variant (plus the earlier draft-decoding run). It is an estimate, not a resource promise
 for other hardware. The tests don't cover rights, labels, patient grouping,
 diagnostic references or clinical validity.

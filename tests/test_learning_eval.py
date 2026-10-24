@@ -242,6 +242,24 @@ class PreprocessingTests(unittest.TestCase):
         self.assertAlmostEqual(float(cropped[0, 2, 32]), 150 / 255, places=1)  # no black padding: the crop fills the square
         self.assertEqual(len({preprocessing_hash("rad-dino", v) for v in ("pad", "pad_pstretch", "native_crop")}), 3)
 
+    def test_only_native_crop_decodes_jpegs_at_full_resolution(self):
+        from unittest import mock
+
+        from PIL import Image, JpegImagePlugin
+
+        from cancer_workbench.adapters.encoder import load_image
+
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "large.jpg"
+            Image.linear_gradient("L").resize((640, 480)).save(p)  # SYNTHETIC gradient, large enough to draft
+            draft = JpegImagePlugin.JpegImageFile.draft
+            with mock.patch.object(JpegImagePlugin.JpegImageFile, "draft", autospec=True, side_effect=draft) as spy:
+                for variant, calls in (("pad", 1), ("pad_pstretch", 1), ("native_crop", 0)):
+                    spy.reset_mock()
+                    load_image(p, 64, variant)
+                    with self.subTest(variant=variant):
+                        self.assertEqual(spy.call_count, calls)
+
 
 if __name__ == "__main__":
     unittest.main()

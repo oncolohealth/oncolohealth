@@ -38,6 +38,8 @@ class RealModelFileTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         cls.images = [synthetic_image(Path(cls.temp.name) / f"s{w}x{h}.png", w, h) for w, h in SHAPES]
+        # a JPEG over twice both target sizes, so reduced-scale draft decoding would show up as a difference
+        cls.images.append(synthetic_image(Path(cls.temp.name) / "s1400x1100.jpg", 1400, 1100))
 
     @classmethod
     def tearDownClass(cls):
