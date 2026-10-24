@@ -375,6 +375,32 @@ details.call pre { font-family: var(--mono); font-size: 0.76rem; white-space: pr
 .live table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 .live th, .live td { padding: 0.4rem 0.7rem 0.4rem 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 
+/* Experiment drafts and saved reproducibility records */
+.experiment-layout { display: grid; grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr); gap: 1.6rem; align-items: start; }
+.experiment-form, .experiment-preview { min-width: 0; padding: 1.2rem; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.experiment-form { display: grid; gap: 0.8rem; }
+.experiment-form > label:not(.check), .experiment-search { display: grid; gap: 0.3rem; }
+.experiment-form select, .experiment-form input[type="number"], .experiment-form textarea, .experiment-search input { width: 100%; min-width: 0; }
+.experiment-review-head, .experiment-history-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.experiment-facts { display: grid; grid-template-columns: minmax(110px, 0.6fr) minmax(0, 1.4fr); gap: 0.5rem 1rem; }
+.experiment-facts dt { color: var(--ink-2); }
+.experiment-facts dd { margin: 0; overflow-wrap: anywhere; }
+.experiment-blockers { padding-left: 1.2rem; overflow-wrap: anywhere; }
+.experiment-blockers li { margin: 0.4rem 0; }
+.experiment-history-head { margin-top: 2rem; }
+.experiment-history-head p { margin: 0.4rem 0 1rem; }
+.experiment-search { max-width: 40rem; margin-bottom: 1rem; }
+#experiment-history { max-height: 30rem; }
+#experiment-history th, #experiment-history td { display: table-cell; overflow-wrap: anywhere; }
+#experiment-history table { min-width: 750px; }
+#experiment-history th:last-child { min-width: 9rem; }
+#experiment-history tbody tr { cursor: default; }
+#experiment-history .link { text-align: left; overflow-wrap: anywhere; border: 0; padding: 0; background: none; color: var(--hema); text-decoration: underline; cursor: pointer; }
+.experiment-detail { margin: 1.2rem 0 0.8rem; padding: 1.2rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.experiment-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40rem; overflow-y: auto; font-size: 0.85rem; }
+@media (max-width: 1000px) { .experiment-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) { .experiment-facts { grid-template-columns: minmax(0, 1fr); } .experiment-facts dd { margin-bottom: 0.5rem; } }
+
 /* Toast */
 .toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translate(-50%, 1rem); opacity: 0; pointer-events: none; background: var(--ink); color: var(--surface); padding: 0.6rem 1rem; border-radius: 8px; transition: opacity 0.2s, transform 0.2s; max-width: min(90vw, 560px); z-index: 10; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }

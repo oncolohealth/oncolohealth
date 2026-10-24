@@ -49,7 +49,8 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
 | `coordinator/evaluation.py`, `scripts/evaluate_coordinator.py` | Versioned public development workflows, observed trace checks, partial failure capture; offline scripted mode and explicitly selected live profile | done (live evaluation pending) |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
-| `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (library only; never executes) |
+| `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (Experiments UI/API now connected; never executes) |
+| `experiments/workspace.py` | Durable non-authorizing draft JSON and bounded read-only ExperimentRecord history/detail, preserved provenance and bad-file warnings | done (stdlib) |
 | `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, heads, records; `baseline` CLI | done (`ml` extra) |
 | `experiments/btxrd_source_shift.py` | Source hold-out only: one head per preprocessing variant, pick by center-1 val macro ROC-AUC (ties to `pad`), test only the pick and `pad`; `source-shift` CLI. Centers 2 + 3 were already seen in the first baseline run | done (`ml` extra) |
 | `experiments/btxrd_near_duplicates.py` | Ranks image pairs by the lower of the RAD-DINO and ResNet-50 cosine similarities; writes `candidates.csv` + `summary.json` for review, changes no split or group; `near-duplicates` CLI | done (needs numpy) |
@@ -189,6 +190,7 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_datasets.py` | Audit findings, grouped splits |
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
 | `test_experiment_plan.py` | Three draft paths, reviewed rights, audit and budget refusal; synthetic records |
+| `test_experiment_workspace.py` | Draft preview/save and restart persistence, exact manifest identity, save-time rechecks, unknown-authority refusal and bounded read-only history |
 | `test_metric_validation.py` | Invalid metric inputs, missing classes, bootstrap accounting, threshold edge cases and undefined summary rendering |
 | `test_evaluation_protocol.py` | Patient aggregation, declared/pretraining overlap, paired comparisons and 1,134 metric oracle cases |
 | `test_learning_eval.py` | Split protocols, heads (incl. save/load round trip), metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |

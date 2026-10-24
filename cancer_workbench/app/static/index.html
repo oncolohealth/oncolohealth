@@ -19,6 +19,7 @@
         <li><button data-screen="downloads" class="nav-btn">Downloads</button></li>
         <li><button data-screen="datasets" class="nav-btn">Datasets</button></li>
         <li><button data-screen="images" class="nav-btn">Images</button></li>
+        <li><button data-screen="experiments" class="nav-btn">Experiments</button></li>
         <li><button data-screen="assistant" class="nav-btn">Assistant</button></li>
         <li><button data-screen="progress" class="nav-btn">Progress</button></li>
       </ul>
@@ -170,6 +171,49 @@
             <p class="empty">Open an image to see it full size, with its annotations, metadata and predictions.</p>
           </aside>
         </div>
+      </section>
+
+      <!-- Experiments -->
+      <section class="screen" id="screen-experiments" hidden>
+        <header class="screen-head">
+          <h1>Experiments</h1>
+          <p class="lede">Prepare a reviewable experiment draft and inspect saved research records.</p>
+        </header>
+        <div class="experiment-layout">
+          <form id="experiment-form" class="experiment-form">
+            <h2>Plan an experiment</h2>
+            <label>Research question <span class="opt">unreviewed draft</span><textarea name="question" rows="2" maxlength="1000" placeholder="What do you want to compare, and on which population?"></textarea></label>
+            <label class="check"><input name="synthetic" type="checkbox"> Use a synthetic example</label>
+            <p class="hint" id="experiment-example-note" hidden>The example uses 12 invented rows and a synthetic model. No training or inference is launched.</p>
+            <label>Reuse path<select name="reuse_path" required>
+              <option value="transfer_learning">Transfer learning</option>
+              <option value="specialist_tools">Specialist tool</option>
+              <option value="distillation">Teacher-guided distillation</option>
+            </select></label>
+            <label>Model<select name="model_id" required></select></label>
+            <label>Dataset manifest<select name="manifest" required></select></label>
+            <label>Storage reservation (bytes)<input name="planned_bytes" type="number" min="0" max="1000000000000000" step="1" required placeholder="Enter planned additional storage"></label>
+            <p id="experiment-error" class="form-error" role="alert"></p>
+            <div class="form-actions">
+              <button class="btn primary" type="submit">Preview draft</button>
+              <button class="btn" id="experiment-save" type="button" disabled>Save draft</button>
+            </div>
+          </form>
+          <aside id="experiment-preview" class="experiment-preview" aria-live="polite">
+            <h2>Draft review</h2>
+            <p class="empty">Choose a model, a local manifest and a reuse path. Preview the checks before saving.</p>
+            <p class="hint">A review-ready draft still needs a reviewed endpoint, cohort, reference standard and execution scope.</p>
+          </aside>
+        </div>
+        <div class="experiment-history-head">
+          <div><h2>Saved drafts and run records</h2><p class="hint">Recorded completion describes software work. It does not establish medical validity.</p></div>
+          <button id="experiment-refresh" type="button" class="btn">Refresh history</button>
+        </div>
+        <label class="experiment-search">Search saved records<input id="experiment-search" type="search" placeholder="Question, model, state or record ID"></label>
+        <div id="experiment-history-warnings" role="status"></div>
+        <div id="experiment-history" class="table-scroll"></div>
+        <section id="experiment-detail" class="experiment-detail" aria-live="polite" hidden></section>
+        <button id="experiment-export" class="btn" type="button" hidden>Download record JSON</button>
       </section>
 
       <!-- Assistant -->

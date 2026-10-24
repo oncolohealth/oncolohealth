@@ -21,7 +21,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 | D | Coordinator & retrieval | `coordinator/`, `retrieval/`, `curriculum/` | C (tool schemas) | |
 | E | Transfer learning & distillation | `learning/` | A (manifest), F (metrics) | |
 | F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Inam Qasimi (utilities + protocol draft) |
-| G | Researcher UI & API | `api/` (new), `ui/` (new) | C, D interfaces | |
+| G | Researcher UI & API | `app/`, `experiments/workspace.py` | B, C, D interfaces | Sebastian (local app); Inam Qasimi (Experiments) |
 | H | Independent review | `docs/reports/H-*` | all | Inam Qasimi (source check only; independent review pending) |
 
 ## Phase 0: Foundation (done in this session)
@@ -59,6 +59,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [~] Arms (Hub Q03, decided 2026-10-23): frozen RAD-DINO + linear head vs. frozen ResNet-50 + linear head, both already downloaded. MedSigLIP joins as a second medical arm once its gated access is granted
 - [~] Check MedSigLIP/RAD-DINO pretraining overlap with BTXRD sources. RAD-DINO: chest X-rays only per its card (no overlap expected; `training_images.csv` not checked). MedSigLIP: not acquired
 - [x] `experiments/plan.py::plan_experiment`: side-effect-free draft gates for three reuse paths, pinned identity, reviewed rights, dataset findings and storage. Eight synthetic tests. Contract: `docs/reports/B-plan-contract.md`; no execution or catalog promotion
+- [x] Experiments UI/API: current catalog/manifest/storage draft preview, save-time rechecks, durable non-authorizing drafts and read-only recorded-run history. Synthetic example covers the three reuse paths. Sixteen integration/storage regressions; details in `docs/reports/B-experiment-workspace.md`. No training dispatch
 
 ### C: Registry and adapters
 - [x] Encoder adapter (`adapters/encoder.py`) wrapping a frozen backbone → embedding envelope (RAD-DINO, ResNet-50; contract in `docs/reports/C-model-cards.md`)
@@ -99,7 +100,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] Images UI cleanup: baseline context and selection actions above the gallery; batch selection caps at 24; visible readiness guidance; background scoring reports preparation stages, current image, processed/total counts, scored/refused/failed outcomes, elapsed time and incremental results. The latest batch and results recover after page reload while the app process stays running; reconnect handles interrupted progress requests. One live UI batch at a time, with bounded in-memory history; app restart clears it. Verified a 24-image live RAD-DINO batch, reload during and after scoring, training-image refusal, an unreadable SYNTHETIC upload and simulated progress-connection failure/reconnect in the browser
 - [x] Images screen handles preprocessing variants (2026-10-24): run results show their variant (`· native_crop (selected)`), and live scoring loads the encoder with the head's own variant, so source-shift heads score instead of being refused. A head whose variant doesn't match its result is still refused before any image is embedded. Live scores of 4 real test images matched the source-shift run's stored test predictions within 1e-16 for both the `native_crop` and `pad` ResNet-50 heads. Not yet checked in a browser
 - [ ] "Analyze an image" through a validated adapter → native result envelope. Still blocked until C ships a reviewed adapter and the catalog promotes a model; until then the assistant must say no model can run
-- [ ] Experiment runs screen (plans, states, records), once B/E land
+- [x] Experiments screen: draft checks/save plus recorded states, lineage, scope and blockers. Full guided execution/queueing remains separate
 - [~] Visual QA pass in a real browser (light + dark, phone width). Updated Images screen checked at 1440×1000 and 390×844 in light and dark palettes; no page-width horizontal overflow. Light mode was exercised with the existing `data-theme="light"` CSS hook because browser media emulation did not change the preferred color scheme. Other screens remain unchecked. Repeated inline-style CSP console warnings were also present before this change; no scoring API failures during the successful flow
 
 Team Hub checklist update for this UI work is prepared in `DOCS.md` for the project lead to paste; direct editing is blocked by Google sign-in.
@@ -257,3 +258,30 @@ Historical verification from the incoming branch's source checkout:
   evaluation and reviewed specialist promotion remain. Genuine patient mapping
   or an independent cohort, primary endpoint and reference-standard/protocol
   review require scientific evidence. Public cloud remains unprovisioned.
+
+### Experiment planning and recorded-run workspace (2026-10-24)
+
+- [x] Added a seventh local screen, Experiments, connecting the existing planner
+  to current catalog models, on-disk manifests and the server's storage budget.
+  Browser-supplied audit/rights/budget/authorization objects are refused. Audits
+  and exact manifest-byte identity are recomputed at preview and save time.
+- [x] Saved blocked or review-ready drafts have UUID identity, UTC time, source
+  revision, manifest hash, audit and `execution_authorized: false`. Exclusive
+  creation does not overwrite an existing draft. A synthetic 12-row example
+  illustrates all three reuse paths without any training or medical execution.
+- [x] Added searchable history and readable lineage/scope/blocker summaries for
+  saved drafts and existing ExperimentRecord files, with expandable/downloadable
+  JSON. Browsing does not load models, refit heads or change run states. Invalid
+  files warn while valid records remain available; paths/read volumes are bounded.
+- [x] Sixteen synthetic integration/storage regressions pass. The full suite
+  checkpoint is **178 discovered, 176 pass, two Torch preprocessing skips** in
+  the available ML environment; plain Python **178 discovered, 138 pass,
+  40 optional-ML skips**. Earlier counts are separate dated checkpoints.
+- [x] Desktop browser check: synthetic preview/save, history search, readable
+  details and page-reload/app-restart persistence. Simplified the example form
+  and moved raw JSON behind an expandable section after visual review. Screenshots
+  use an isolated QA folder. Mobile/light-theme coverage is not claimed.
+- [ ] Authorized job dispatch, a complete guided training workflow, independent
+  code/protocol review and scientific eligibility remain open. This screen is a
+  completed planning/review component; it does not turn unresolved data or model
+  permissions into approval. No cloud or hosted-model call was made.

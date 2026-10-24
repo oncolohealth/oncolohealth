@@ -6,8 +6,9 @@ unclaimed B planning work. The callable and its two output states are preserved.
 
 `plan_experiment(path, model, dataset_audit=None, budget=None)` is a pure library
 function. It never downloads weights, trains, calls a specialist, changes a
-catalog record, or grants execution permission. There is no UI/CLI integration
-yet. `ready_for_review` means the draft passed these limited checks; a reviewed
+catalog record, or grants execution permission. The Experiments screen now
+provides UI/API draft preview, save and history; CLI integration remains absent.
+`ready_for_review` means the draft passed these limited checks; a reviewed
 endpoint, population, preprocessing, split, overlap assessment and execution
 scope are still needed.
 
@@ -37,3 +38,8 @@ baseline is a separate path, not silently converted into a patient-valid run.
 Eight synthetic tests cover all three paths, unchanged inputs, catalog-only
 models, unresolved permissions, mutable references, missing/partial audits and
 storage refusal. No real experiment was launched.
+
+The later [workspace](B-experiment-workspace.md) adds 16 integration/storage
+regressions and uses this library contract without promoting draft readiness
+to permission. Model rights are read from the actual catalog or the explicitly
+synthetic fixture, not accepted as a caller-supplied browser overlay.

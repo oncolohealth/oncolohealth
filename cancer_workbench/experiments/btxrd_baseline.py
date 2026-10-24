@@ -4,8 +4,8 @@ For each split protocol x endpoint x encoder: fit a linear head on TRAIN, pick
 its regularization (and, for binary endpoints, the decision threshold) on VAL,
 report on TEST. BTXRD has no patient identifiers, so every result is
 image-level and EXPLORATORY: views of one patient can sit on both sides of a
-split. `source_holdout` keeps any such pair inside one source (center 1 trains,
-centers 2 + 3 test) at the cost of measuring a source shift as well.
+split. `source_holdout` holds declared sources apart (center 1 trains,
+centers 2 + 3 test), but cannot certify disjoint patients or lesions.
 """
 from __future__ import annotations
 

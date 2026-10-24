@@ -5,9 +5,11 @@ import base64
 import binascii
 import collections
 import concurrent.futures
+import csv
 import datetime as dt
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -16,13 +18,15 @@ from ..acquisition import budget
 from ..acquisition.download import hash_file
 from ..acquisition.fetch import plan, target_dir
 from ..adapters import SYNTHETIC_MODEL_RECORD, SyntheticThresholdAdapter
-from ..common.paths import CONFIG_DIR, DATA_DIR, MODELS_DIR
+from ..common.paths import CONFIG_DIR, DATA_DIR, MODELS_DIR, PROJECT_ROOT
 from ..coordinator import ProviderError, default_toolbox, load_profiles, make_provider, run_turn
 from ..coordinator.config import config_path
 from ..coordinator.loop import SYSTEM_PROMPT
 from ..datasets import audit_dataset, grouped_split, read_manifest, write_manifest
 from ..datasets.btxrd import MANIFEST_PATH as BTXRD_MANIFEST, RAW_DIR as BTXRD_RAW
-from ..experiments import explore
+from ..experiments import explore, workspace
+from ..experiments.plan import plan_experiment
+from ..experiments.records import REUSE_PATHS
 from ..registry import load_catalog
 from ..routing import route_models
 from . import progress_md
@@ -211,6 +215,117 @@ def split(body: dict) -> dict:
     rep["saved"] = saved
     rep["synthetic"] = bool(body.get("synthetic"))
     return rep
+
+
+# ---------- experiment drafts and recorded runs ----------
+
+EXPERIMENTS_DIR = PROJECT_ROOT / "runs"
+MAX_MANIFEST_BYTES = 16_000_000
+
+
+def experiment_options() -> dict:
+    return {"paths": list(REUSE_PATHS), "models": [{"id": m["id"], "name": m.get("name", m["id"])}
+                                                    for m in load_catalog().models],
+            "manifests": manifests()["manifests"], "storage": storage()}
+
+
+def experiment_preview(body: dict) -> dict:
+    allowed = {"model_id", "reuse_path", "manifest", "planned_bytes", "question", "synthetic"}
+    if not isinstance(body, dict) or set(body) - allowed:
+        raise ApiError("Unknown experiment input. Supply model, reuse path, manifest and storage reservation.")
+    if body.get("reuse_path") not in REUSE_PATHS:
+        raise ApiError("Choose a supported model reuse path.")
+    synthetic = body.get("synthetic", False)
+    if not isinstance(synthetic, bool):
+        raise ApiError("Synthetic mode must be true or false.")
+    question = body.get("question", "")
+    if not isinstance(question, str) or len(question) > 1000:
+        raise ApiError("Research question must be text of at most 1,000 characters.")
+    planned = body.get("planned_bytes")
+    if isinstance(planned, bool) or not isinstance(planned, int) or not 0 <= planned <= 10**15:
+        raise ApiError("Storage reservation must be a nonnegative integer number of bytes (at most 10^15).")
+    identity = None
+    if synthetic:
+        model = dict(SYNTHETIC_MODEL_RECORD, acquisition={"revision": "0" * 40}, reuse_permissions={
+            p: {"status": "allowed", "evidence": "SYNTHETIC software fixture only"}
+            for p in ("transfer_learning", "distillation")})
+        rows = [{"sample_id": f"fixture-{i}", "patient_id": f"fixture-patient-{i}", "duplicate_group": "",
+                 "partition": ("train", "val", "test")[i // 4], "label": ("negative", "positive")[i % 2]}
+                for i in range(12)]
+        spec = {"id": "synthetic-plan-fixture", "classes": ["negative", "positive"], "unresolved": []}
+        identity = {"fixture": "synthetic-plan-v1", "sha256": hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()}
+    else:
+        if not isinstance(body.get("model_id"), str):
+            raise ApiError("Select a catalog model.")
+        model = load_catalog().get(body.get("model_id"))
+        if model is None or model.get("_kind") != "model":
+            raise ApiError("Select a catalog model.")
+        rel = body.get("manifest")
+        if not isinstance(rel, str) or not rel:
+            raise ApiError("Select a dataset manifest from this machine.")
+        path = _safe_data_path(rel)
+        try:
+            with path.open("rb") as stream:
+                raw = stream.read(MAX_MANIFEST_BYTES + 1)
+            if len(raw) > MAX_MANIFEST_BYTES:
+                raise ApiError("Manifest exceeds the 16 MB draft-preview limit.")
+            reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
+            required = {"sample_id", "patient_id", "partition", "label"}
+            if not required <= set(reader.fieldnames or []):
+                raise ApiError("Manifest needs sample_id, patient_id, partition and label columns.")
+            if len(set(reader.fieldnames)) != len(reader.fieldnames):
+                raise ApiError("Manifest has duplicate CSV column names.")
+            rows = list(reader)
+            if any(None in r or any(r.get(k) is None for k in required) for r in rows):
+                raise ApiError("Manifest has a malformed CSV row.")
+        except (OSError, UnicodeError, csv.Error) as exc:
+            raise ApiError(f"Cannot read the selected manifest: {exc}") from exc
+        dataset_id = path.relative_to(DATA_DIR.resolve()).parts[0]
+        dataset = load_catalog().get(dataset_id)
+        if not dataset or dataset.get("_kind") != "dataset":
+            raise ApiError("Manifest must belong to a catalog dataset folder.")
+        spec = _spec_for(dataset_id, rows)
+        identity = {"path": str(path.relative_to(DATA_DIR.resolve())), "sha256": hashlib.sha256(raw).hexdigest()}
+    audit = audit_dataset(spec, rows)
+    if any(not r["sample_id"].strip() for r in rows):
+        audit["findings"].append({"severity": "error", "code": "missing_sample_id", "detail": "Some manifest rows lack a sample identity."})
+        audit["ready_for_training"] = False
+    if any((r.get(k) or "") != (r.get(k) or "").strip() for r in rows for k in ("sample_id", "patient_id", "duplicate_group")):
+        audit["findings"].append({"severity": "error", "code": "identity_whitespace", "detail": "Identity fields contain surrounding whitespace. Review the source identities before grouping."})
+        audit["ready_for_training"] = False
+    if any(r.get("partition") in {"train", "val", "test"} and not r["label"].strip() for r in rows):
+        audit["findings"].append({"severity": "error", "code": "missing_label", "detail": "Assigned rows lack reference labels. Review eligibility or mark exclusions explicitly."})
+        audit["ready_for_training"] = False
+    measured = {"used_bytes": budget.usage_bytes(), "planned_bytes": planned, "limit_bytes": budget.budget_bytes()}
+    plan = plan_experiment(body["reuse_path"], model, audit, measured)
+    return {"question": question.strip(), "synthetic": synthetic, "manifest": identity, "audit": audit, "plan": plan,
+            "note": "Draft only. The question is unreviewed. No weights, data, training or specialist execution is dispatched."}
+
+
+def experiment_save(body: dict) -> dict:
+    # Recompute from catalog/manifest/storage now. No client-supplied audit,
+    # permission overlay, saved preview or execution state is accepted.
+    preview = experiment_preview(body)
+    from ..experiments.btxrd_baseline import _git_revision
+    try:
+        return workspace.save_draft(EXPERIMENTS_DIR, preview, source_revision=_git_revision())
+    except (OSError, ValueError) as exc:
+        raise ApiError(f"Could not save draft: {exc}") from exc
+
+
+def experiment_history() -> dict:
+    return workspace.history(EXPERIMENTS_DIR)
+
+
+def experiment_record(body: dict) -> dict:
+    if not isinstance(body, dict) or set(body) != {"key"}:
+        raise ApiError("Select a saved record.")
+    try:
+        return workspace.detail(EXPERIMENTS_DIR, body["key"])
+    except FileNotFoundError as exc:
+        raise ApiError("Saved record is no longer available. Refresh history.", 404) from exc
+    except (OSError, ValueError, TypeError, UnicodeError, RecursionError) as exc:
+        raise ApiError(str(exc)) from exc
 
 
 # ---------- images: browse, annotations, runs, uploads, live scoring ----------
@@ -490,6 +605,7 @@ GET_ROUTES = {
     "/api/coordinator/profiles": profiles, "/api/progress": progress,
     "/api/images": image_sets, "/api/runs": runs, "/api/uploads": uploads,
     "/api/score/current": lambda: {"job": SCORES.current()},
+    "/api/experiments/options": experiment_options, "/api/experiments/history": experiment_history,
 }
 GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory, "/api/images/": image_set,
                     "/api/annotation/": annotation, "/api/score/jobs/": score_job}
@@ -501,4 +617,6 @@ POST_ROUTES = {
     "/api/progress/mark": progress_mark, "/api/progress/owner": progress_owner,
     "/api/runs/review": run_review, "/api/uploads/add": upload, "/api/uploads/delete": delete_upload, "/api/score": live_score,
     "/api/score/start": start_score,
+    "/api/experiments/preview": experiment_preview, "/api/experiments/save": experiment_save,
+    "/api/experiments/record": experiment_record,
 }
