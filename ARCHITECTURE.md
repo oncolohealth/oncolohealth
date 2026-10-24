@@ -49,15 +49,16 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
 | `experiments/plan.py` | `plan_experiment` | stub |
-| `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, records; `baseline` CLI | done (`ml` extra) |
+| `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, heads, records; `baseline` CLI | done (`ml` extra) |
+| `experiments/explore.py` | Images screen backend: `list_runs`, `review` (stored val/test predictions joined with the split, stdlib), `head_for` (load or verified refit of a run's head), `score` (live encoder + head on chosen images; refuses training images). Bypasses `execute_specialist` on purpose; not in the coordinator tool box | done (`score`/`head_for` need `ml`) |
 | `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing hash | done (`ml` extra) |
-| `learning/heads.py` | `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals | done (`ml` extra; distillation not implemented) |
+| `learning/heads.py` | `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals, `save_head`/`load_head` (plain-array `.npz`, no pickle) | done (`ml` extra; distillation not implemented) |
 | `evaluation/metrics.py` | `binary_report`, `multiclass_report` (bootstrap CIs), `calibration` | done (`ml` extra) |
 | `evaluation/thresholds.py` | `choose_threshold` on development data (`youden`, `sensitivity>=X`) | done (`ml` extra) |
 | `evaluation/` (rest) | Patient-level aggregation, leakage vs. pretraining data | stub (contracts in package docstring) |
 | `retrieval/` | PubMed search + MedCPT rerank | stub (contract in docstring) |
 | `curriculum/` | Export reviewed tool-use transcripts | stub (contract in docstring) |
-| `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token | done |
+| `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token (header for `/api/`, `?t=` for `/media/` images), 32 MB body cap | done |
 | `app/api.py` | JSON endpoints as plain functions; `GET_ROUTES`, `GET_PARAM_ROUTES`, `POST_ROUTES` | done |
 | `app/jobs.py` | `JobManager`: one background fetch at a time, progress, cancel | done |
 | `app/progress_md.py` | Parse and edit `PROGRESS.md` checkboxes and owner cells | done |
@@ -73,8 +74,9 @@ registry        ◄── acquisition.fetch, coordinator.tools, app, __main__
 routing         ◄── adapters.base, coordinator.tools, app, __main__
 adapters        ◄── coordinator.tools, app, learning.features (encoder)
 acquisition     ◄── datasets.audit + datasets.btxrd (hash_file), app, __main__
-datasets        ◄── app, __main__, experiments.btxrd_baseline
-learning, evaluation ◄── experiments.btxrd_baseline
+datasets        ◄── app, __main__, experiments.btxrd_baseline, experiments.explore
+learning, evaluation ◄── experiments.btxrd_baseline, experiments.explore (learning only)
+experiments.explore ◄── app
 coordinator     ◄── app, __main__
 app             ◄── __main__
 ```
@@ -126,6 +128,11 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 **Audit and split** (Datasets screen):
 `read_manifest` → `audit_dataset(spec, rows)` → `grouped_split(rows, fractions, seed)` → re-audit. A saved split goes to `data/<id>/splits/<name>.csv` with a `.json` sidecar recording the source manifest hash, fractions, seed and audit.
 
+**Images screen** (replay and live scoring):
+`GET /api/images/btxrd` (manifest rows) + `/media/btxrd/<file>?t=<token>` (pixels, path-checked against the image root) + `/api/annotation/btxrd/<id>` (LabelMe shapes).
+Replay: `POST /api/runs/review` → `explore.review` joins `runs/<id>/splits/<protocol>.csv`, the endpoint cohort and `predictions/<result>.json`; binary verdicts use the stored val threshold (`>=`, as in `binary_report`).
+Live: `POST /api/score` → `explore.score`: `head_for` loads `heads/<result>.npz` or refits from the split + feature cache and keeps it only if it reproduces the stored val probabilities → refuse training images → `FrozenEncoderAdapter.embed` per image → head probabilities. Uploads go to `data/uploads/<sha256[:16]>.<ext>` with a JSON sidecar via `POST /api/uploads/add`.
+
 **App request:**
 browser → `server.Handler` checks the Host header and `X-CW-Token` → looks up the path in `api.*_ROUTES` → plain function → JSON. `api.ApiError` maps to its HTTP status; other exceptions return 500.
 
@@ -137,7 +144,8 @@ browser → `server.Handler` checks the Host header and `X-CW-Token` → looks u
 | `configs/coordinator.example.json` | Example endpoint profiles (vLLM, SGLang, Ollama, LM Studio, llama.cpp) | yes |
 | `configs/coordinator.json` | Local profiles, written by the app | no |
 | `data/<id>/`, `models/<id>/` | Downloaded artifacts + `PROVENANCE.json` (`CW_DATA_DIR`, `CW_MODELS_DIR`) | no |
-| `runs/features/`, `runs/<run-id>/` | Cached features; per-run splits, predictions, `results.json`, `records.json`, `summary.md` | no |
+| `data/uploads/` | Images uploaded in the app, hash-named, with a JSON sidecar | no |
+| `runs/features/`, `runs/<run-id>/` | Cached features; per-run splits, predictions, heads, `results.json`, `records.json`, `summary.md` | no |
 | `.venv/` | `uv venv` with the `ml` extra | no |
 | `PROGRESS.md` | Checklist, also edited in place by the Progress screen | yes |
 | `docs/` | `big-machine.md` (GPU setup), `reports/` (workstream deliverables) | yes |
@@ -154,9 +162,9 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_acquisition.py` | Download, resume and verification; zip safety |
 | `test_datasets.py` | Audit findings, grouped splits |
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
-| `test_learning_eval.py` | Split protocols, heads, metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
+| `test_learning_eval.py` | Split protocols, heads (incl. save/load round trip), metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
-| `test_app.py` | `PROGRESS.md` editing, API functions, server Host and token guards |
+| `test_app.py` | `PROGRESS.md` editing, API functions, uploads, media path checks, run replay, server Host and token guards |
 | `helpers.py` | `LocalServer` fixture |
 
 ## Where new work plugs in

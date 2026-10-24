@@ -35,7 +35,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] `execute_specialist` + clearly SYNTHETIC adapter; catalog-only models cannot execute
 - [x] Dataset manifest contract, `audit_dataset` (patient/duplicate leakage, missing ids, labels, file hashes), deterministic `grouped_split`
 - [x] Coordinator: multi-profile OpenAI-compatible providers (vLLM/SGLang/Ollama/LM Studio/llama.cpp), tool box with argument validation, tool loop that feeds back only observed results, CLI `coordinator profiles|ping|ask --profile A --profile B`
-- [x] 30 synthetic unit tests passing (`python3 -m unittest discover -s tests`)
+- [x] 61 synthetic unit tests passing (`.venv/bin/python -m unittest discover -s tests`; 7 ML tests skip under plain `python3`)
 - [x] Default-tier download: 13 artifacts fetched and checksum-verified (HF sha256 / Zenodo md5 / figshare md5; the 3 TCIA series are trust-on-first-use sha256), 6.35 GB used including extracted copies
 - [ ] Review each `PROVENANCE.json`, then PR evidence_state `cataloged → access_obtained`
 - [x] Local app (`python3 -m cancer_workbench app`): catalog + router, downloads with live progress/cancel/budget, dataset inventory + audit + grouped splits, multi-model assistant chat with visible tool calls, editable PROGRESS checklist. Standard library only, localhost-only, per-launch token
@@ -62,7 +62,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 
 ### C: Registry and adapters
 - [x] Encoder adapter (`adapters/encoder.py`) wrapping a frozen backbone → embedding envelope (RAD-DINO, ResNet-50; contract in `docs/reports/C-model-cards.md`)
-- [ ] Bone classifier adapter once E produces a head
+- [ ] Bone classifier adapter once E produces a head. Heads now persist (`learning/heads.py::save_head`/`load_head`, plain arrays, no pickle) and the Images screen scores with them through a separate exploratory path (`experiments/explore.py`); a gated adapter through `execute_specialist` still needs a reviewed catalog promotion
 - [ ] Full input validation: geometry, bit depth, channels, normalization
 - [ ] Promote models' `evidence_state` via PR as each one is actually run
 
@@ -86,9 +86,12 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 
 ### G: Interface
 - [~] API/state contract: `cancer_workbench/app/api.py` wraps routing, acquisition, audit/splits, coordinator, progress
-- [ ] "Analyze an image" screen: upload a radiograph → validated adapter call → native result envelope. Blocked until C ships an adapter and E a trained head; until then the app and assistant must say no model can run
+- [x] Images screen (exploratory): browse BTXRD (filters by label, center, view, region, annotations, audit flags), full-size viewer with LabelMe box/polygon overlay and manifest metadata, browser upload of JPEG/PNG to `data/uploads/` (hash-named, magic-byte check, 20 MB cap, budget check)
+- [x] Replay of baseline runs: pick run → protocol · endpoint · encoder, see each val/test image's stored probabilities, val threshold and right/wrong; filter by wrong, sort by confidence. Checked against the run report (source_holdout · tumor_vs_normal · RAD-DINO: confusion 395/127/114/172 matches)
+- [x] Live scoring of up to 24 selected images with a run's frozen encoder + head (`ml` extra). Runs made before heads were saved are refit from their split + feature cache and used only if they reproduce the stored val probabilities (both existing runs do). Refuses training images; flags val images (optimistic), out-of-cohort images and uploads (no label, not BTXRD). Live RAD-DINO embeddings matched the feature cache exactly on MPS. Labeled EXPLORATORY; bypasses `execute_specialist` on purpose and is not exposed to the assistant
+- [ ] "Analyze an image" through a validated adapter → native result envelope. Still blocked until C ships a reviewed adapter and the catalog promotes a model; until then the assistant must say no model can run
 - [ ] Experiment runs screen (plans, states, records), once B/E land
-- [ ] Visual QA pass in a real browser (light + dark, phone width)
+- [~] Visual QA pass in a real browser (light + dark, phone width). Images screen checked in headless Chromium (dark, 1440 px and 390 px); fixed phone-width horizontal overflow of the shell. Other screens and light mode not checked
 
 ### H: Review
 - [ ] Review of this foundation: interfaces, gaps, smallest next experiment

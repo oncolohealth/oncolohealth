@@ -45,6 +45,17 @@ def endpoint_rows(rows: list[dict], endpoint: str) -> list[dict]:
     return [dict(r, label=mapping[r["label_derived"]]) for r in rows if r["label"] and mapping[r["label_derived"]]]
 
 
+def head_inputs(er: list[dict], f: dict, index: dict[str, int], endpoint: str) -> dict:
+    """Training/evaluation arrays for `train_feature_head` from endpoint rows and a loaded feature cache."""
+    import numpy as np
+
+    idx = [index[r["sample_id"]] for r in er]
+    col = lambda k: np.array([r[k] for r in er])
+    return {"features": f["features"][idx], "labels": col("label"), "partitions": col("partition"), "sample_ids": col("sample_id"),
+            "patient_ids": col("patient_id"), "classes": CLASSES[endpoint],
+            "encoder": {"encoder_id": str(f["encoder_id"]), "revision": f["revision"], "preprocessing_hash": f["preprocessing_hash"]}}
+
+
 def _git_revision() -> str:
     try:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, capture_output=True, text=True, check=True).stdout.strip()
@@ -64,13 +75,11 @@ def _environment(device: str) -> dict[str, str]:
 
 def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out_dir: Path | None = None,
         seed: str = "0", n_boot: int = 1000, features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
-    import numpy as np
-
     from ..adapters.encoder import preprocessing, preprocessing_hash, revision
     from ..evaluation.metrics import binary_report, calibration, multiclass_report
     from ..evaluation.thresholds import choose_threshold
     from ..learning.features import cache_path, extract_features, load_features
-    from ..learning.heads import evaluate_head, train_feature_head
+    from ..learning.heads import evaluate_head, save_head, train_feature_head
 
     if not MANIFEST_PATH.exists():
         raise FileNotFoundError(f"{MANIFEST_PATH} missing; run `python -m cancer_workbench btxrd manifest` first")
@@ -101,11 +110,7 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
             audit = audit_dataset({"id": "btxrd", "classes": CLASSES[endpoint]}, er)
             for enc in encoders:
                 f, index, fpath = feats[enc]
-                idx = [index[r["sample_id"]] for r in er]
-                encoder_ref = {"encoder_id": enc, "revision": f["revision"], "preprocessing_hash": f["preprocessing_hash"]}
-                data = {"features": f["features"][idx], "labels": np.array([r["label"] for r in er]),
-                        "partitions": np.array([r["partition"] for r in er]), "sample_ids": np.array([r["sample_id"] for r in er]),
-                        "patient_ids": np.array([r["patient_id"] for r in er]), "classes": CLASSES[endpoint], "encoder": encoder_ref}
+                data = head_inputs(er, f, index, endpoint)
                 t0 = time.monotonic()
                 head = train_feature_head(data)
                 val, test = evaluate_head(head, data, "val"), evaluate_head(head, data, "test")
@@ -124,6 +129,8 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
                                 "test": report})
                 (out_dir / "predictions").mkdir(exist_ok=True)
                 (out_dir / "predictions" / f"{run_id}.json").write_text(json.dumps({"val": val, "test": test}) + "\n")
+                (out_dir / "heads").mkdir(exist_ok=True)
+                save_head(head, out_dir / "heads" / f"{run_id}.npz")
                 rec = ExperimentRecord(
                     id=f"{out_dir.name}/{run_id}", path="transfer_learning", task=f"btxrd_{endpoint}_image",
                     cohort=f"btxrd {RELEASE}; manifest sha256 {manifest_sha}", split=f"{split_path.name} ({protocol}, seed {seed}); "
@@ -137,7 +144,7 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
                     state=JobState.COMPLETED,
                     resource_profile={"feature_seconds": float(f["seconds"]), "feature_device": str(f["device"]),
                                       "head_and_eval_seconds": round(time.monotonic() - t0, 2)},
-                    outputs=[str(fpath.relative_to(PROJECT_ROOT)), f"predictions/{run_id}.json"],
+                    outputs=[str(fpath.relative_to(PROJECT_ROOT)), f"predictions/{run_id}.json", f"heads/{run_id}.npz"],
                     blockers=[x["detail"] for x in audit["findings"] if x["severity"] == "error"])
                 records.append(dict(dataclasses.asdict(rec), state=rec.state.value))
 

@@ -70,6 +70,75 @@ class ApiTests(unittest.TestCase):
             api.save_profile({"name": "x", "profile": {"base_url": "http://h/v1", "model": "m", "api_key": "sk-123"}})
 
 
+PNG_1PX = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                        "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
+
+
+def _synthetic_run(root: Path) -> str:
+    """SYNTHETIC baseline run: 4 rows, one per partition, binary endpoint with a stored val threshold."""
+    run = root / "btxrd-baseline-test"
+    split = [{"sample_id": f"S{i}", "patient_id": "", "duplicate_group": "", "partition": p, "label": l, "label_derived": l,
+              "file": "", "sha256": ""} for i, (p, l) in enumerate([("train", "malignant"), ("val", "benign"), ("test", "malignant"), ("test", "")])]
+    from cancer_workbench.datasets import write_manifest
+
+    write_manifest(run / "splits" / "image_stratified.csv", split)
+    (run / "predictions").mkdir()
+    (run / "predictions" / "r.json").write_text(json.dumps({
+        "val": {"sample_ids": ["S1"], "y_true": [0], "probs": [[0.3, 0.7]]},
+        "test": {"sample_ids": ["S2"], "y_true": [0], "probs": [[0.45, 0.55]]}}))
+    (run / "results.json").write_text(json.dumps({"label": "EXPLORATORY", "results": [
+        {"id": "r", "protocol": "image_stratified", "endpoint": "tumor_vs_normal", "encoder": "rad-dino", "counts": {},
+         "test": {"roc_auc": 0.5, "threshold": 0.6}}]}))
+    return run.name
+
+
+class ImageApiTests(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+
+        self.tmp = Path(tempfile.mkdtemp())
+        for target, value in ((api, "UPLOADS_DIR"), (api.explore, "RUNS_DIR")):
+            p = mock.patch.object(target, value, self.tmp / value.lower())
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_upload_checks_type_and_stores_by_hash(self):
+        import base64
+
+        with self.assertRaises(api.ApiError):
+            api.upload({"name": "x.txt", "data": base64.b64encode(b"hello").decode()})
+        meta = api.upload({"name": "dot.png", "data": base64.b64encode(PNG_1PX).decode()})
+        self.assertEqual(meta["file"], meta["id"] + ".png")
+        self.assertEqual([u["original_name"] for u in api.uploads()["uploads"]], ["dot.png"])
+        self.assertEqual(api.media_file(f"uploads/{meta['file']}")[1], "image/png")
+        api.delete_upload({"id": meta["id"]})
+        self.assertEqual(api.uploads()["uploads"], [])
+
+    def test_media_stays_inside_its_root(self):
+        (self.tmp / "uploads_dir").mkdir()
+        for rel in ("uploads/../../etc/passwd", "uploads/../uploads_dir", "nosuchset/a.png", "uploads/"):
+            with self.assertRaises(api.ApiError):
+                api.media_file(rel)
+
+    def test_review_applies_the_val_threshold(self):
+        name = _synthetic_run(api.explore.RUNS_DIR)
+        rows = api.run_review({"run": name, "result": "r"})["rows"]
+        self.assertEqual(rows["S2"]["pred"], "normal")  # P(tumor) 0.55 < threshold 0.6
+        self.assertFalse(rows["S2"]["correct"])
+        self.assertTrue(rows["S1"]["correct"])  # benign maps to tumor; 0.7 >= 0.6
+        self.assertEqual(rows["S3"]["partition"], "excluded")
+        self.assertNotIn("probs", rows["S0"])
+        with self.assertRaises(api.ApiError):
+            api.run_review({"run": "../" + name, "result": "r"})
+
+    def test_live_score_needs_ml_extra(self):
+        from unittest import mock
+
+        with mock.patch.object(api, "_ml_missing", return_value=["torch"]), self.assertRaises(api.ApiError) as cm:
+            api.live_score({"run": "x", "result": "y", "items": []})
+        self.assertEqual(cm.exception.status, 409)
+
+
 class ServerGuardTests(unittest.TestCase):
     def setUp(self):
         import http.server
@@ -101,6 +170,10 @@ class ServerGuardTests(unittest.TestCase):
 
     def test_foreign_host_rejected(self):
         self.assertEqual(self._get("/", {"Host": "attacker.example:80"})[0], 421)
+
+    def test_media_requires_token(self):
+        self.assertEqual(self._get("/media/btxrd/images/x.jpeg")[0], 403)
+        self.assertEqual(self._get("/media/btxrd/../../etc/passwd?t=tok")[0], 404)
 
     def test_page_carries_token(self):
         status, body = self._get("/")

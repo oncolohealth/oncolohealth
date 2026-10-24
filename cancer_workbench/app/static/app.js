@@ -46,7 +46,7 @@ async function guard(fn) {
 }
 
 /* ---------------- navigation ---------------- */
-const SCREENS = ["catalog", "downloads", "datasets", "assistant", "progress"];
+const SCREENS = ["catalog", "downloads", "datasets", "images", "assistant", "progress"];
 const loaders = {};
 function show(name) {
   if (!SCREENS.includes(name)) name = "catalog";
@@ -381,6 +381,304 @@ function renderAudit(rep, src) {
   });
 }
 loaders.datasets = () => guard(loadDatasets);
+
+/* ---------------- images ---------------- */
+const PAGE = 48;
+const img = { src: "btxrd", meta: null, rows: [], byId: {}, uploads: [], upById: {}, runs: [], review: null, page: 0,
+  sel: new Map(), live: {}, liveRun: null, open: null, overlay: true, f: { part: "test" } };
+const keyOf = (set, id) => `${set}:${id}`;
+const media = (set, file) => `/media/${encodeURIComponent(set)}/${file.split("/").map(encodeURIComponent).join("/")}?t=${encodeURIComponent(TOKEN)}`;
+const fmtP = p => (p == null ? "" : p.toFixed(2));
+function setWidths(root) { $$("[data-w]", root).forEach(el => { el.style.width = `${Math.max(0, Math.min(100, Number(el.dataset.w)))}%`; }); }
+function selectedResult() {
+  const run = img.runs.find(r => r.id === $("#img-tools").run.value);
+  return run && run.results.find(r => r.id === $("#img-tools").result.value) ? { run: run.id, result: $("#img-tools").result.value } : null;
+}
+
+async function loadImages() {
+  if (!img.meta) {
+    img.meta = await api("/api/images");
+    const [{ runs }, set] = await Promise.all([api("/api/runs"), img.meta.sets[0]?.available ? api("/api/images/btxrd") : null]);
+    img.runs = runs;
+    if (set) { img.rows = set.rows; img.byId = Object.fromEntries(set.rows.map(r => [r.sample_id, r])); }
+    const t = $("#img-tools");
+    t.run.innerHTML = `<option value="">None: browse only</option>` + runs.map(r => `<option value="${esc(r.id)}">${esc(r.id)}</option>`).join("");
+    const miss = img.meta.ml_missing;
+    $("#img-ml").textContent = miss.length ? `Live scoring is off in this app process: ${miss.join(", ")} not installed. Start it with .venv/bin/python -m cancer_workbench app.` : "";
+  }
+  await loadUploads();
+  renderFilters(); renderImages();
+}
+async function loadUploads() {
+  img.uploads = (await api("/api/uploads")).uploads;
+  img.upById = Object.fromEntries(img.uploads.map(u => [u.id, u]));
+}
+
+$("#img-source").addEventListener("click", e => {
+  const b = e.target.closest("[data-src]");
+  if (!b) return;
+  img.src = b.dataset.src; img.page = 0;
+  $$("#img-source button").forEach(x => x.classList.toggle("on", x === b));
+  $("#upload-zone").hidden = img.src !== "uploads";
+  renderFilters(); renderImages();
+});
+$("#img-tools").addEventListener("change", e => guard(async () => {
+  const t = $("#img-tools");
+  if (e.target === t.run) {
+    const run = img.runs.find(r => r.id === t.run.value);
+    t.result.innerHTML = run ? run.results.map(r => `<option value="${esc(r.id)}">${esc(`${r.protocol} · ${r.endpoint} · ${r.encoder}`)} (${r.macro ? "macro " : ""}AUC ${fmtP(r.roc_auc)})</option>`).join("") : "";
+    t.result.disabled = !run;
+  }
+  img.review = null;
+  const sr = selectedResult();
+  if (sr) img.review = await api("/api/runs/review", sr);
+  img.page = 0;
+  renderFilters(); renderImages();
+}));
+
+function opts(values, cur, all = "All") {
+  return `<option value="">${esc(all)}</option>` + values.map(v => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(v)}</option>`).join("");
+}
+function renderFilters() {
+  const f = img.f, el = $("#img-filters");
+  if (img.src === "uploads") {
+    el.innerHTML = `<label class="grow">Search name<input name="q" type="search" value="${esc(f.q || "")}"></label>`;
+    return;
+  }
+  const uniq = k => [...new Set(img.rows.map(r => r[k]).filter(Boolean))].sort();
+  const rv = img.review;
+  el.innerHTML = `
+    <label>Label<select name="label">${opts(["normal", "benign", "malignant", "unlabeled"], f.label)}</select></label>
+    <label>Center<select name="center">${opts(uniq("center"), f.center)}</select></label>
+    <label>View<select name="view">${opts(uniq("view"), f.view)}</select></label>
+    <label>Region<select name="region">${opts(uniq("region"), f.region)}</select></label>
+    <label>Annotations<select name="ann">${opts(["yes", "no"], f.ann, "Any")}</select></label>
+    <label>Audit flags<select name="flags">${opts(["flagged"], f.flags, "Any")}</select></label>
+    ${rv ? `<label>In this run<select name="part">${["test", "val", "train", "excluded"].map(p => `<option ${f.part === p ? "selected" : ""}>${p}</option>`).join("")}<option value="all" ${f.part === "all" ? "selected" : ""}>all</option></select></label>
+    <label>Prediction<select name="pred">${opts(["wrong", "right"], f.pred, "Any")}</select></label>
+    <label>Sort<select name="sort">${[["", "Image id"], ["conf_desc", "Most confident first"], ["conf_asc", "Least confident first"], ...(rv.positive_class ? [["pos_desc", `P(${rv.positive_class}) high to low`]] : [])].map(([v, l]) => `<option value="${v}" ${f.sort === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}
+    <label class="grow">Search id<input name="q" type="search" value="${esc(f.q || "")}" placeholder="IMG000123"></label>`;
+}
+$("#img-filters").addEventListener("input", e => {
+  const el = e.target;
+  if (!el.name) return;
+  img.f[el.name] = el.value; img.page = 0;
+  renderImages();
+});
+$("#img-filters").addEventListener("submit", e => e.preventDefault());
+
+function visibleItems() {
+  const f = img.f, q = (f.q || "").trim().toLowerCase();
+  if (img.src === "uploads") {
+    return img.uploads.filter(u => !q || u.original_name.toLowerCase().includes(q))
+      .map(u => ({ key: keyOf("uploads", u.id), set: "uploads", id: u.id, title: u.original_name, url: media("uploads", u.file) }));
+  }
+  const rv = img.review?.rows;
+  let rows = img.rows.filter(r => (!f.label || (f.label === "unlabeled" ? !r.label : r.label === f.label)) &&
+    (!f.center || r.center === f.center) && (!f.view || r.view === f.view) && (!f.region || r.region === f.region) &&
+    (!f.ann || (f.ann === "yes") === (Number(r.annotation_shapes) > 0)) && (!f.flags || !!r.audit_flags) &&
+    (!q || r.sample_id.toLowerCase().includes(q)));
+  if (rv) {
+    rows = rows.filter(r => {
+      const v = rv[r.sample_id];
+      if (!v) return f.part === "all";
+      return (f.part === "all" || v.partition === f.part) && (!f.pred || (v.pred != null && (f.pred === "wrong") === !v.correct));
+    });
+    const conf = r => { const p = rv[r.sample_id]?.probs; return p ? Math.max(...p) : -1; };
+    if (f.sort === "conf_desc") rows.sort((a, b) => conf(b) - conf(a));
+    if (f.sort === "conf_asc") rows.sort((a, b) => (conf(a) < 0) - (conf(b) < 0) || conf(a) - conf(b));
+    if (f.sort === "pos_desc") rows.sort((a, b) => (rv[b.sample_id]?.probs?.[1] ?? -1) - (rv[a.sample_id]?.probs?.[1] ?? -1));
+  }
+  return rows.map(r => ({ key: keyOf("btxrd", r.sample_id), set: "btxrd", id: r.sample_id, title: r.sample_id, url: media("btxrd", r.file), row: r, rv: rv?.[r.sample_id] }));
+}
+
+function predTag(v) {
+  if (!v || v.probs == null) return "";
+  return `<span class="tag ${v.correct ? "ok" : "bad"}" title="Stored ${esc(v.partition)} prediction">${v.correct ? "" : "✗ "}${esc(v.pred)} ${fmtP(Math.max(...v.probs))}</span>`;
+}
+function renderImages() {
+  const items = visibleItems(), rv = img.review;
+  const pages = Math.max(1, Math.ceil(items.length / PAGE));
+  img.page = Math.min(img.page, pages - 1);
+  img.pageItems = items.slice(img.page * PAGE, img.page * PAGE + PAGE);
+  if (img.src === "btxrd" && !img.rows.length) {
+    $("#img-summary").textContent = "No BTXRD manifest yet. Download BTXRD, then run python -m cancer_workbench btxrd manifest.";
+  } else if (rv) {
+    const scored = items.filter(i => i.rv?.probs);
+    const wrong = scored.filter(i => !i.rv.correct).length;
+    $("#img-summary").textContent = `${items.length} images in this view. ${scored.length ? `${wrong} of the ${scored.length} with stored predictions are wrong` : "None has a stored prediction (the run only predicts val and test images)"}${rv.threshold != null ? `; ${rv.positive_class} when P ≥ ${fmtP(rv.threshold)} (val threshold)` : "; argmax over classes"}. Counts in a filtered view are for finding patterns, not performance: the run's summary.md has the test-set results. ${rv.label}`;
+  } else {
+    $("#img-summary").textContent = img.src === "uploads" ? `${items.length} uploaded image${items.length === 1 ? "" : "s"}.` : `${items.length} of ${img.rows.length} images. Pick a baseline run to see its stored predictions.`;
+  }
+  $("#img-grid").innerHTML = img.pageItems.map(it => {
+    const r = it.row, live = img.live[it.key];
+    return `<div class="img-card${img.sel.has(it.key) ? " picked" : ""}${img.open === it.key ? " cur" : ""}">
+      <button type="button" class="thumb" data-open="${esc(it.key)}" aria-label="Open ${esc(it.title)}"><img loading="lazy" src="${esc(it.url)}" alt=""></button>
+      <label class="pick"><input type="checkbox" data-pick="${esc(it.key)}" ${img.sel.has(it.key) ? "checked" : ""}><span class="mono" title="${esc(it.title)}">${esc(it.title)}</span></label>
+      <div class="tags">${r ? `<span class="tag">${esc(rv ? (it.rv?.label || it.rv?.partition || "") : (r.label || "unlabeled"))}</span>` : ""}
+        ${it.rv ? partTag(it.rv) : ""}${predTag(it.rv)}${live?.probs ? `<span class="tag live">live ${esc(live.pred)}</span>` : ""}</div></div>`;
+  }).join("") || `<p class="empty">No images match these filters.</p>`;
+  $("#img-pager").innerHTML = pages > 1 ? `<button class="btn small" data-page="-1" ${img.page ? "" : "disabled"}>Previous</button><span>Page ${img.page + 1} of ${pages}</span><button class="btn small" data-page="1" ${img.page < pages - 1 ? "" : "disabled"}>Next</button>` : "";
+  updateImgSelection();
+}
+function partTag(v) { return img.f.part === "all" ? `<span class="tag">${esc(v.partition)}</span>` : ""; }
+$("#img-pager").addEventListener("click", e => {
+  const b = e.target.closest("[data-page]");
+  if (!b) return;
+  img.page += Number(b.dataset.page);
+  renderImages();
+  $("#img-grid").scrollIntoView({ block: "start", behavior: "smooth" });
+});
+function itemFromKey(key) {
+  const [set, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  if (set === "uploads") { const u = img.upById[id]; return u && { key, set, id, title: u.original_name, url: media("uploads", u.file), up: u }; }
+  const r = img.byId[id];
+  return r && { key, set, id, title: id, url: media(set, r.file), row: r, rv: img.review?.rows[id] };
+}
+$("#img-grid").addEventListener("change", e => {
+  const cb = e.target.closest("[data-pick]");
+  if (!cb) return;
+  const it = itemFromKey(cb.dataset.pick);
+  cb.checked ? img.sel.set(it.key, { set: it.set, id: it.id }) : img.sel.delete(it.key);
+  cb.closest(".img-card").classList.toggle("picked", cb.checked);
+  updateImgSelection();
+});
+$("#img-grid").addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) openImage(b.dataset.open); });
+$("#img-select-page").addEventListener("click", () => { for (const it of img.pageItems || []) img.sel.set(it.key, { set: it.set, id: it.id }); renderImages(); });
+$("#img-clear").addEventListener("click", () => { img.sel.clear(); renderImages(); });
+function updateImgSelection() {
+  const n = img.sel.size, max = img.meta?.max_score ?? 24, sr = selectedResult();
+  $("#img-selected").textContent = n ? `${n} selected${n > max ? ` (score at most ${max} at a time)` : ""}` : "Nothing selected";
+  const b = $("#img-score");
+  const why = img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Pick a baseline run and result to score with." : !n ? "Select images first." : n > max ? `Select at most ${max} images.` : "";
+  b.disabled = !!why; b.title = why;
+  $("#img-clear").disabled = !n;
+}
+
+function probBars(probs, classes, pred, threshold) {
+  return `<div class="probs">${classes.map((c, i) => `<div class="prob-row${c === pred ? " pred" : ""}"><span>${esc(c)}</span><div class="bar"><i data-w="${probs[i] * 100}"></i>${threshold != null && i === 1 ? `<b class="thr" data-left="${threshold * 100}" title="Val threshold ${fmtP(threshold)}"></b>` : ""}</div><span class="v">${fmtP(probs[i])}</span></div>`).join("")}</div>`;
+}
+async function openImage(key) {
+  const it = itemFromKey(key);
+  if (!it) return;
+  img.open = key;
+  $$("#img-grid .img-card").forEach(c => c.classList.toggle("cur", c.querySelector("[data-open]")?.dataset.open === key));
+  const rv = img.review, v = it.rv, live = img.live[key], r = it.row;
+  const box = $("#img-detail");
+  const meta = r ? [["Label (manifest)", r.label || "unlabeled"], ["Raw indicators", r.label_raw], ["Subtype", r.subtype], ["Site", r.site], ["Region", r.region], ["View", r.view],
+    ["Center", r.center], ["Age / sex", [r.age, r.gender].filter(Boolean).join(" / ")], ["Duplicate group", r.duplicate_group], ["Audit flags", r.audit_flags], ["File", r.file]]
+    : [["Original name", it.up.original_name], ["Size", fmtBytes(it.up.bytes)], ["Uploaded", it.up.uploaded_at], ["sha256", it.up.sha256]];
+  box.innerHTML = `
+    <h2>${esc(it.title)}</h2>
+    ${Number(r?.annotation_shapes) > 0 ? `<label class="check"><input type="checkbox" id="img-overlay" ${img.overlay ? "checked" : ""}> Show tumor annotations (${esc(r.annotation_shapes)})</label>` : ""}
+    <div class="stage"><img id="img-full" src="${esc(it.url)}" alt="${esc(it.title)}"><svg id="img-svg" aria-hidden="true"></svg></div>
+    <ul class="shape-list" id="img-shapes"></ul>
+    ${rv ? `<h3>Stored prediction</h3>${v?.probs ? `<p class="hint">${esc(v.partition)} image in ${esc(rv.result)}. Reference: <strong>${esc(v.label)}</strong>. Predicted: <strong class="${v.correct ? "ok-text" : "err-text"}">${esc(v.pred)}</strong>${v.correct ? "" : " (wrong)"}.</p>${probBars(v.probs, rv.classes, v.pred, rv.threshold)}`
+      : `<p class="hint">${v ? (v.partition === "excluded" ? `Not in this run's cohort: ${esc(v.why)}.` : `A ${esc(v.partition)} image: the run stores predictions for val and test images only.`) : "Not in this run."}</p>`}` : ""}
+    ${live ? `<h3>Live score</h3>${liveDetail(live)}` : ""}
+    <h3>Details</h3>
+    <dl>${meta.filter(([, x]) => x).map(([k, x]) => `<dt>${esc(k)}</dt><dd>${esc(x)}</dd>`).join("")}</dl>
+    ${it.up ? `<div class="actions"><button class="btn danger" id="img-delete">Delete upload</button></div>` : ""}`;
+  setWidths(box);
+  $$("[data-left]", box).forEach(el => { el.style.left = `${el.dataset.left}%`; });
+  $("#img-overlay")?.addEventListener("change", e => { img.overlay = e.target.checked; $("#img-svg").classList.toggle("off", !img.overlay); });
+  $("#img-delete")?.addEventListener("click", () => {
+    if (!confirm(`Delete ${it.up.original_name} from data/uploads?`)) return;
+    guard(async () => {
+      await api("/api/uploads/delete", { id: it.id });
+      img.sel.delete(key); delete img.live[key]; img.open = null;
+      box.innerHTML = `<p class="empty">Upload deleted.</p>`;
+      await loadUploads(); renderImages();
+    });
+  });
+  if (Number(r?.annotation_shapes) > 0) {
+    const a = await api(`/api/annotation/${encodeURIComponent(it.set)}/${encodeURIComponent(it.id)}`);
+    if (img.open !== key || !a.width) return;
+    const svg = $("#img-svg");
+    svg.setAttribute("viewBox", `0 0 ${a.width} ${a.height}`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.classList.toggle("off", !img.overlay);
+    svg.innerHTML = a.shapes.map(s => {
+      const pts = s.points;
+      if (s.type === "rectangle" && pts.length === 2) {
+        const [[x1, y1], [x2, y2]] = pts;
+        return `<rect class="shape" x="${Math.min(x1, x2)}" y="${Math.min(y1, y2)}" width="${Math.abs(x2 - x1)}" height="${Math.abs(y2 - y1)}"></rect>`;
+      }
+      return `<polygon class="shape" points="${pts.map(p => p.join(",")).join(" ")}"></polygon>`;
+    }).join("");
+    $("#img-shapes").innerHTML = a.shapes.map(s => `<li><span class="mono">${esc(s.type)}</span> ${esc(s.label)}</li>`).join("");
+  }
+}
+function liveDetail(e) {
+  const m = img.liveRun;
+  if (e.refused) return `<p class="err-text">${esc(e.refused)}</p>`;
+  if (e.error) return `<p class="err-text">Could not score: ${esc(e.error)}</p>`;
+  return `<p class="hint">${esc(m.result)} on ${esc(m.device)}.${e.label ? ` Reference: <strong>${esc(e.label)}</strong>.` : ""} Predicted: <strong>${esc(e.pred)}</strong>.</p>
+    ${probBars(e.probs, m.classes, e.pred, m.threshold)}
+    ${e.stored_probs ? `<p class="hint">Stored prediction from the run: ${m.classes.map((c, i) => `${esc(c)} ${fmtP(e.stored_probs[i])}`).join(", ")}. Largest difference ${Math.max(...e.stored_probs.map((p, i) => Math.abs(p - e.probs[i]))).toFixed(4)}.</p>` : ""}
+    ${e.notes.map(n => `<p class="hint warn-text">${esc(n)}</p>`).join("")}`;
+}
+
+$("#img-score").addEventListener("click", () => {
+  const sr = selectedResult();
+  if (!sr) return;
+  const items = [...img.sel.values()];
+  const b = $("#img-score");
+  b.disabled = true;
+  $("#img-live").innerHTML = `<div class="live"><p class="thinking">Scoring ${items.length} image${items.length === 1 ? "" : "s"} with ${esc(sr.result)}. The first call loads the encoder and can take a minute…</p></div>`;
+  api("/api/score", { ...sr, items })
+    .then(res => {
+      img.liveRun = res;
+      for (const e of res.items) img.live[e.key] = e;
+      renderLive(res);
+      renderImages();
+      if (img.open) openImage(img.open);
+    })
+    .catch(err => { $("#img-live").innerHTML = `<div class="live"><p class="err-text">${esc(err.message)}</p></div>`; })
+    .finally(updateImgSelection);
+});
+function renderLive(res) {
+  const labeled = res.items.filter(e => e.correct != null);
+  const right = labeled.filter(e => e.correct).length;
+  $("#img-live").innerHTML = `<div class="live">
+    <div class="audit-head"><h2>Live scores</h2><span class="badge synthetic">Exploratory</span></div>
+    <p class="hint">${esc(res.run)} / ${esc(res.result)}, encoder ${esc(res.encoder)} on ${esc(res.device)}, ${res.seconds} s. ${res.threshold != null ? `${esc(res.positive_class)} when P ≥ ${fmtP(res.threshold)}.` : "Argmax over classes."}
+      ${labeled.length ? `${right} of ${labeled.length} labeled images match the reference label${labeled.some(e => e.partition === "val") ? ", including val images, which are optimistic" : ""}.` : ""} ${esc(res.note)}</p>
+    <div class="table-scroll"><table><thead><tr><th></th><th>Image</th><th>In run</th><th>Reference</th><th>Live</th><th>Stored</th><th>Notes</th></tr></thead><tbody>
+    ${res.items.map(e => {
+      const it = itemFromKey(e.key);
+      const probs = p => res.classes.map((c, i) => `${esc(c)} ${fmtP(p[i])}`).join("<br>");
+      return `<tr><td>${it ? `<button type="button" class="thumb small" data-open="${esc(e.key)}" aria-label="Open ${esc(it.title)}"><img src="${esc(it.url)}" alt=""></button>` : ""}</td>
+        <td class="mono">${esc(it?.title || e.key)}</td><td>${esc(e.partition)}</td><td>${esc(e.label || "none")}</td>
+        <td>${e.refused ? '<span class="err-text">refused</span>' : e.error ? '<span class="err-text">failed</span>' : `<strong class="${e.correct === false ? "err-text" : e.correct ? "ok-text" : ""}">${esc(e.pred)}</strong><br><small>${probs(e.probs)}</small>`}</td>
+        <td>${e.stored_probs ? `<small>${probs(e.stored_probs)}</small>` : ""}</td>
+        <td><small>${[e.refused, e.error, ...e.notes].filter(Boolean).map(esc).join("<br>")}</small></td></tr>`;
+    }).join("")}</tbody></table></div></div>`;
+}
+$("#img-live").addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) { openImage(b.dataset.open); $("#img-detail").scrollIntoView({ behavior: "smooth", block: "nearest" }); } });
+
+async function uploadFiles(files) {
+  const max = img.meta?.max_upload ?? 20e6;
+  let ok = 0;
+  for (const file of files) {
+    if (file.size > max) { toast(`${file.name} is over ${fmtBytes(max)}.`, true); continue; }
+    const data = await new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onload = () => resolve(String(rd.result).split(",", 2)[1] || "");
+      rd.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+      rd.readAsDataURL(file);
+    });
+    try { await api("/api/uploads/add", { name: file.name, data }); ok++; } catch (e) { toast(`${file.name}: ${e.message}`, true); }
+  }
+  if (ok) toast(`Uploaded ${ok} image${ok === 1 ? "" : "s"}.`);
+  await loadUploads(); renderImages();
+}
+$("#upload-input").addEventListener("change", e => { guard(() => uploadFiles([...e.target.files])); e.target.value = ""; });
+const zone = $("#upload-zone");
+zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("over"); });
+zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+zone.addEventListener("drop", e => { e.preventDefault(); zone.classList.remove("over"); guard(() => uploadFiles([...e.dataTransfer.files])); });
+loaders.images = () => guard(loadImages);
 
 /* ---------------- assistant ---------------- */
 const chat = { profiles: {}, defaultName: null, picked: new Set(), up: {}, turns: {}, histories: {}, editing: null };

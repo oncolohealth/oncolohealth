@@ -4,7 +4,8 @@ Contract change from the package docstring: the head is an L2-regularized
 logistic regression (scikit-learn, lbfgs) on standardized features, with
 balanced class weights. Its regularization strength is picked from `c_grid`
 on VAL rows only; the head is fit on TRAIN rows only. Distillation
-(`teacher_weight > 0`) is not implemented yet.
+(`teacher_weight > 0`) is not implemented yet. `save_head` / `load_head`
+store a head as plain arrays so a run's head can be reused for scoring.
 """
 from __future__ import annotations
 
@@ -98,3 +99,43 @@ def evaluate_head(model: HeadModel, data: dict[str, Any], partition: str = "test
     Z = (data["features"][idx].astype(np.float64) - model.mean) / model.scale
     return {"sample_ids": ids, "classes": model.classes, "y_true": [model.classes.index(l) for l in data["labels"][idx]],
             "probs": model.clf.predict_proba(Z).tolist()}
+
+
+class _LinearProbs:
+    """predict_proba of a fitted LogisticRegression rebuilt from its coefficients (sigmoid for 2 classes, else softmax)."""
+
+    def __init__(self, coef, intercept):
+        self.coef_, self.intercept_ = coef, intercept
+
+    def predict_proba(self, Z):
+        import numpy as np
+
+        logits = Z @ self.coef_.T + self.intercept_
+        if self.coef_.shape[0] == 1:
+            p = 1.0 / (1.0 + np.exp(-logits[:, 0]))
+            return np.column_stack([1.0 - p, p])
+        e = np.exp(logits - logits.max(1, keepdims=True))
+        return e / e.sum(1, keepdims=True)
+
+
+def save_head(model: HeadModel, path) -> None:
+    """Write the head as plain arrays (.npz, no pickle) so it can be reloaded without trusting the file's code."""
+    import json
+
+    import numpy as np
+
+    np.savez(path, mean=model.mean, scale=model.scale, coef=model.clf.coef_, intercept=model.clf.intercept_,
+             classes=np.array(model.classes), C=model.C, val_score=model.val_score, encoder=json.dumps(model.encoder),
+             train_ids=np.array(sorted(model.train_ids)), train_patients=np.array(sorted(model.train_patients)))
+
+
+def load_head(path) -> HeadModel:
+    import json
+
+    import numpy as np
+
+    with np.load(path, allow_pickle=False) as z:
+        return HeadModel(encoder=json.loads(z["encoder"].item()), classes=z["classes"].tolist(), C=float(z["C"]),
+                         val_score=float(z["val_score"]), mean=z["mean"], scale=z["scale"],
+                         clf=_LinearProbs(z["coef"], z["intercept"]), train_ids=frozenset(z["train_ids"].tolist()),
+                         train_patients=frozenset(z["train_patients"].tolist()))

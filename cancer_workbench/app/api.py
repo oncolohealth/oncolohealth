@@ -1,8 +1,13 @@
 """JSON API behind the local app. Plain functions so they can be tested without HTTP."""
 from __future__ import annotations
 
+import base64
+import binascii
 import collections
 import concurrent.futures
+import datetime as dt
+import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -16,6 +21,8 @@ from ..coordinator import ProviderError, default_toolbox, load_profiles, make_pr
 from ..coordinator.config import config_path
 from ..coordinator.loop import SYSTEM_PROMPT
 from ..datasets import audit_dataset, grouped_split, read_manifest, write_manifest
+from ..datasets.btxrd import MANIFEST_PATH as BTXRD_MANIFEST, RAW_DIR as BTXRD_RAW
+from ..experiments import explore
 from ..registry import load_catalog
 from ..routing import route_models
 from . import progress_md
@@ -204,6 +211,146 @@ def split(body: dict) -> dict:
     return rep
 
 
+# ---------- images: browse, annotations, runs, uploads, live scoring ----------
+
+UPLOADS_DIR = DATA_DIR / "uploads"
+MAX_UPLOAD = 20_000_000
+IMAGE_TYPES = {".jpeg": "image/jpeg", ".jpg": "image/jpeg", ".png": "image/png"}
+# Image sets the Images screen can browse: image root, manifest (its `file` column is relative to root), LabelMe folder.
+IMAGE_SETS = {"btxrd": {"root": BTXRD_RAW, "manifest": BTXRD_MANIFEST, "annotations": BTXRD_RAW / "Annotations"}}
+IMAGE_FIELDS = ("sample_id", "label", "file", "center", "site", "subtype", "view", "region", "age", "gender",
+                "duplicate_group", "audit_flags", "annotation_shapes", "label_raw")
+ML_MODULES = ("numpy", "sklearn", "torch", "PIL", "transformers", "timm", "safetensors")
+
+
+def _ml_missing() -> list[str]:
+    return [m for m in ML_MODULES if importlib.util.find_spec(m) is None]
+
+
+def media_file(rel: str) -> tuple[Path, str]:
+    """Resolve `<set>/<path>` from a /media/ URL to an image file inside that set's root (or the uploads folder)."""
+    name, _, sub = rel.partition("/")
+    root = UPLOADS_DIR if name == "uploads" else IMAGE_SETS.get(name, {}).get("root")
+    p = (root / sub).resolve() if root and sub else None
+    if p is None or not p.is_relative_to(root.resolve()) or p.suffix.lower() not in IMAGE_TYPES or not p.is_file():
+        raise ApiError("No such image.", 404)
+    return p, IMAGE_TYPES[p.suffix.lower()]
+
+
+def image_sets() -> dict:
+    sets = [{"id": k, "available": v["manifest"].exists()} for k, v in IMAGE_SETS.items()]
+    return {"sets": sets, "ml_missing": _ml_missing(), "max_score": explore.MAX_SCORE, "max_upload": MAX_UPLOAD}
+
+
+def image_set(name: str) -> dict:
+    spec = IMAGE_SETS.get(name)
+    if spec is None:
+        raise ApiError("Unknown image set.", 404)
+    if not spec["manifest"].exists():
+        raise ApiError(f"No manifest for {name} yet. Run `python -m cancer_workbench {name} manifest`.", 404)
+    rows = read_manifest(spec["manifest"])
+    return {"id": name, "manifest": str(spec["manifest"].relative_to(DATA_DIR)), "rows": [{k: r.get(k, "") for k in IMAGE_FIELDS} for r in rows]}
+
+
+def annotation(rel: str) -> dict:
+    """LabelMe shapes for one image (`<set>/<sample_id>`): label, shape type and points in image pixels."""
+    name, _, sid = rel.partition("/")
+    spec = IMAGE_SETS.get(name)
+    if spec is None or not sid.replace("_", "").replace("-", "").isalnum():
+        raise ApiError("Unknown image.", 404)
+    p = spec["annotations"] / f"{sid}.json"
+    if not p.is_file():
+        return {"width": None, "height": None, "shapes": []}
+    a = json.loads(p.read_text())
+    shapes = [{"label": str(s.get("label", "")), "type": str(s.get("shape_type", "")), "points": [[float(x), float(y)] for x, y in s.get("points", [])]}
+              for s in a.get("shapes", [])]
+    return {"width": a.get("imageWidth"), "height": a.get("imageHeight"), "shapes": shapes}
+
+
+def runs() -> dict:
+    return {"runs": explore.list_runs()}
+
+
+def run_review(body: dict) -> dict:
+    try:
+        return explore.review(body.get("run", ""), body.get("result", ""))
+    except (ValueError, FileNotFoundError, KeyError) as e:
+        raise ApiError(str(e).strip("'\""), 404)
+
+
+def _upload_stem(stem) -> str:
+    if not isinstance(stem, str) or len(stem) != 16 or any(c not in "0123456789abcdef" for c in stem):
+        raise ApiError("Unknown upload.", 404)
+    return stem
+
+
+def uploads() -> dict:
+    metas = sorted(UPLOADS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if UPLOADS_DIR.exists() else []
+    return {"uploads": [json.loads(p.read_text()) for p in metas]}
+
+
+def upload(body: dict) -> dict:
+    """Store one JPEG/PNG under data/uploads/, named by content hash, with a sidecar. Pixels are only decoded when scored."""
+    try:
+        raw = base64.b64decode(body.get("data") or "", validate=True)
+    except (binascii.Error, ValueError):
+        raise ApiError("Upload data must be base64.")
+    if not raw:
+        raise ApiError("The file is empty.")
+    if len(raw) > MAX_UPLOAD:
+        raise ApiError(f"Images over {MAX_UPLOAD // 1_000_000} MB can't be uploaded.", 413)
+    ext = ".jpeg" if raw[:3] == b"\xff\xd8\xff" else ".png" if raw[:8] == b"\x89PNG\r\n\x1a\n" else None
+    if ext is None:
+        raise ApiError("Only JPEG and PNG images can be uploaded.")
+    if not budget.check(len(raw))[0]:
+        raise ApiError("This upload would go over the storage budget.", 409)
+    sha = hashlib.sha256(raw).hexdigest()
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    (UPLOADS_DIR / f"{sha[:16]}{ext}").write_bytes(raw)
+    meta = {"id": sha[:16], "file": f"{sha[:16]}{ext}", "original_name": str(body.get("name") or "upload")[:200], "bytes": len(raw),
+            "sha256": sha, "uploaded_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+    (UPLOADS_DIR / f"{sha[:16]}.json").write_text(json.dumps(meta, indent=2) + "\n")
+    return meta
+
+
+def delete_upload(body: dict) -> dict:
+    stem = _upload_stem(body.get("id"))
+    for p in UPLOADS_DIR.glob(f"{stem}.*"):
+        p.unlink()
+    return uploads()
+
+
+def live_score(body: dict) -> dict:
+    """Exploratory live scoring with a baseline run's head. Bypasses execute_specialist on purpose; see experiments/explore.py."""
+    if missing := _ml_missing():
+        raise ApiError(f"Live scoring needs the ml extra ({', '.join(missing)} not installed). "
+                       "Start the app with `.venv/bin/python -m cancer_workbench app`.", 409)
+    files, items = {}, []
+    for it in body.get("items", []):
+        name = it.get("set")
+        if name == "uploads":
+            stem = _upload_stem(it.get("id"))
+            found = [p for p in UPLOADS_DIR.glob(f"{stem}.*") if p.suffix in IMAGE_TYPES]
+            if not found:
+                raise ApiError(f"Upload {stem} is gone.", 404)
+            items.append({"key": f"uploads:{stem}", "path": str(found[0])})
+        elif name in IMAGE_SETS:
+            if name not in files:
+                files[name] = {r["sample_id"]: r["file"] for r in read_manifest(IMAGE_SETS[name]["manifest"])}
+            sid = it.get("id")
+            if sid not in files[name]:
+                raise ApiError(f"{sid!r} is not in the {name} manifest.", 404)
+            # Baseline runs are BTXRD-only, so only BTXRD ids are matched against the run's split.
+            items.append({"key": f"{name}:{sid}", "path": str(IMAGE_SETS[name]["root"] / files[name][sid]),
+                          "sample_id": sid if name == "btxrd" else None})
+        else:
+            raise ApiError("Unknown image set.", 404)
+    try:
+        return explore.score(body.get("run", ""), body.get("result", ""), items)
+    except (ValueError, FileNotFoundError, RuntimeError) as e:
+        raise ApiError(str(e), 409)
+
+
 # ---------- coordinator ----------
 
 def profiles() -> dict:
@@ -308,12 +455,15 @@ GET_ROUTES = {
     "/api/catalog": catalog, "/api/route/options": route_options, "/api/storage": storage,
     "/api/jobs": lambda: {"jobs": JOBS.list()}, "/api/manifests": manifests,
     "/api/coordinator/profiles": profiles, "/api/progress": progress,
+    "/api/images": image_sets, "/api/runs": runs, "/api/uploads": uploads,
 }
-GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory}
+GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory, "/api/images/": image_set,
+                    "/api/annotation/": annotation}
 POST_ROUTES = {
     "/api/route": route, "/api/fetch/plan": fetch_plan, "/api/fetch/start": fetch_start, "/api/fetch/cancel": fetch_cancel,
     "/api/audit": audit, "/api/split": split,
     "/api/coordinator/profiles/save": save_profile, "/api/coordinator/profiles/delete": delete_profile,
     "/api/coordinator/ping": ping, "/api/coordinator/ask": ask,
     "/api/progress/mark": progress_mark, "/api/progress/owner": progress_owner,
+    "/api/runs/review": run_review, "/api/uploads/add": upload, "/api/uploads/delete": delete_upload, "/api/score": live_score,
 }

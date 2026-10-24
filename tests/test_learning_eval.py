@@ -80,6 +80,22 @@ class HeadTests(unittest.TestCase):
         self.assertEqual(sum(rep["support"].values()), rep["n"])
         self.assertIn("too narrow", rep["ci_method"])
 
+    def test_saved_head_reloads_to_same_predictions(self):
+        import numpy as np
+
+        from cancer_workbench.learning.heads import evaluate_head, load_head, save_head, train_feature_head
+
+        for classes in (("neg", "pos"), ("normal", "benign", "malignant")):
+            data = synthetic_data(classes=classes)
+            head = train_feature_head(data)
+            path = Path(tempfile.mkdtemp()) / "head.npz"
+            save_head(head, path)
+            back = load_head(path)
+            np.testing.assert_allclose(evaluate_head(back, data)["probs"], evaluate_head(head, data)["probs"], atol=1e-12)
+            self.assertEqual((back.classes, back.encoder, back.train_ids), (head.classes, head.encoder, head.train_ids))
+            with self.assertRaises(ValueError):
+                evaluate_head(back, data, "train")
+
 
 @unittest.skipUnless(HAS_ML, "needs the ml extra")
 class MetricTests(unittest.TestCase):

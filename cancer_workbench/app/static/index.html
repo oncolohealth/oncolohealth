@@ -18,6 +18,7 @@
         <li><button data-screen="catalog" class="nav-btn">Catalog</button></li>
         <li><button data-screen="downloads" class="nav-btn">Downloads</button></li>
         <li><button data-screen="datasets" class="nav-btn">Datasets</button></li>
+        <li><button data-screen="images" class="nav-btn">Images</button></li>
         <li><button data-screen="assistant" class="nav-btn">Assistant</button></li>
         <li><button data-screen="progress" class="nav-btn">Progress</button></li>
       </ul>
@@ -115,6 +116,46 @@
           </div>
         </div>
         <div id="audit-panel"></div>
+      </section>
+
+      <!-- Images -->
+      <section class="screen" id="screen-images" hidden>
+        <header class="screen-head">
+          <h1>Images</h1>
+          <p class="lede">Look at dataset and uploaded images, review a baseline run's stored predictions one image at a time, and score selected images live with that run's head.</p>
+        </header>
+        <p class="explore-banner">Exploratory software output from image-level baselines without patient grouping. Nothing on this screen is a diagnosis or a validated model.</p>
+        <form class="img-tools" id="img-tools">
+          <div class="seg" id="img-source" role="group" aria-label="Image source">
+            <button type="button" data-src="btxrd" class="on">BTXRD</button>
+            <button type="button" data-src="uploads">Uploads</button>
+          </div>
+          <label>Baseline run<select name="run"></select></label>
+          <label>Result (protocol · endpoint · encoder)<select name="result" disabled></select></label>
+        </form>
+        <div class="upload-zone" id="upload-zone" hidden>
+          <label class="btn primary upload-btn">Upload JPEG or PNG images<input type="file" id="upload-input" accept="image/jpeg,image/png" multiple></label>
+          <p class="hint">Or drop files here. Upload de-identified images only. Files stay in <code>data/uploads/</code> on this machine, unchanged, including any embedded metadata. They have no reference label, so a score on them can't be checked.</p>
+        </div>
+        <form class="img-filters" id="img-filters"></form>
+        <p class="img-summary" id="img-summary" aria-live="polite"></p>
+        <div class="split-view img-view">
+          <div>
+            <div class="img-grid" id="img-grid"></div>
+            <div class="pager" id="img-pager"></div>
+          </div>
+          <aside class="detail" id="img-detail" aria-live="polite">
+            <p class="empty">Open an image to see it full size, with its annotations, metadata and predictions.</p>
+          </aside>
+        </div>
+        <div class="action-bar" id="img-actions">
+          <span id="img-selected">Nothing selected</span>
+          <button class="btn" id="img-select-page" type="button">Select page</button>
+          <button class="btn" id="img-clear" type="button">Clear</button>
+          <button class="btn primary" id="img-score" type="button">Score selected live</button>
+        </div>
+        <p class="hint" id="img-ml"></p>
+        <div id="img-live"></div>
       </section>
 
       <!-- Assistant -->

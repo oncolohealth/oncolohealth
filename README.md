@@ -10,7 +10,7 @@ A researcher-focused workspace: **question → evidence → eligible data → co
 python3 -m cancer_workbench app                  # opens the researcher app at http://127.0.0.1:8765
 ```
 
-The app has five screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Assistant** chats with or compares any OpenAI-compatible model. **Progress** shows the team checklist. It runs on localhost only and needs nothing installed. It can't run a model on an image yet: see PROGRESS.md (C/E/G).
+The app has six screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Images** browses BTXRD and uploaded images with their annotations and metadata, replays a baseline run's stored predictions image by image (filter by errors, sort by confidence), and scores selected images live with that run's frozen encoder and head. **Assistant** chats with or compares any OpenAI-compatible model. **Progress** shows the team checklist. It runs on localhost only. Everything except live scoring needs nothing installed; live scoring needs the `ml` extra, so start the app with `.venv/bin/python -m cancer_workbench app`. Live scores are exploratory: they do not go through `execute_specialist`, no catalog model is cleared to run, and the assistant can't call them.
 
 Command-line equivalents:
 

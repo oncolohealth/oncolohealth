@@ -3,6 +3,8 @@
 Every request must carry the right Host header (blocks DNS rebinding) and
 every /api call must carry the per-launch token injected into the page
 (blocks other websites from driving this server through your browser).
+/media/ image requests carry the same token as a `t` query parameter,
+because <img> tags can't send headers.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ from pathlib import Path
 from . import api
 
 STATIC = Path(__file__).with_name("static")
+MAX_BODY = 32_000_000  # a base64 upload of api.MAX_UPLOAD plus JSON
 STATIC_FILES = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                 "/style.css": ("style.css", "text/css; charset=utf-8")}
 
@@ -28,14 +31,15 @@ def make_handler(token: str, port_ref: dict):
         server_version = "CancerWorkbench"
 
         def log_message(self, fmt, *args):
-            if "/api/jobs" not in (args[0] if args else ""):
+            line = str(args[0]) if args else ""
+            if "/api/jobs" not in line and "/media/" not in line:
                 sys.stderr.write("  %s\n" % (fmt % args))
 
-        def _send(self, status: int, body: bytes, ctype: str):
+        def _send(self, status: int, body: bytes, ctype: str, cache: str = "no-store"):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'")
             self.end_headers()
@@ -62,6 +66,8 @@ def make_handler(token: str, port_ref: dict):
                 else:
                     if path in api.POST_ROUTES:
                         n = int(self.headers.get("Content-Length") or 0)
+                        if n > MAX_BODY:
+                            return self._json(413, {"error": "Request too large."})
                         body = json.loads(self.rfile.read(n) or b"{}") if n else {}
                         return self._json(200, api.POST_ROUTES[path](body))
                 return self._json(404, {"error": f"No such endpoint: {path}"})
@@ -71,12 +77,24 @@ def make_handler(token: str, port_ref: dict):
                 traceback.print_exc()
                 return self._json(500, {"error": f"{type(e).__name__}: {e}"})
 
+        def _media(self, url):
+            if urllib.parse.parse_qs(url.query).get("t") != [token]:
+                return self._send(403, b"missing or wrong app token", "text/plain")
+            try:
+                p, ctype = api.media_file(urllib.parse.unquote(url.path[len("/media/"):]))
+            except api.ApiError:
+                return self._send(404, b"not found", "text/plain")
+            self._send(200, p.read_bytes(), ctype, cache="private, max-age=3600")
+
         def do_GET(self):
             if not self._host_ok():
                 return self._send(421, b"wrong host", "text/plain")
-            path = urllib.parse.urlsplit(self.path).path
+            url = urllib.parse.urlsplit(self.path)
+            path = url.path
             if path.startswith("/api/"):
                 return self._api("GET")
+            if path.startswith("/media/"):
+                return self._media(url)
             if path in STATIC_FILES:
                 name, ctype = STATIC_FILES[path]
                 body = (STATIC / name).read_bytes()
