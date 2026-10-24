@@ -1,5 +1,5 @@
 {
-  "_comment": "Researcher workflows the coordinator retrieves with get_workflow. Each step names a real tool or command in this repository. Written 2026-10-24 by Sebastian with Claude Code; review_status pending. They describe procedure, not results.",
+  "_comment": "Researcher workflows the coordinator retrieves with get_workflow. Each step names a real tool or command in this repository. Written 2026-10-24 by Sebastian with Claude Code; review_status pending. They describe procedure, not results. The text is Claude-written: retrieve it, but do not use it as training text for another model until its authorship has been through the rights review.",
   "review_status": "pending",
   "workflows": [
     {

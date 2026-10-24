@@ -7,7 +7,7 @@ from pathlib import Path
 from cancer_workbench.adapters import SYNTHETIC_MODEL_RECORD, SyntheticThresholdAdapter
 from cancer_workbench.coordinator import default_toolbox
 from cancer_workbench.curriculum import export_curriculum
-from cancer_workbench.curriculum.capture import CURRICULUM_DIR, capture, capture_one, load_scenarios
+from cancer_workbench.curriculum.capture import capture, capture_one, load_scenarios
 from cancer_workbench.registry import load_catalog
 
 RUN = {"name": "run_specialist", "arguments": {"model_id": SYNTHETIC_MODEL_RECORD["id"], "task": SYNTHETIC_MODEL_RECORD["tasks"][0],
@@ -40,10 +40,14 @@ class CaptureTests(unittest.TestCase):
         self.assertFalse(first["admitted_to_training"])
         self.assertNotIn("reasoning", json.dumps(first["messages"]))
 
-        stale = capture_one(_scenario(response="SYNTHETIC answer", response_for="0" * 64), box)
+        unattributed = capture_one(_scenario(response="SYNTHETIC answer", response_for=first["observed_digest"]), box)
+        self.assertEqual(unattributed["state"], "needs_response")  # a response must name its author
+        stale = capture_one(_scenario(response="SYNTHETIC answer", response_author="SYNTHETIC person", response_for="0" * 64), box)
         self.assertEqual(stale["state"], "stale_response")
-        fresh = capture_one(_scenario(response="SYNTHETIC answer", response_for=first["observed_digest"]), box)
+        fresh = capture_one(_scenario(response="SYNTHETIC answer", response_author="SYNTHETIC person",
+                                      response_for=first["observed_digest"]), box)
         self.assertEqual(fresh["state"], "pending_review")  # run ids and times differ; the digest ignores them
+        self.assertIn("Response author: SYNTHETIC person", fresh["review"]["rights_notes"])
         self.assertEqual(fresh["messages"][-1], {"role": "assistant", "content": "SYNTHETIC answer"})
 
     def test_scenarios_refuse_lineage_groups_spanning_splits(self):
@@ -64,7 +68,7 @@ class CaptureTests(unittest.TestCase):
 
 class AdmissionTests(unittest.TestCase):
     def setUp(self):
-        self.rec = capture_one(_scenario(response="SYNTHETIC answer"), _box())
+        self.rec = capture_one(_scenario(response="SYNTHETIC answer", response_author="SYNTHETIC person"), _box())
         self.rec["state"] = "pending_review"
 
     def test_pending_candidates_are_never_exported(self):
@@ -76,22 +80,7 @@ class AdmissionTests(unittest.TestCase):
         for split in ("development", "evaluation_reserved"):
             self.assertEqual(export_curriculum([dict(self.rec, split=split)]), [])
         self.assertEqual(export_curriculum([dict(self.rec, state="stale_response")]), [])
-
-
-class ShippedCurriculumTests(unittest.TestCase):
-    def test_shipped_candidates_match_scenarios_and_stay_pending(self):
-        scenarios = load_scenarios()
-        lines = (CURRICULUM_DIR / "candidates.jsonl").read_text().splitlines()
-        candidates = [json.loads(line) for line in lines]
-        self.assertEqual([c["conversation_id"] for c in candidates], [s["id"] for s in scenarios])
-        self.assertTrue(25 <= len(candidates) <= 50)
-        self.assertTrue(all(s.get("response") and s.get("response_for") for s in scenarios))
-        for c in candidates:
-            self.assertEqual(c["state"], "pending_review", c["conversation_id"])
-            self.assertEqual(c["review"]["status"], "pending")
-            self.assertFalse(c["admitted_to_training"])
-            self.assertTrue(c["calls"] and all(c2["schema"] and "observed" in c2 for c2 in c["calls"]))
-        self.assertEqual(export_curriculum(candidates), [])
+        self.assertEqual(export_curriculum([dict(self.rec, response_author=None)]), [])
 
 
 if __name__ == "__main__":

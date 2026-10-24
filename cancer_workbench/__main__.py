@@ -199,6 +199,9 @@ def _curriculum(argv: list[str]) -> int:
                                  description="Capture candidate conversations from observed tool results (pending review; never admitted automatically).")
     ap.add_argument("cmd", choices=["capture"])
     a = ap.parse_args(argv)
+    if not (cap.CURRICULUM_DIR / "scenarios.json").exists():
+        print(f"No {cap.CURRICULUM_DIR / 'scenarios.json'} yet; see curriculum/README.md for its format.", file=sys.stderr)
+        return 1
     out = cap.capture()
     manifest = json.loads((out / "manifest.json").read_text())
     print(json.dumps({k: manifest[k] for k in ("candidates", "tool_calls", "counts")}, indent=2))

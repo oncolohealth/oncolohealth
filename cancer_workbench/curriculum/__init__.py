@@ -20,7 +20,8 @@ def export_curriculum(records: list[dict]) -> list[dict]:
     for rec in records:
         review = rec.get("review") or {}
         if (review.get("status") != "reviewed" or review.get("rights_status") != "cleared"
-                or rec.get("split") != "train_candidate" or rec.get("state") != "pending_review"):
+                or rec.get("split") != "train_candidate" or rec.get("state") != "pending_review"
+                or not rec.get("response_author")):
             continue
         calls = rec.get("calls") or []
         if not calls or any("observed" not in c or not c.get("schema") for c in calls):

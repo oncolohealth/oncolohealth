@@ -1,5 +1,5 @@
 {
-  "_comment": "Knowledge cards attached to catalog records by load_catalog and returned by get_record. Written 2026-10-24 by Sebastian with Claude Code from local files, catalog records and the cited sources; review_status pending. Local hashes are copied from each PROVENANCE.json.",
+  "_comment": "Knowledge cards attached to catalog records by load_catalog and returned by get_record. Written 2026-10-24 by Sebastian with Claude Code from local files, catalog records and the cited sources; review_status pending. Local hashes are copied from each PROVENANCE.json. The text is Claude-written: retrieve it, but do not use it as training text for another model until its authorship has been through the rights review.",
   "review_status": "pending",
   "cards": {
     "rad-dino": {

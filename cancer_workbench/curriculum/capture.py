@@ -9,9 +9,10 @@ candidate per scenario with call/result ids, exact schemas, source identities
 and pending review fields.
 
 A drafted response is tied to the digest of the observed results it was
-written against (`response_for`). If a later capture observes something
-different, the candidate is marked `stale_response` instead of silently pairing
-old prose with new results. Nothing here admits a candidate to training; see
+written against (`response_for`) and names its author (`response_author`, a
+person or a model). If a later capture observes something different, the
+candidate is marked `stale_response` instead of silently pairing old prose with
+new results. A response without an author is treated as missing. Nothing here admits a candidate to training; see
 `export_curriculum`.
 """
 from __future__ import annotations
@@ -30,7 +31,9 @@ SPLITS = ("train_candidate", "development", "evaluation_reserved")
 # Fields that change on every run and say nothing about what was observed.
 VOLATILE = {"run_id", "created_at", "seconds", "latency_s"}
 THINKING_MODE = "off: scripted tool calls and a drafted final response; no reasoning trace is recorded or included"
-RESPONSE_ORIGIN = "drafted by Claude Code (Claude Opus 5.5) from the observed tool results; pending human review"
+RIGHTS_NOTE = ("Tool results come from this repository's catalog and code. No patient identifiers; image references are "
+               "BTXRD ids (CC BY 4.0) only. Response author: {author}. A model-written response is that model's output: "
+               "check its provider's terms on training other models before admission, or have a person write it.")
 
 
 def _canonical(value: Any) -> str:
@@ -107,7 +110,7 @@ def capture_one(scenario: dict, toolbox) -> dict:
             call_ids.append(call_id)
             calls.append(ToolCall(call_id, call["name"], json.dumps(call["arguments"], sort_keys=True)))
         script.append(ChatResult(None, calls, "tool_calls", "scripted-capture", "capture"))
-    final = scenario.get("response")
+    final = scenario.get("response") if scenario.get("response_author") else None
     script.append(ChatResult(final or "[response pending]", [], "stop", "scripted-capture", "capture"))
     record = run_turn(ScriptedProvider(script, profile="scripted-capture"), toolbox, scenario["user"], max_steps=len(script))
     schemas = {s["function"]["name"]: s for s in toolbox.schemas()}
@@ -142,10 +145,11 @@ def capture_one(scenario: dict, toolbox) -> dict:
         "messages": messages,
         "calls": calls,
         "observed_digest": digest,
-        "response_origin": RESPONSE_ORIGIN if final else None,
+        "response_author": scenario.get("response_author") if final else None,
         "state": state,
         "review": {"status": "pending", "reviewer": None, "reviewed_at": None,
-                   "rights_status": "pending", "rights_notes": scenario.get("rights_notes", "Tool results come from this repository's catalog and code. No patient identifiers; image references are BTXRD ids (CC BY 4.0) only."),
+                   "rights_status": "pending",
+                   "rights_notes": scenario.get("rights_notes", RIGHTS_NOTE.format(author=scenario.get("response_author") or "none yet")),
                    "notes": None},
         "admitted_to_training": False,
     }
