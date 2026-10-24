@@ -36,6 +36,49 @@ def _read_json(path: Path, root: Path):
     return json.loads(data, parse_constant=_reject_constant), len(data)
 
 
+def execution_review(preview: dict, *, recorded: bool = False) -> dict:
+    """Summarize the existing draft's evidence limits, without checking files or authorizing work.
+
+    A clean record audit and a pinned declaration are not authenticated medical
+    evidence or measured runtime readiness. Saved drafts describe snapshots only.
+    This view adds no browser-supplied approvals or second planning state.
+    """
+    plan = preview.get("plan") if isinstance(preview.get("plan"), dict) else {}
+    audit = preview.get("audit") if isinstance(preview.get("audit"), dict) else {}
+    manifest = preview.get("manifest") if isinstance(preview.get("manifest"), dict) else {}
+    synthetic = preview.get("synthetic") is True
+    blockers = plan.get("blockers")
+    if not isinstance(blockers, list) or any(not isinstance(item, str) for item in blockers):
+        blockers = ["Draft blockers are missing or malformed; review the recorded inputs."]
+    return {
+        "basis": "saved_snapshot" if recorded else "current_preview",
+        "execution_authorized": False, "dispatch_available": False,
+        "model_id": plan.get("model_id"), "model_revision": plan.get("model_revision"),
+        "dataset_id": audit.get("dataset_id"), "manifest_sha256": manifest.get("sha256"),
+        "input_binding": ("Saved input snapshot; current files have not been rechecked." if recorded else
+                          "Synthetic fixture records only." if synthetic else
+                          "The manifest bytes were read and hashed for this preview; source medical files were not checked."),
+        "evidence_scope": ("Synthetic software example; no patient or medical evidence." if synthetic else
+                           "Declared manifest records only. Patient/lesion identity, diagnostic references, label adjudication and permissions require source review."),
+        "draft_blockers": list(blockers),
+        "required_review": [
+            {"code": "protocol", "label": "Task and protocol",
+             "detail": "Review the research question, endpoint, eligible cohort, evaluation unit, exclusions, preprocessing, split/overlap policy, metrics, thresholds and seeds."},
+            {"code": "artifacts", "label": "Model and input artifacts",
+             "detail": "Verify actual permitted weights, processor/configuration and source inputs, measured identities and the intended adapter/runtime. A revision or manifest hash alone is insufficient."},
+            {"code": "evidence", "label": "Scientific evidence and reuse rights",
+             "detail": "Review genuine grouping and diagnostic references, contradictory records and the exact reuse permission. Inference permission does not imply adaptation or distillation permission."},
+            {"code": "resources", "label": "Runtime and resource scope",
+             "detail": "Verify dependencies, hardware, usable free space, storage destinations and explicit compute/time limits. The configured storage budget is not a measured free-disk or GPU/RAM check."},
+            {"code": "controls", "label": "Logs, outputs and cancellation",
+             "detail": "Specify log/output/checkpoint destinations, failure recovery and cancellation behavior. This planning workspace does not dispatch jobs or implement job cancellation."},
+            {"code": "authorization", "label": "Execution authorization",
+             "detail": "Obtain a specific human instruction covering the reviewed workload and resources. Saving or reopening a draft grants no execution permission."},
+        ],
+        "note": "Review requirements remain open even when the limited draft checks pass. No model, scientific evidence or runtime was authenticated by this summary.",
+    }
+
+
 def save_draft(root: Path, preview: dict, *, source_revision: str) -> dict:
     """Persist a freshly computed draft. Never accepts an execution-ready state."""
     if (preview.get("plan", {}).get("state") not in {"blocked", "ready_for_review"}
@@ -48,6 +91,7 @@ def save_draft(root: Path, preview: dict, *, source_revision: str) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
     doc = {**preview, "schema_version": 1, "kind": "experiment_draft", "id": identifier,
            "created_at": dt.datetime.now(dt.timezone.utc).isoformat(), "source_revision": source_revision}
+    doc["execution_review"] = execution_review(doc, recorded=True)
     # Serialize before opening the file. A failed write removes only this newly
     # created file; an identifier collision never overwrites another draft.
     payload = json.dumps(doc, indent=2, allow_nan=False) + "\n"
@@ -97,6 +141,9 @@ def detail(root: Path, key: str) -> dict:
         value = _validate_draft(value)
         if value.get("id") != parts[1]:
             raise ValueError("Saved draft identity does not match its file.")
+        # Recompute the display from recorded inputs, including for legacy drafts.
+        # A hand-edited saved summary cannot assert current checks or permission.
+        value["execution_review"] = execution_review(value, recorded=True)
         return {"key": key, "kind": "draft", "file": f"drafts/{parts[1]}.json", "record": value}
     if (len(parts) == 3 and parts[0] == "run" and _NAME.fullmatch(parts[1])
             and parts[2].isdigit() and len(parts[2]) < 8):

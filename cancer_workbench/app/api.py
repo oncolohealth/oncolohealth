@@ -298,8 +298,10 @@ def experiment_preview(body: dict) -> dict:
         audit["ready_for_training"] = False
     measured = {"used_bytes": budget.usage_bytes(), "planned_bytes": planned, "limit_bytes": budget.budget_bytes()}
     plan = plan_experiment(body["reuse_path"], model, audit, measured)
-    return {"question": question.strip(), "synthetic": synthetic, "manifest": identity, "audit": audit, "plan": plan,
-            "note": "Draft only. The question is unreviewed. No weights, data, training or specialist execution is dispatched."}
+    preview = {"question": question.strip(), "synthetic": synthetic, "manifest": identity, "audit": audit, "plan": plan,
+               "note": "Draft only. The question is unreviewed. No weights, data, training or specialist execution is dispatched."}
+    preview["execution_review"] = workspace.execution_review(preview)
+    return preview
 
 
 def experiment_save(body: dict) -> dict:
