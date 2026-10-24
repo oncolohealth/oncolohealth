@@ -25,7 +25,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 
 | Path | Role | Status |
 |---|---|---|
-| `cancer_workbench/__main__.py` | CLI dispatcher: `app`, `fetch`, `catalog`, `route`, `coordinator`, `btxrd` | done |
+| `cancer_workbench/__main__.py` | CLI dispatcher: `app`, `fetch`, `catalog`, `route`, `coordinator`, `btxrd`, `baseline` | done |
 | `common/types.py` | Shared types: `EvidenceState`, `Permission`, `ResultStatus`, `ResultEnvelope` | done; changes need cross-workstream review |
 | `common/paths.py` | `PROJECT_ROOT`, `CATALOG_DIR`, `CONFIG_DIR`, `DATA_DIR`, `MODELS_DIR` (env-overridable) | done |
 | `registry/store.py` | `load_catalog()` → `Catalog` (models + datasets tagged with `_kind`, duplicate-id check, lookup, search) | done |
@@ -33,6 +33,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `routing/router.py` | `route_models`, `compatibility_reasons`, `runnable_blockers` | done (basic checks only, see docstring) |
 | `adapters/base.py` | `Adapter` protocol + `execute_specialist`, the only way a model runs | done |
 | `adapters/synthetic.py` | `SyntheticThresholdAdapter` + `SYNTHETIC_MODEL_RECORD`, test-only fakes | done |
+| `adapters/encoder.py` | `FrozenEncoderAdapter` (RAD-DINO, ResNet-50): shared pad-to-square preprocessing, safetensors-only loading; `ml` extra, import explicitly | done |
 | `acquisition/sources.py` | Per-publisher resolvers (Hugging Face, Zenodo, figshare, TCIA, plain URL) → `FilePlan`s | done |
 | `acquisition/download.py` | Resumable download, checksum verification, safe zip extraction, cross-host auth stripping | done |
 | `acquisition/fetch.py` | Plan/fetch catalog records, write `PROVENANCE.json`; `fetch` CLI | done |
@@ -48,8 +49,12 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
 | `experiments/plan.py` | `plan_experiment` | stub |
-| `learning/` | Frozen-encoder features, classifier heads, distillation | stub (contracts in docstrings) |
-| `evaluation/` | Metrics, calibration, thresholds, leakage vs. pretraining | stub (contracts in docstrings) |
+| `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, records; `baseline` CLI | done (`ml` extra) |
+| `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing hash | done (`ml` extra) |
+| `learning/heads.py` | `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals | done (`ml` extra; distillation not implemented) |
+| `evaluation/metrics.py` | `binary_report`, `multiclass_report` (bootstrap CIs), `calibration` | done (`ml` extra) |
+| `evaluation/thresholds.py` | `choose_threshold` on development data (`youden`, `sensitivity>=X`) | done (`ml` extra) |
+| `evaluation/` (rest) | Patient-level aggregation, leakage vs. pretraining data | stub (contracts in package docstring) |
 | `retrieval/` | PubMed search + MedCPT rerank | stub (contract in docstring) |
 | `curriculum/` | Export reviewed tool-use transcripts | stub (contract in docstring) |
 | `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token | done |
@@ -66,9 +71,10 @@ Stub modules raise `NotImplementedError`. Their package docstring is the contrac
 common          ◄── everything
 registry        ◄── acquisition.fetch, coordinator.tools, app, __main__
 routing         ◄── adapters.base, coordinator.tools, app, __main__
-adapters        ◄── coordinator.tools, app
+adapters        ◄── coordinator.tools, app, learning.features (encoder)
 acquisition     ◄── datasets.audit + datasets.btxrd (hash_file), app, __main__
-datasets        ◄── app, __main__
+datasets        ◄── app, __main__, experiments.btxrd_baseline
+learning, evaluation ◄── experiments.btxrd_baseline
 coordinator     ◄── app, __main__
 app             ◄── __main__
 ```
@@ -131,6 +137,8 @@ browser → `server.Handler` checks the Host header and `X-CW-Token` → looks u
 | `configs/coordinator.example.json` | Example endpoint profiles (vLLM, SGLang, Ollama, LM Studio, llama.cpp) | yes |
 | `configs/coordinator.json` | Local profiles, written by the app | no |
 | `data/<id>/`, `models/<id>/` | Downloaded artifacts + `PROVENANCE.json` (`CW_DATA_DIR`, `CW_MODELS_DIR`) | no |
+| `runs/features/`, `runs/<run-id>/` | Cached features; per-run splits, predictions, `results.json`, `records.json`, `summary.md` | no |
+| `.venv/` | `uv venv` with the `ml` extra | no |
 | `PROGRESS.md` | Checklist, also edited in place by the Progress screen | yes |
 | `docs/` | `big-machine.md` (GPU setup), `reports/` (workstream deliverables) | yes |
 
@@ -138,7 +146,7 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 
 ## Tests
 
-`python3 -m unittest discover -s tests`, standard library only, synthetic fixtures only.
+`python3 -m unittest discover -s tests` runs the standard-library suite; `.venv/bin/python -m unittest discover -s tests` also runs the ML tests. Synthetic fixtures only.
 
 | File | Covers |
 |---|---|
@@ -146,6 +154,7 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_acquisition.py` | Download, resume and verification; zip safety |
 | `test_datasets.py` | Audit findings, grouped splits |
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
+| `test_learning_eval.py` | Split protocols, heads, metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
 | `test_app.py` | `PROGRESS.md` editing, API functions, server Host and token guards |
 | `helpers.py` | `LocalServer` fixture |
@@ -156,8 +165,9 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 |---|---|---|
 | A model or dataset | `catalog/*.json` record | `catalog validate`; resolver in `acquisition/sources.py` if the publisher is new |
 | A real specialist | `adapters/<name>.py` implementing `Adapter` | catalog `adapter` field; pass the instance in the `adapters` dict |
+| Another frozen encoder | an entry in `adapters/encoder.py::ENCODERS` (+ loader if new architecture) | `--encoder` choice in `experiments/btxrd_baseline.py::ENCODERS` |
 | Another dataset's manifest | `datasets/<name>.py`, following `btxrd.py` | Datasets screen picks up `data/<id>/*.csv` automatically |
-| Feature extraction or heads | `learning/` | consumes manifests; hands predictions to `evaluation/` |
+| A new split protocol or endpoint | `experiments/btxrd_baseline.py` (`PROTOCOLS`, `CLASSES`) and `datasets/btxrd.py::ENDPOINTS` | `baseline --protocol/--endpoint` |
 | A coordinator tool | `coordinator/tools.py::default_toolbox` | JSON schema + handler returning observed data |
 | An app endpoint | function in `app/api.py` + entry in a route table | call it from `app/static/app.js` via `api()` |
 | A CLI command | `__main__.py` | add to `commands` |
