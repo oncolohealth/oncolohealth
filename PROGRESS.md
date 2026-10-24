@@ -64,13 +64,13 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] Encoder adapter (`adapters/encoder.py`) wrapping a frozen backbone → embedding envelope (RAD-DINO, ResNet-50; contract in `docs/reports/C-model-cards.md`)
 - [ ] Bone classifier adapter once E produces a head. Heads now persist (`learning/heads.py::save_head`/`load_head`, plain arrays, no pickle) and the Images screen scores with them through a separate exploratory path (`experiments/explore.py`); a gated adapter through `execute_specialist` still needs a reviewed catalog promotion
 - [ ] Full input validation: geometry, bit depth, channels, normalization
-- [ ] Convert exceptions from adapter validation into failed result envelopes (H source check)
+- [x] Convert exceptions from adapter validation into failed result envelopes (H source check); synthetic regression verifies that `run` is not called after validation throws
 - [ ] Promote models' `evidence_state` via PR as each one is actually run
 
 ### E: Transfer learning
 - [x] `learning/features.py::extract_features` (RAD-DINO and ResNet-50 over all 3,746 BTXRD images; cached in `runs/features/`)
 - [x] `learning/heads.py::train_feature_head` / `evaluate_head` (logistic / linear head). Existing exploratory report: `docs/reports/E-btxrd-exploratory-baseline.md`. Reported image-level and source-holdout estimates have not been independently reproduced in this checkout; they do not establish equivalence between encoders or medical performance
-- [ ] Pre-fit train/val identity, duplicate, shape, finite-feature and class-coverage validation (H source check); reject leakage before C selection
+- [x] Pre-fit train/val identity, duplicate, shape, finite-feature and class-coverage validation (H source check); reject declared overlap before C selection. Duplicate groups and file hashes now pass from the BTXRD manifest to this check. Unknown patient identity still prevents independence claims
 - [ ] Optional: teacher-student distillation, after a baseline exists and with teacher rights checked
 
 ### F: Evaluation
@@ -82,7 +82,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 ### D: Coordinator
 - [ ] 🔒 Live Qwen endpoint. Blocked on the GPU machine: confirm its VRAM to choose BF16 (~80 GB) or FP8 (~40–48 GB). See `docs/big-machine.md`
 - [ ] Develop locally against a small model via an Ollama/LM Studio profile meanwhile
-- [ ] Enforce coordinator tool argument types/enums and nested schema constraints before calling handlers (H source check)
+- [x] Enforce coordinator tool argument types/enums and the documented nested schema subset before calling handlers (H source check); synthetic tests cover rejected values and unchanged valid arguments
 - [ ] Held-out workflow evaluation set: missing inputs, unknown models, catalog-only models, tool failures, unsupported requests, conflicting sources
 - [ ] Compare profiles on that set (routing accuracy, invalid args, invented results, latency)
 - [ ] `retrieval/`: PubMed E-utilities search + MedCPT rerank; citation-support check
@@ -149,7 +149,39 @@ Historical verification from the incoming branch's source checkout:
 
 - Based on clean merged main `bff6ea43ca8996d1a6959ebbb1a1bea5bc274089` at `/home/inamqasimi/Documents/BETA_TEST`.
 - B/F ownership and source-check attribution corrected to Inam Qasimi. `.mailmap` maps the earlier assistant author identity for Git reporting; future branch commits use the repository's configured human email. Existing shared commit objects are unchanged.
-- `docs/reports/F-metric-hardening.md` describes the fix, compatibility changes and verification. Scientific endpoint/patient/source evidence and independent review remain unresolved. E/C/D source findings remain open.
+- `docs/reports/F-metric-hardening.md` describes the fix, compatibility changes and verification. Scientific endpoint/patient/source evidence and independent review remain unresolved. E/C/D source findings remained open at that checkpoint and are addressed in the subsequent demo-readiness branch below.
 - Verified with a temporary test environment: NumPy 2.5.4, scikit-learn 1.9.1 and SciPy 1.18.1. **122 tests: 121 pass, 1 skipped** (Torch preprocessing unavailable), including all 24 new tests. Before this change, merged main ran **98 tests: 97 pass, 1 skipped** in the same environment and emitted single-class metric warnings; the patched suite does not emit those warnings.
 - Plain `python3`: **122 tests: 93 pass, 29 skipped** because optional scikit-learn/Torch tests are unavailable; the newly added plain-Python summary tests pass. Before this change: **98 tests: 91 pass, 7 skipped**.
 - Catalog remains 16 models and 14 datasets. No UI/learning/coordinator/adapter/catalog/shared-contract changes, medical data downloads, inference, training or evidence promotions.
+
+## Inam Qasimi: execution checks and presentation follow-up (2026-10-24)
+
+- Separate `codex/demo-readiness` branch, based on `df45e78`, in an isolated local
+  clone. The user's `/home/inamqasimi/Documents/BETA_TEST` checkout and checked-out
+  branch are unchanged. This work is not merged or pushed.
+- E: reject invalid feature tables and declared sample/patient/duplicate/hash
+  overlap before fitting or selecting a head. Manifest duplicate/hash metadata
+  reaches the head inputs. Missing patient IDs remain unknown.
+- C: adapter validation exceptions become failed result envelopes, with identity
+  and synthetic provenance retained. D: enforce the documented tool-schema
+  subset before invoking handlers, without coercion.
+- Added 17 synthetic regression tests. Available ML environment: **139 discovered,
+  138 pass, 1 Torch preprocessing skip**. Plain Python: **139 discovered, 103 pass,
+  36 optional-ML skips**. Catalog: 16 models and 14 datasets valid. The full socket
+  tests passed after the sandbox network grant. No medical workload was run.
+- Added `scripts/demo_observed_results.py`; actual catalog refusal, argument
+  rejection, synthetic success/failure and scripted observed-result feedback
+  execute offline. This does not evaluate live LLM reasoning.
+- Browser navigation checked on all six screens in a source-only desktop app.
+  Catalog compatibility/refusal and the built-in 240-row synthetic audit worked.
+  Screenshots captured for the presentation. This is not a full light/dark/mobile
+  QA pass; downloaded-image inference remains unavailable in this checkout.
+- Prepared an editable 12-slide presentation (seven-slide pitch, four appendices,
+  alternate cover), original conceptual artwork, native chart/tables, real app
+  captures, speaker notes, a timed demo script, claims/source ledger, researcher
+  feedback guide and proposed cloud sequence. These are separate chat outputs,
+  not app features. Sponsor integrations/public cloud hosting remain proposed.
+- Next: independent code review and full Torch regression checks before merging;
+  genuine patient mapping or an independent cohort and protocol review before
+  stronger scientific claims; configured live endpoint for held-out coordinator
+  evaluation. `docs/reports/demo-readiness.md` records details and limits.

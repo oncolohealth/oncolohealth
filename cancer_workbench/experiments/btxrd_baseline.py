@@ -53,6 +53,8 @@ def head_inputs(er: list[dict], f: dict, index: dict[str, int], endpoint: str) -
     col = lambda k: np.array([r[k] for r in er])
     return {"features": f["features"][idx], "labels": col("label"), "partitions": col("partition"), "sample_ids": col("sample_id"),
             "patient_ids": col("patient_id"), "classes": CLASSES[endpoint],
+            "duplicate_groups": np.array([r.get("duplicate_group", "") for r in er]),
+            "image_hashes": np.array([r.get("sha256", "") for r in er]),
             "encoder": {"encoder_id": str(f["encoder_id"]), "revision": f["revision"], "preprocessing_hash": f["preprocessing_hash"]}}
 
 
@@ -134,7 +136,9 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
                 rec = ExperimentRecord(
                     id=f"{out_dir.name}/{run_id}", path="transfer_learning", task=f"btxrd_{endpoint}_image",
                     cohort=f"btxrd {RELEASE}; manifest sha256 {manifest_sha}", split=f"{split_path.name} ({protocol}, seed {seed}); "
-                    "grouping: none available, each image is its own group", model=f"{enc}@{f['revision']}",
+                    "grouping: declared duplicate groups in image_stratified; centers held out in source_holdout; "
+                    "declared cross-partition overlap rejected before fitting; patient identities unavailable",
+                    model=f"{enc}@{f['revision']}",
                     source_revision=source_rev, environment=_environment(str(f["device"])), preprocessing=preprocessing(enc),
                     objective="logistic regression on standardized frozen features, balanced class weights; C and threshold chosen on val",
                     metrics=["roc_auc", "pr_auc", "sensitivity", "specificity", "calibration"] if len(CLASSES[endpoint]) == 2

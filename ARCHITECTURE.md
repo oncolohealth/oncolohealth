@@ -128,6 +128,20 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 **Coordinator turn** (`coordinator ask` CLI or the Assistant screen):
 `make_provider(profile)` → `run_turn(provider, default_toolbox(catalog), question)`. The model sees `SYSTEM_PROMPT` and tool schemas, and each tool call goes through `ToolBox.call`, which validates arguments and returns `{result}` or `{error}`. The turn ends when the model answers without tool calls, or after `max_steps`. The app runs several profiles in parallel for side-by-side comparison.
 
+`ToolBox.call` validates types/enums and the documented nested schema subset
+before handler invocation. It keeps top-level arguments closed, preserves
+declared nested open objects and rejects non-finite JSON values. This is not
+a full JSON Schema engine. `scripts/demo_observed_results.py` provides an
+offline synthetic/scripted demonstration of observed outcomes.
+
+**Feature-head input checks:** `train_feature_head` validates aligned feature
+tables, finite numeric data, class/encoder declarations, split membership and
+train/validation class coverage before any learner is constructed. Declared
+sample, patient, duplicate-group and image-hash overlap is rejected before C
+selection. `head_inputs` carries BTXRD duplicate/hash metadata. Unknown patient
+IDs still prevent independence claims; these checks do not discover near
+duplicates or unrecorded patient links. Saved-head file format is unchanged.
+
 **Audit and split** (Datasets screen):
 `read_manifest` → `audit_dataset(spec, rows)` → `grouped_split(rows, fractions, seed)` → re-audit. A saved split goes to `data/<id>/splits/<name>.csv` with a `.json` sidecar recording the source manifest hash, fractions, seed and audit.
 

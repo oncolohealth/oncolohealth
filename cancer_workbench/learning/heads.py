@@ -37,13 +37,60 @@ def _rows(data: dict, partition: str):
     return idx
 
 
-def _check(data: dict) -> None:
+def _check(data: dict) -> dict:
+    """Normalize and validate a feature table before any fitting or prediction.
+
+    Empty patient/duplicate identities remain unknown. These checks detect
+    declared overlap only and cannot establish independence from missing IDs.
+    """
+    import numpy as np
+
     for k in ("features", "labels", "partitions", "sample_ids", "classes", "encoder"):
         if k not in data:
             raise ValueError(f"data lacks {k!r}")
-    unknown = set(data["labels"].tolist()) - set(data["classes"])
+    checked = dict(data)
+    classes = data["classes"]
+    if not isinstance(classes, (list, tuple)) or len(classes) < 2 or any(
+            not isinstance(c, str) or not c.strip() for c in classes) or len(set(classes)) != len(classes):
+        raise ValueError("classes must contain at least two unique nonempty strings")
+    X = np.asarray(data["features"])
+    if X.ndim != 2 or 0 in X.shape or X.dtype.kind not in "iuf":
+        raise ValueError("features must be a nonempty real numeric N x D array")
+    X = X.astype(np.float64)
+    if not np.isfinite(X).all():
+        raise ValueError("features must be finite")
+    checked["features"] = X
+    for key in ("labels", "partitions", "sample_ids", "patient_ids", "duplicate_groups", "image_hashes"):
+        if key not in data:
+            continue
+        col = np.asarray(data[key])
+        if col.ndim != 1 or len(col) != len(X):
+            raise ValueError(f"{key} must be one-dimensional and aligned with features")
+        if any(not isinstance(v, str) for v in col.tolist()):
+            raise ValueError(f"{key} must contain strings")
+        if key in ("labels", "partitions", "sample_ids") and any(not v.strip() for v in col.tolist()):
+            raise ValueError(f"{key} must contain nonempty strings")
+        checked[key] = col
+    if len(set(checked["sample_ids"].tolist())) != len(X):
+        raise ValueError("sample_ids must be unique; duplicate samples cannot enter head fitting")
+    if set(checked["partitions"].tolist()) - {"train", "val", "test"}:
+        raise ValueError("partitions must be train, val or test")
+    unknown = set(checked["labels"].tolist()) - set(classes)
     if unknown:
         raise ValueError(f"labels outside the declared classes: {sorted(unknown)}")
+    enc = data["encoder"]
+    if not isinstance(enc, dict) or any(not isinstance(enc.get(k), str) or not enc[k].strip()
+                                          for k in ("encoder_id", "revision", "preprocessing_hash")):
+        raise ValueError("encoder must declare nonempty encoder_id, revision and preprocessing_hash")
+    for key in ("patient_ids", "duplicate_groups", "image_hashes"):
+        seen = {}
+        for identity, part in zip(checked.get(key, []), checked["partitions"]):
+            if not identity.strip():
+                continue
+            if identity in seen and seen[identity] != part:
+                raise ValueError(f"{key} overlap across {seen[identity]} and {part} partitions")
+            seen[identity] = part
+    return checked
 
 
 def _auc(y, probs, n_classes):
@@ -59,12 +106,22 @@ def train_feature_head(data: dict[str, Any], *, c_grid=C_GRID, teacher_weight: f
 
     if teacher_weight:
         raise NotImplementedError("distillation needs a reviewed teacher and permission; not implemented")
-    _check(data)
+    data = _check(data)
+    if isinstance(c_grid, (str, bytes)):
+        raise ValueError("c_grid must contain finite positive numbers")
+    try:
+        c_grid = tuple(c_grid)
+    except TypeError as e:
+        raise ValueError("c_grid must contain finite positive numbers") from e
+    if not c_grid or any(isinstance(c, (bool, np.bool_)) or not isinstance(c, (int, float, np.integer, np.floating))
+                         or not np.isfinite(c) or c <= 0 for c in c_grid):
+        raise ValueError("c_grid must contain finite positive numbers")
     classes = list(data["classes"])
     y = np.array([classes.index(l) for l in data["labels"]])
     tr, va = _rows(data, "train"), _rows(data, "val")
-    if len(set(y[tr])) < len(classes):
-        raise ValueError("train rows do not cover every class")
+    for name, idx in (("train", tr), ("val", va)):
+        if len(set(y[idx])) < len(classes):
+            raise ValueError(f"{name} rows do not cover every class")
     X = data["features"].astype(np.float64)
     mean, scale = X[tr].mean(0), X[tr].std(0) + 1e-6
     Z = (X - mean) / scale
@@ -84,7 +141,7 @@ def evaluate_head(model: HeadModel, data: dict[str, Any], partition: str = "test
     """Predict `partition` rows. Refuses leakage or a mismatched encoder/class order; computes no headline metrics."""
     import numpy as np
 
-    _check(data)
+    data = _check(data)
     if dict(data["encoder"]) != model.encoder:
         raise ValueError(f"encoder mismatch: head trained on {model.encoder}, data from {dict(data['encoder'])}")
     if list(data["classes"]) != model.classes:

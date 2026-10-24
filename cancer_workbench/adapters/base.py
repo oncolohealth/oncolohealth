@@ -47,7 +47,11 @@ def execute_specialist(model: dict, request: dict, adapters: dict[str, Adapter])
         return ResultEnvelope(status=ResultStatus.REJECTED, errors=problems, **env)
 
     env["synthetic"] = bool(getattr(adapter, "synthetic", False))
-    input_errors = adapter.validate(request.get("inputs", {}))
+    try:
+        input_errors = adapter.validate(request.get("inputs", {}))
+    except Exception as e:
+        return ResultEnvelope(status=ResultStatus.FAILED,
+                              errors=[f"input validation failed: {type(e).__name__}: {e}"], **env)
     if input_errors:
         return ResultEnvelope(status=ResultStatus.REJECTED, errors=input_errors, **env)
     try:

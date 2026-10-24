@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 from typing import Any, Callable
 
 from ..adapters.base import Adapter, execute_specialist
@@ -46,16 +47,85 @@ class ToolBox:
             return {"error": f"arguments are not valid JSON: {e}"}
         if not isinstance(args, dict):
             return {"error": "arguments must be a JSON object"}
-        missing = [k for k in tool.parameters.get("required", []) if k not in args]
-        if missing:
-            return {"error": f"missing required arguments: {missing}"}
-        unknown = set(args) - set(tool.parameters.get("properties", {}))
-        if unknown:
-            return {"error": f"unknown arguments: {sorted(unknown)}"}
+        # Top-level tool arguments remain closed, as before. Nested objects
+        # follow their own schemas (open unless additionalProperties is false).
+        schema = dict(tool.parameters, additionalProperties=False)
+        problems = _argument_errors(args, schema)
+        if problems:
+            return {"error": "; ".join(problems)}
         try:
             return {"result": tool.handler(**args)}
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _argument_errors(value: Any, schema: dict, path: str = "arguments") -> list[str]:
+    """Validate the JSON-schema subset used by this toolbox, without coercion.
+
+    Supports type, enum, object properties/required/additionalProperties, array
+    items/minItems/maxItems, string minLength/maxLength and numeric bounds.
+    This is a tool-argument boundary, not a general JSON Schema implementation.
+    """
+    kinds = {
+        "object": lambda x: isinstance(x, dict),
+        "array": lambda x: isinstance(x, list),
+        "string": lambda x: isinstance(x, str),
+        "integer": lambda x: isinstance(x, int) and not isinstance(x, bool),
+        "number": lambda x: isinstance(x, (int, float)) and not isinstance(x, bool),
+        "boolean": lambda x: isinstance(x, bool),
+        "null": lambda x: x is None,
+    }
+    kind = schema.get("type")
+    allowed = kind if isinstance(kind, list) else [kind]
+    if kind is not None and not any(k in kinds and kinds[k](value) for k in allowed):
+        return [f"{path} must have type {kind}"]
+    if isinstance(value, float) and not math.isfinite(value):
+        return [f"{path} must be finite"]
+    if "enum" in schema and not any(_same_json(value, item) for item in schema["enum"]):
+        return [f"{path} must be one of {schema['enum']}"]
+    errors = []
+    if isinstance(value, dict):
+        props = schema.get("properties", {})
+        missing = [k for k in schema.get("required", []) if k not in value]
+        if missing:
+            errors.append(f"{path}: missing required arguments: {missing}")
+        for key, item in value.items():
+            if key in props:
+                errors.extend(_argument_errors(item, props[key], f"{path}.{key}"))
+            elif schema.get("additionalProperties") is False:
+                errors.append(f"{path}: unknown arguments: {[key]}")
+            elif isinstance(schema.get("additionalProperties"), dict):
+                errors.extend(_argument_errors(item, schema["additionalProperties"], f"{path}.{key}"))
+            else:
+                # Even unconstrained payloads must contain actual finite JSON.
+                errors.extend(_argument_errors(item, {}, f"{path}.{key}"))
+    elif isinstance(value, list):
+        for bound, op in (("minItems", lambda a, b: a < b), ("maxItems", lambda a, b: a > b)):
+            if bound in schema and op(len(value), schema[bound]):
+                errors.append(f"{path} violates {bound}={schema[bound]}")
+        for i, item in enumerate(value):
+            errors.extend(_argument_errors(item, schema.get("items", {}), f"{path}[{i}]"))
+    elif isinstance(value, str):
+        for bound, op in (("minLength", lambda a, b: a < b), ("maxLength", lambda a, b: a > b)):
+            if bound in schema and op(len(value), schema[bound]):
+                errors.append(f"{path} violates {bound}={schema[bound]}")
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        for bound, op in (("minimum", lambda a, b: a < b), ("maximum", lambda a, b: a > b),
+                          ("exclusiveMinimum", lambda a, b: a <= b), ("exclusiveMaximum", lambda a, b: a >= b)):
+            if bound in schema and op(value, schema[bound]):
+                errors.append(f"{path} violates {bound}={schema[bound]}")
+    return errors
+
+
+def _same_json(a: Any, b: Any) -> bool:
+    """JSON booleans must not match numeric enum members through Python ==."""
+    if isinstance(a, bool) != isinstance(b, bool):
+        return False
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same_json(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same_json(x, y) for x, y in zip(a, b))
+    return a == b
 
 
 def _public(rec: dict) -> dict:

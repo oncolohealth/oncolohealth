@@ -50,5 +50,8 @@ The current checkout is `/home/inamqasimi/Documents/BETA_TEST` (initially pulled
 Sebastian's Images workspace, saved heads and background scoring are present.
 Inam Qasimi's F metric/threshold input and invalid-bootstrap-draw finding is
 addressed in the follow-up, with synthetic tests and undefined-summary support.
-The E pre-fit leakage and C/D adapter/schema findings remain open. This is a
+At the evaluation-follow-up checkpoint, E pre-fit leakage and C/D adapter/schema
+findings remained open. The subsequent separate `codex/demo-readiness` branch
+addresses these with synthetic regression tests; see `demo-readiness.md`.
+Live workflow evaluation and scientific prerequisites remain open. This is a
 maintenance follow-up by the same contributor, not independent review.
