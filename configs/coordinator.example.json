@@ -1,0 +1,63 @@
+{
+  "_comment": "Copy to configs/coordinator.json (gitignored) and edit. Every profile speaks the OpenAI chat-completions API, so any server works: vLLM, SGLang, llama.cpp, Ollama, LM Studio, TGI, or a hosted gateway. base_url_env lets a profile read its URL from an environment variable. Server-side tool-calling flags (e.g. vLLM --enable-auto-tool-choice --tool-call-parser ...) must match the model; follow the official recipe linked per profile rather than guessing.",
+  "default_profile": "qwen-fp8-vllm",
+  "profiles": {
+    "qwen-bf16-vllm": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:8000/v1",
+      "base_url_env": "CW_QWEN_BASE_URL",
+      "model": "Qwen/Qwen3.8-27B",
+      "api_key_env": "CW_QWEN_API_KEY",
+      "timeout_s": 300,
+      "default_params": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 4096},
+      "extra_body": {},
+      "_notes": "~55.6 GB BF16 weights: ~80 GB GPU or tensor parallel. Recipe: https://recipes.vllm.ai/Qwen/Qwen3.8-27B"
+    },
+    "qwen-fp8-vllm": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:8000/v1",
+      "base_url_env": "CW_QWEN_BASE_URL",
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "api_key_env": "CW_QWEN_API_KEY",
+      "timeout_s": 300,
+      "default_params": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 4096},
+      "extra_body": {},
+      "_notes": "Official FP8 build, ~30.9 GB weights."
+    },
+    "qwen-fp8-no-thinking": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:8000/v1",
+      "base_url_env": "CW_QWEN_BASE_URL",
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "api_key_env": "CW_QWEN_API_KEY",
+      "default_params": {"temperature": 0.7, "max_tokens": 2048},
+      "extra_body": {"chat_template_kwargs": {"enable_thinking": false}},
+      "_notes": "Same weights with thinking disabled per request (vLLM/SGLang chat_template_kwargs). Compare latency vs tool-selection accuracy."
+    },
+    "qwen-sglang": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:30000/v1",
+      "base_url_env": "CW_SGLANG_BASE_URL",
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "api_key_env": "CW_SGLANG_API_KEY",
+      "_notes": "Cookbook: https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-27B"
+    },
+    "ollama-local": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:11434/v1",
+      "model": "REPLACE_WITH_PULLED_MODEL_TAG",
+      "_notes": "Laptop development against a small local model. Tool calling quality varies by model."
+    },
+    "lmstudio-local": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:1234/v1",
+      "model": "REPLACE_WITH_LOADED_MODEL_ID"
+    },
+    "llamacpp-local": {
+      "type": "openai_compatible",
+      "base_url": "http://localhost:8080/v1",
+      "model": "local",
+      "_notes": "llama-server with --jinja for tool calling."
+    }
+  }
+}

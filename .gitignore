@@ -1,0 +1,17 @@
+# downloaded artifacts (never commit data or weights)
+data/
+models/
+*.part
+# local config with endpoints/keys
+configs/coordinator.json
+.env
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+# experiment outputs
+runs/
+mlruns/
+.DS_Store
