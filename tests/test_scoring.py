@@ -123,7 +123,7 @@ class ScoringProgressTests(unittest.TestCase):
         import numpy as np
         from cancer_workbench.adapters import encoder
 
-        view = {"run": "synthetic", "result": "head", "encoder": "rad-dino", "classes": ["normal", "tumor"],
+        view = {"run": "synthetic", "result": "head", "encoder": "rad-dino", "variant": "pad", "classes": ["normal", "tumor"],
                 "threshold": 0.6, "positive_class": "tumor", "label": "SYNTHETIC", "rows": {
                     "train": {"partition": "train", "label": "tumor"},
                     "val": {"partition": "val", "label": "tumor"}}}
@@ -134,7 +134,7 @@ class ScoringProgressTests(unittest.TestCase):
         items = [{"key": key, "sample_id": key, "path": Path("synthetic.png")} for key in ("train", "val", "broken")]
         events = []
         with mock.patch.object(explore, "review", return_value=view), mock.patch.object(explore, "head_for", return_value=head), \
-                mock.patch.dict(explore._ENCODERS, {"rad-dino": adapter}), \
+                mock.patch.dict(explore._ENCODERS, {("rad-dino", "pad"): adapter}), \
                 mock.patch.object(encoder, "revision", return_value="synthetic"), \
                 mock.patch.object(encoder, "preprocessing_hash", return_value="synthetic"):
             result = explore.score("synthetic", "head", items, progress=lambda event: events.append(copy.deepcopy(event)))
@@ -147,3 +147,48 @@ class ScoringProgressTests(unittest.TestCase):
         self.assertIn("error", result["items"][2])
         self.assertEqual(events[-1]["items"], result["items"])
         self.assertEqual(events[-1]["metadata"]["device"], "synthetic")
+
+    def test_variant_heads_score_with_their_own_preprocessing(self):
+        import numpy as np
+        from cancer_workbench.adapters import encoder
+
+        view = {"run": "synthetic", "result": "head", "encoder": "rad-dino", "variant": "native_crop", "classes": ["normal", "tumor"],
+                "threshold": 0.5, "positive_class": "tumor", "label": "SYNTHETIC", "rows": {}}
+        head = lambda variant: SimpleNamespace(
+            encoder={"encoder_id": "rad-dino", "revision": "synthetic", "preprocessing_hash": f"hash-{variant}"},
+            train_ids=set(), mean=np.array([0.]), scale=np.array([1.]),
+            clf=SimpleNamespace(predict_proba=lambda features: np.array([[0.2, 0.8]])))
+        crop = SimpleNamespace(device="synthetic", embed=mock.Mock(return_value=np.array([[1.]])))
+        pad = SimpleNamespace(device="synthetic", embed=mock.Mock(return_value=np.array([[1.]])))
+        items = [{"key": "upload", "sample_id": None, "path": Path("synthetic.png")}]
+        with mock.patch.object(explore, "review", return_value=view), \
+                mock.patch.dict(explore._ENCODERS, {("rad-dino", "native_crop"): crop, ("rad-dino", "pad"): pad}), \
+                mock.patch.object(encoder, "revision", return_value="synthetic"), \
+                mock.patch.object(encoder, "preprocessing_hash", side_effect=lambda enc, variant="pad": f"hash-{variant}"):
+            with mock.patch.object(explore, "head_for", return_value=head("native_crop")):
+                result = explore.score("synthetic", "head", items)
+            with mock.patch.object(explore, "head_for", return_value=head("pad")), self.assertRaises(ValueError):
+                explore.score("synthetic", "head", items)  # SYNTHETIC: a pad head under a native_crop result
+        self.assertEqual((result["variant"], result["items"][0]["pred"]), ("native_crop", "tumor"))
+        crop.embed.assert_called_once()
+        pad.embed.assert_not_called()
+
+
+class RunListTests(unittest.TestCase):
+    def test_runs_list_the_preprocessing_variant(self):
+        import json
+        import tempfile
+
+        test = {"n": 1, "roc_auc": 0.5}
+        results = [{"id": f"source_holdout.tumor_vs_normal.rad-dino.{v}", "protocol": "source_holdout", "endpoint": "tumor_vs_normal",
+                    "encoder": "rad-dino", "counts": {}, "variant": v, "selected": v == "native_crop", "test": test}
+                   for v in ("pad", "native_crop")]
+        with tempfile.TemporaryDirectory() as d:  # SYNTHETIC run folders
+            for name, res in (("synthetic-shift", results), ("synthetic-baseline", [dict(results[0], variant=None)])):
+                (Path(d) / name).mkdir()
+                (Path(d) / name / "results.json").write_text(json.dumps({"label": "SYNTHETIC", "results": res}))
+            with mock.patch.object(explore, "RUNS_DIR", Path(d)):
+                runs = {r["id"]: r for r in explore.list_runs()}
+        self.assertEqual([(r["variant"], r["selected"]) for r in runs["synthetic-shift"]["results"]],
+                         [("pad", False), ("native_crop", True)])
+        self.assertIsNone(runs["synthetic-baseline"]["results"][0]["variant"])
