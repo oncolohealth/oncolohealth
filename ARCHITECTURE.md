@@ -42,6 +42,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `datasets/audit.py` | `audit_dataset`: leakage, missing patient ids, labels, file integrity | done (no pixel/near-duplicate checks) |
 | `datasets/splits.py` | `grouped_split`: deterministic, group-preserving, label-stratified | done |
 | `datasets/btxrd.py` | BTXRD release → `describe_release` inventory and `build_manifest` (endpoints: `three_class`, `tumor_vs_normal`, `benign_vs_malignant`) | done |
+| `datasets/readiness.py` | Read-only published audit/evidence summary and blank-only template export; byte identity/consistency checks, no current-archive audit or execution | done (stdlib) |
 | `datasets/xlsx.py` | Read-only stdlib `.xlsx` reader for metadata sheets | done |
 | `coordinator/providers.py` | `OpenAICompatibleProvider` (any `/chat/completions` server), `ScriptedProvider` for tests | done |
 | `coordinator/config.py` | Named profiles from `configs/coordinator.json` or `configs/coordinator.example.json` | done |

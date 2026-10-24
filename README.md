@@ -25,6 +25,8 @@ exploratory caches and heads to measured inputs. Existing unbound runs retain
 stored-prediction replay; live scoring/refitting requires a newly generated bound
 run. Regeneration is an explicit reviewed ML operation, not an automatic migration.
 
+The Datasets screen also surfaces the [published BTXRD evidence review](docs/reports/A-evidence-workspace.md), including missing grouping/reference evidence and a blank handoff-template export. It is a saved review snapshot, not an audit of current local files or permission to run an experiment.
+
 Command-line equivalents:
 
 ```fish

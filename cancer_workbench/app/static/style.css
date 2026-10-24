@@ -536,6 +536,19 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
 .experiment-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40rem; overflow-y: auto; font: 12px/1.5 var(--mono); }
 @media (max-width: 720px) { .experiment-facts { grid-template-columns: minmax(0, 1fr); } .experiment-facts dd { margin-bottom: 6px; } }
 
+.dataset-evidence { padding: 18px; margin-bottom: 22px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--raised); overflow-wrap: anywhere; }
+.dataset-evidence h2 { margin: 0; }
+.evidence-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 16px 0; }
+.evidence-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; }
+.evidence-stats strong { font-size: 24px; }
+.evidence-stats span { color: var(--text-2); font-size: 12px; }
+.evidence-counts { width: 100%; }
+.evidence-counts th:last-child, .evidence-counts td:last-child { text-align: right; }
+.evidence-details { margin: 14px 0; }
+.evidence-details summary { cursor: pointer; }
+.evidence-details .mono, .evidence-details code { white-space: normal; overflow-wrap: anywhere; }
+.evidence-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+
 /* ---------------- Toast: notification card above the status bar ---------------- */
 .toast {
   position: fixed; right: 16px; bottom: 36px; max-width: min(90vw, 420px); z-index: 30;

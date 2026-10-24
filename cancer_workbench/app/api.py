@@ -23,6 +23,7 @@ from ..coordinator import ProviderError, default_toolbox, load_profiles, make_pr
 from ..coordinator.config import config_path
 from ..coordinator.loop import SYSTEM_PROMPT
 from ..datasets import audit_dataset, grouped_split, read_manifest, write_manifest
+from ..datasets import readiness
 from ..datasets.btxrd import MANIFEST_PATH as BTXRD_MANIFEST, RAW_DIR as BTXRD_RAW
 from ..experiments import explore, workspace
 from ..experiments.plan import plan_experiment
@@ -157,6 +158,22 @@ def manifests() -> dict:
             for f in sorted(list(ds.glob("*.csv")) + list(ds.glob("splits/*.csv"))):
                 found.append({"dataset_id": ds.name, "path": str(f.relative_to(DATA_DIR)), "bytes": f.stat().st_size})
     return {"manifests": found}
+
+
+def dataset_evidence() -> dict:
+    try:
+        return readiness.summary()
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"dataset_id": "btxrd", "available": False, "source_kind": "published_review_snapshot",
+                "note": "Published BTXRD evidence snapshot is unavailable or inconsistent. Local manifest audits remain available.",
+                "ready_for_training": False, "execution_authorized": False}
+
+
+def dataset_evidence_template() -> dict:
+    try:
+        return readiness.blank_template()
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ApiError("The published blank template is unavailable or inconsistent. No evidence file was exported.", 409) from error
 
 
 def _synthetic_rows() -> list[dict]:
@@ -602,6 +619,8 @@ def progress_owner(body: dict) -> dict:
 GET_ROUTES = {
     "/api/catalog": catalog, "/api/route/options": route_options, "/api/storage": storage,
     "/api/jobs": lambda: {"jobs": JOBS.list()}, "/api/manifests": manifests,
+    "/api/datasets/btxrd/evidence": dataset_evidence,
+    "/api/datasets/btxrd/evidence-template": dataset_evidence_template,
     "/api/coordinator/profiles": profiles, "/api/progress": progress,
     "/api/images": image_sets, "/api/runs": runs, "/api/uploads": uploads,
     "/api/score/current": lambda: {"job": SCORES.current()},

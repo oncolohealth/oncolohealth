@@ -15,13 +15,13 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 
 | WS | Focus | Module(s) | Depends on | Owner |
 |---|---|---|---|---|
-| A | Dataset & evidence curator | `datasets/`, `acquisition/`, `catalog/datasets.json` | none | |
+| A | Dataset & evidence curator | `datasets/`, `acquisition/`, `catalog/datasets.json` | none | Inam Qasimi (data/evidence workspace); Jordi (offline audit/evidence handoff) |
 | B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | Inam Qasimi (planner + protocol draft) |
 | C | Registry & specialist adapters | `registry/`, `routing/`, `adapters/`, `catalog/models.json` | none | |
 | D | Coordinator & retrieval | `coordinator/`, `retrieval/`, `curriculum/` | C (tool schemas) | |
 | E | Transfer learning & distillation | `learning/` | A (manifest), F (metrics) | |
 | F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Inam Qasimi (utilities + protocol draft) |
-| G | Researcher UI & API | `app/`, `experiments/workspace.py` | B, C, D interfaces | Sebastian (local app); Inam Qasimi (Experiments) |
+| G | Researcher UI & API | `app/`, `experiments/workspace.py` | B, C, D interfaces | Sebastian (local app); Inam Qasimi (Experiments + dataset evidence review) |
 | H | Independent review | `docs/reports/H-*` | all | Inam Qasimi (source check only; independent review pending) |
 
 ## Phase 0: Foundation (done in this session)
@@ -345,3 +345,33 @@ The review branch consolidates all three local patches and provides readable res
 The user corrected the operation to rebase `research/overnight-integration` onto main, leaving main unchanged. The branch now contains main `79c51d5ac9d508b602193fd0e457a8a5eecec3c5`, including Inam's demo-readiness and Sebastian's desktop/Experiments integration. Conflicts preserve upstream's broader model/processor/image/payload/head provenance and its existing tests; the earlier narrower overlapping repair commits and incompatible duplicate cache tests are superseded. The original patches/source archive remain historical artifacts. No shared main merge is performed.
 
 The new offline release/evidence review adds 25 tests to main's 218. Current local suite: **243 discovered, 203 pass, 40 optional ML skips**. Catalog: 16 model / 14 dataset records valid. Gemma example default/profile parsing and whitespace checks pass. The current upstream app, coordinator, evaluation, learning, encoder and encoder-provenance test paths match the rebased main checkpoint byte-for-byte. Full supported ML/Torch checks remain open; no actual medical inference, training, acquisition or cluster run occurred. Patient/lesion grouping and per-row diagnostic-reference evidence remain unresolved.
+
+### Current roles and receiving-branch evidence workspace (2026-10-24)
+
+- [x] Corrected Inam's Hub check-in and T01–T04 contribution status with concrete
+  implementation and merge references. Inam's d8066fb branch is ancestral to
+  main via Sebastian's 79c51d5 integration; Jordi's additive release/evidence
+  review is present in the current e22234c receiving tree. Historical claims of
+  no source access or a still-unmerged contribution no longer describe this tree.
+- [x] Independently verified e22234c: 243 discovered, 241 pass/two Torch skips
+  in the available ML environment; system Python 203 pass/40 optional-ML skips.
+  These counts preserve the distinction from Sebastian's all-218 ML checkpoint.
+- [x] Added a read-only BTXRD published-evidence panel to the existing Datasets
+  screen: source observations, missing evidence, next actions and snapshot hashes.
+  Blank-only template export refuses returned patient/reference values. Published
+  byte identities and report consistency are checked; changed/unavailable files
+  degrade without disabling local manifest audits. No current archive is audited
+  merely by viewing the panel, and no training/cohort/promotion is authorized.
+- [x] Fourteen new SYNTHETIC snapshot/CSV/API regressions. Full follow-up suite:
+  **257 discovered, 255 pass, two Torch skips** in the available ML environment;
+  system Python **257 discovered, 217 pass, 40 optional-ML skips**. Catalog remains
+  16 models/14 datasets; Gemma example remains selected. JavaScript/whitespace
+  checks and eight scripted coordinator smoke cases pass. No live endpoint used.
+- [x] Desktop browser check of panel loading, expanded review actions/provenance,
+  and the existing 240-row synthetic audit alongside it; no console errors. CSV
+  payload/blank-field behavior is tested through the API/library, not a completed
+  browser download. Phone/light-theme coverage is not claimed.
+- [ ] Receiving-branch review/merge of this follow-up; full supported Torch/model
+  loading, real archive reruns and scientific/protocol evidence remain separate.
+  Report: `docs/reports/A-evidence-workspace.md`. New work is on the isolated
+  `codex/evidence-workspace-followup` branch; the user checkout is untouched.

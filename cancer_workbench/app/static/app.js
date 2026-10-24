@@ -361,6 +361,37 @@ async function loadDatasets() {
   const { manifests } = await api("/api/manifests");
   $("#manifest-list").innerHTML = manifests.map(m => `<li><button class="linkish" data-audit="${esc(m.path)}" data-ds="${esc(m.dataset_id)}">${esc(m.path)}</button> <span class="hint">${fmtBytes(m.bytes)}</span></li>`).join("") ||
     `<li class="empty">No manifests yet.</li>`;
+  await loadDatasetEvidence();
+}
+async function loadDatasetEvidence() {
+  const panel = $("#dataset-evidence");
+  try {
+    const data = await api("/api/datasets/btxrd/evidence");
+    if (!data.available) {
+      panel.innerHTML = `<h2>BTXRD evidence review</h2><p>${esc(data.note)}</p>`;
+      return;
+    }
+    const o = data.observations, e = data.evidence;
+    const names = { patient_id: "Patient mapping", lesion_id: "Lesion mapping", grouping_reference: "Grouping evidence", reference_standard: "Diagnostic reference standard", reference_evidence: "Diagnostic evidence reference" };
+    panel.innerHTML = `<div class="audit-head"><h2>BTXRD evidence review</h2><span class="badge not">Evidence unresolved</span></div>
+      <p class="hint">${esc(data.note)}</p>
+      <div class="evidence-stats"><div><strong>${esc(o.images.toLocaleString())}</strong><span>source images</span></div><div><strong>${esc(o.exact_duplicate_pairs)}</strong><span>exact duplicate pairs</span></div><div><strong>${esc(o.conflicting_images)}</strong><span>copies with conflicting labels</span></div></div>
+      <p>${Object.entries(o.class_counts).map(([label,n]) => `${esc(n.toLocaleString())} ${esc(label)}`).join(" · ")} images. These are source label counts, not verified patient counts.</p>
+      <h3>Evidence still missing</h3><table class="counts evidence-counts"><thead><tr><th>Required evidence</th><th>Rows missing</th></tr></thead><tbody>${Object.entries(e.missing_counts).map(([key,n]) => `<tr><td>${esc(names[key] || key)}</td><td>${esc(n.toLocaleString())}</td></tr>`).join("")}</tbody></table>
+      <p class="hint">${e.source_binding_reported ? `The saved evidence report matched ${esc(e.matched_image_count.toLocaleString())} rows to source bytes.` : "The saved report does not establish a source-byte match."} No current archive or model was inspected to open this panel.</p>
+      <details class="evidence-details"><summary>Audit findings and next actions</summary><p>${esc(o.pairs_crossing_original_lists)} duplicate pairs cross the authors' original split lists; ${esc(o.original_extension_mismatches)} filename extensions differ. ${esc(o.subtype_label_differences)} subtype-label ${o.subtype_label_differences === 1 ? "difference needs" : "differences need"} review. Duplicate checks cannot establish patient independence.</p><ul>${data.next_actions.map(a => `<li>${esc(a)}</li>`).join("")}</ul><p>For an explicit check of a local archive or returned evidence file, inspect the CLI options:</p>${data.commands.map(c=>`<p><code>${esc(c)}</code></p>`).join("")}<p class="hint">These help commands do not acquire data or run a model.</p></details>
+      <div class="evidence-actions"><button class="btn" id="export-evidence-template">Export blank evidence template</button><span class="hint">Public source IDs/flags/hashes; patient and diagnostic evidence fields stay blank.</span></div>
+      <details class="evidence-details"><summary>Snapshot provenance</summary><p class="hint">File hashes check consistency with the published handoff; they do not authenticate the publisher or medical assertions.</p><p class="mono">Archive SHA-256: ${esc(data.archive_sha256)}</p>${data.files.map(f=>`<p class="mono">${esc(f.name)}<br>${esc(f.sha256)}</p>`).join("")}</details>`;
+    $("#export-evidence-template").addEventListener("click", () => guard(async () => {
+      const result = await api("/api/datasets/btxrd/evidence-template");
+      const url = URL.createObjectURL(new Blob([result.csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a"); link.href = url; link.download = result.filename; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast(`Exported a blank template for ${result.rows.toLocaleString()} source images. No cohort or execution permission created.`);
+    }));
+  } catch (error) {
+    panel.innerHTML = `<h2>BTXRD evidence review</h2><p class="hint">The published snapshot could not be loaded. Local manifest audits remain available.</p>`;
+  }
 }
 $("#local-datasets").addEventListener("click", e => {
   const b = e.target.closest("[data-inv]");
