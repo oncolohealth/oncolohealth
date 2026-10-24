@@ -77,3 +77,19 @@ pass. Desktop browser panel loading, expanded review/provenance and coexistence
 with the synthetic manifest audit were verified with no console errors. Template
 CSV content is verified by API/library tests; a completed browser download and
 phone/light-theme QA are not claimed.
+
+## Subsequent local integration check
+
+Combined 7405810 with the published identity-formatting guard a7f8ff4, preserving
+both histories. Only the appended progress records conflicted; both were kept.
+The integrated review branch discovers 267 tests: 265 pass/two Torch skips in
+the available ML environment, or 227 pass/40 optional-ML skips in system Python.
+This is a local candidate, not a merge into shared main.
+
+At 390x844, dark and light panel layouts have no page-width horizontal overflow.
+Desktop light mode and the export control were checked; the UI confirmed a
+3,746-row blank-template export with no console errors/warnings. API/library
+tests verify CSV contents; a completed downloaded file was not independently
+inspected. Temporary viewport/theme changes were restored. Full Torch/runtime
+and scientific prerequisites remain open. Other teams' readiness/coordinator
+branches remain separate from this bounded integration.

@@ -153,7 +153,7 @@ Historical verification from the incoming branch's source checkout:
 
 ## Inam Qasimi: merged-main evaluation follow-up (2026-10-24)
 
-- Based on clean merged main `bff6ea43ca8996d1a6959ebbb1a1bea5bc274089` at `/home/inamqasimi/Documents/BETA_TEST`.
+- Based on clean merged main `bff6ea43ca8996d1a6959ebbb1a1bea5bc274089`.
 - B/F ownership and source-check attribution corrected to Inam Qasimi. `.mailmap` maps the earlier assistant author identity for Git reporting; future branch commits use the repository's configured human email. Existing shared commit objects are unchanged.
 - `docs/reports/F-metric-hardening.md` describes the fix, compatibility changes and verification. Scientific endpoint/patient/source evidence and independent review remain unresolved. E/C/D source findings remained open at that checkpoint and are addressed in the subsequent demo-readiness branch below.
 - Verified with a temporary test environment: NumPy 2.5.4, scikit-learn 1.9.1 and SciPy 1.18.1. **122 tests: 121 pass, 1 skipped** (Torch preprocessing unavailable), including all 24 new tests. Before this change, merged main ran **98 tests: 97 pass, 1 skipped** in the same environment and emitted single-class metric warnings; the patched suite does not emit those warnings.
@@ -163,7 +163,7 @@ Historical verification from the incoming branch's source checkout:
 ## Inam Qasimi: execution checks and presentation follow-up (2026-10-24)
 
 - Separate `codex/demo-readiness` branch, based on `df45e78`, in an isolated local
-  clone. The user's `/home/inamqasimi/Documents/BETA_TEST` checkout and checked-out
+  clone. The user's existing checkout and checked-out
   branch are unchanged. This work is not merged or pushed.
 - E: reject invalid feature tables and declared sample/patient/duplicate/hash
   overlap before fitting or selecting a head. Manifest duplicate/hash metadata
@@ -375,3 +375,32 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
   loading, real archive reruns and scientific/protocol evidence remain separate.
   Report: `docs/reports/A-evidence-workspace.md`. New work is on the isolated
   `codex/evidence-workspace-followup` branch; the user checkout is untouched.
+
+## Identity guard integration and runtime inventory
+
+- [x] Reviewed and applied the three-file identity formatting candidate to clean `e22234c8cf1356a4845e8f60da76fc2f8434d627`; implementation/test hashes match the isolated candidate exactly. Audit readiness refuses padded sample/patient/duplicate tokens; whitespace-only patients count as missing. Head preflight refuses padded identity channels. No silent normalization or identity inference.
+- [x] All 10 targeted synthetic regressions pass. Combined suite in existing bundled NumPy/Pillow: **253 discovered, 213 pass, 40 optional ML skips**. Catalog: 16 models / 14 datasets valid. Whitespace check passes. See [the report](docs/reports/F-identity-formatting.md) and [exact verification](docs/research-handoff/identity-guard-integration.json).
+- [x] Read-only runtime inventory: no repository `.venv`; system Python has none of the checked ML packages; the existing imaging environment has Pillow only; the bundled runtime has NumPy 2.3.5 and Pillow 12.3.0 but lacks scikit-learn/Torch and the other checked encoder dependencies. It differs from the complete pinned `ml` extra. No install or download was performed.
+- [x] New team state: the browser shows `reverset` merged PR #1; authenticated desktop fetch now resolves remote main and the research branch to the preceding `e22234c` checkpoint. Earlier draft/unmerged statements above describe the handoff before that external merge. This follow-up remains on the research branch for separate review; no merge or history rewrite is performed here.
+- [ ] Supported full ML/Torch and real model-loading verification, reviewed execution scope, patient/lesion mapping, per-row reference evidence and protocol review remain open. The report gives the offline runtime verification sequence. No medical pixels, weights, actual model inference, training, acquisition, cluster workload or outreach were used.
+
+### Local evidence-panel and identity-guard integration (2026-10-24)
+
+- [x] Reviewed the published identity-formatting guard a7f8ff4 and combined it
+  with Inam's evidence-panel commit 7405810 on a separate local review branch,
+  codex/evidence-identity-integration. Only PROGRESS.md conflicted; both histories
+  and contributors' records are preserved. Main and BETA_TEST are unchanged.
+- [x] Combined verification: **267 discovered, 265 pass/two Torch skips** in the
+  available ML environment; system Python **227 pass/40 optional-ML skips**.
+  Catalog remains 16 models/14 datasets. JavaScript and whitespace checks pass.
+- [x] Evidence panel checked at phone width 390x844 in dark and light themes;
+  document/page widths agree with no page-width horizontal overflow. Desktop
+  light-mode display and export-button invocation also pass, with an observed
+  3,746-row export confirmation and no console warnings/errors. CSV blank-field
+  contents remain covered by the API/library tests; a completed downloaded file
+  is not independently inspected in this browser pass. Viewport/theme restored.
+- [ ] Review/publish/merge this combined candidate through the team's chosen
+  process. Other published experiments-readiness and coordinator-profile branches
+  belong to their existing workstreams and are not silently included here. Full
+  supported Torch/model-loading, actual live endpoints and scientific evidence
+  remain separate prerequisites. No actual inference, training or cloud workload.

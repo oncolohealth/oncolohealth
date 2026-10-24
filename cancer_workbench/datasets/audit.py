@@ -33,6 +33,15 @@ def audit_dataset(spec: dict, rows: list[dict], files_root: Path | None = None) 
     for item in spec.get("unresolved", []):
         add("warning", "unresolved_evidence", item)
 
+    # Refuse ambiguous record formatting instead of guessing whether two tokens
+    # identify the same subject or sample. Empty optional IDs remain unknown.
+    for key in ("sample_id", "patient_id", "duplicate_group"):
+        invalid = sum(not isinstance(value, str) or value != value.strip()
+                      or (key == "sample_id" and not value)
+                      for value in (r.get(key, "") for r in rows))
+        if invalid:
+            add("error", "invalid_identity", f"{invalid} rows have invalid {key}; use strings without surrounding whitespace and nonempty sample IDs")
+
     ids = [r["sample_id"] for r in rows]
     dup_ids = [i for i, n in collections.Counter(ids).items() if n > 1]
     if dup_ids:
@@ -48,7 +57,7 @@ def audit_dataset(spec: dict, rows: list[dict], files_root: Path | None = None) 
         if bad:
             add("error", "unknown_label", f"labels not in spec classes: {bad}")
 
-    no_patient = sum(1 for r in rows if not r.get("patient_id"))
+    no_patient = sum(1 for r in rows if not isinstance(r.get("patient_id"), str) or not r["patient_id"].strip())
     if no_patient:
         add("error" if no_patient == len(rows) else "warning", "missing_patient_id",
             f"{no_patient}/{len(rows)} rows lack patient_id; patient-level claims and leakage checks are unsupported for them")
@@ -63,8 +72,9 @@ def audit_dataset(spec: dict, rows: list[dict], files_root: Path | None = None) 
     patients: dict[str, set] = collections.defaultdict(set)
     for r in rows:
         counts[r.get("partition", "")][r["label"]] += 1
-        if r.get("patient_id"):
-            patients[r.get("partition", "")].add(r["patient_id"])
+        patient = r.get("patient_id")
+        if isinstance(patient, str) and patient and patient == patient.strip():
+            patients[r.get("partition", "")].add(patient)
 
     file_checks = {"checked": 0, "missing": 0, "hash_mismatch": 0}
     if files_root is not None:

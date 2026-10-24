@@ -1,6 +1,6 @@
 # Overnight integration handoff
 
-Read [the complete handoff](docs/research-handoff/README.md) and [the noon–2 PM plan](docs/research-handoff/Team-integration-plan.md). This review branch contains the actual combined release/evidence, model-folder provenance and feature-cache fixes. Its reference source archive also preserves the standalone foundation and Gemma OncoCopilot implementations. Main is not merged by this upload; the actual unpushed team branch still needs reconciliation.
+Read [the complete handoff](docs/research-handoff/README.md) and [the integration plan](docs/research-handoff/Team-integration-plan.md). The team merged the original handoff through PR #1; subsequent work stays on the research branch for review. The active root preserves the integrated desktop/Experiments and broader provenance implementation, adds offline release/evidence review, and rejects ambiguous surrounding whitespace in declared identities. The reference source archive preserves earlier standalone implementations as historical material.
 
 # Cancer AI research workbench
 

@@ -71,6 +71,9 @@ def _check(data: dict) -> dict:
             raise ValueError(f"{key} must contain strings")
         if key in ("labels", "partitions", "sample_ids") and any(not v.strip() for v in col.tolist()):
             raise ValueError(f"{key} must contain nonempty strings")
+        if key in ("sample_ids", "patient_ids", "group_ids", "duplicate_groups", "image_hashes") and any(
+                v != v.strip() for v in col.tolist()):
+            raise ValueError(f"{key} must not contain surrounding whitespace; review source identities instead of silently normalizing them")
         checked[key] = col
     if len(set(checked["sample_ids"].tolist())) != len(X):
         raise ValueError("sample_ids must be unique; duplicate samples cannot enter head fitting")
