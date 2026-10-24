@@ -26,6 +26,10 @@ python3 -m cancer_workbench coordinator profiles
 
 ML work needs the pinned extras: `uv venv; uv pip install -e ".[ml]"` (add `imaging`, `clip` as needed).
 
+## Automated tests
+
+[GitHub Actions](.github/workflows/tests.yml) runs `python -m unittest discover -s tests -v` on every push and pull request using Ubuntu and Python 3.11, 3.12, 3.13 and 3.14. CI installs no optional dependencies; ML tests skip when their packages are absent. No datasets, model weights or secrets are needed.
+
 ## Layout
 
 ```text

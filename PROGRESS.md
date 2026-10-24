@@ -143,3 +143,10 @@ Historical verification from the incoming branch's source checkout:
 - `.venv/bin/python -m unittest discover -s tests`: **98 tests, all passing**, including the optional ML tests. `python3 -m unittest discover -s tests`: **98 tests, OK with 7 optional ML tests skipped**.
 - `.venv/bin/python -m cancer_workbench catalog validate`: **16 models, 14 datasets valid**. `git diff --check` is clean. These checks establish software behavior only; no medical workload or catalog promotion was performed during the merge.
 - Team Hub checklist synchronization remains blocked: opening the document redirects to Google sign-in. The B/F completion items and current verification results above await synchronization after access is restored.
+
+### GitHub Actions tests
+
+- [x] Add `.github/workflows/tests.yml`: core unittest suite on every push and pull request, Ubuntu, Python 3.11–3.14. Official actions pinned to verified release commits; read-only repository permission; no dependency installs or artifact downloads.
+- [x] Local verification: workflow YAML parses and its triggers/matrix match the requested settings. Clean Python 3.12.13 and 3.14.3 environments each discover **98 tests, OK with 8 optional ML tests skipped**. `git diff --check` passes. These are synthetic software checks only.
+- [ ] Verify the first GitHub-hosted run after the workflow is committed and pushed; Python 3.11/3.13 and Ubuntu have not been exercised locally.
+- [ ] Synchronize this CI checklist with the Team Hub's Local build checklist tab. Access still redirects to Google sign-in; no remote checklist changes were made.
