@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,182 +8,246 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="shell">
-    <nav class="rail" aria-label="Screens">
+  <div class="app">
+    <header class="titlebar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">Research<br>workbench</span>
+        <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true"><rect width="20" height="20" rx="5"/><path d="M10 4.5v11M4.5 10h11"/><circle cx="10" cy="10" r="3.2"/></svg>
+        <span class="brand-name">Cancer Research Workbench</span>
       </div>
-      <ul class="nav">
-        <li><button data-screen="catalog" class="nav-btn">Catalog</button></li>
-        <li><button data-screen="downloads" class="nav-btn">Downloads</button></li>
-        <li><button data-screen="datasets" class="nav-btn">Datasets</button></li>
-        <li><button data-screen="images" class="nav-btn">Images</button></li>
-        <li><button data-screen="assistant" class="nav-btn">Assistant</button></li>
-        <li><button data-screen="progress" class="nav-btn">Progress</button></li>
-      </ul>
-      <div class="rail-foot">
-        <div class="meter" id="storage-meter" title="Downloaded data and weights against the storage budget">
-          <div class="meter-label"><span>Storage</span><span id="storage-text">…</span></div>
-          <div class="meter-track"><div class="meter-fill" id="storage-fill"></div></div>
-        </div>
-        <p class="token-state" id="hf-state"></p>
-        <p class="disclaimer">Research software. Nothing here is a validated medical result.</p>
+      <span class="crumb-sep" aria-hidden="true">/</span>
+      <span class="crumb" id="title-screen">Catalog</span>
+      <div class="titlebar-right">
+        <span class="ro-badge" title="Nothing in this app is a validated medical result.">Research use only</span>
+        <button type="button" class="icon-btn" id="theme-toggle" aria-label="Switch to light theme" title="Switch to light theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path class="fill" d="M12 4a8 8 0 0 1 0 16Z"/></svg>
+        </button>
       </div>
+    </header>
+
+    <nav class="activitybar" aria-label="Screens">
+      <button data-screen="catalog" class="nav-btn" aria-label="Catalog" data-tip="Catalog  Alt+1">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 12.5 9 5 9-5"/><path d="m3 17 9 5 9-5"/></svg>
+      </button>
+      <button data-screen="downloads" class="nav-btn" aria-label="Downloads" data-tip="Downloads  Alt+2">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v12"/><path d="m7 10.5 5 5 5-5"/><path d="M4.5 20h15"/></svg>
+      </button>
+      <button data-screen="datasets" class="nav-btn" aria-label="Datasets" data-tip="Datasets  Alt+3">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg>
+      </button>
+      <button data-screen="images" class="nav-btn" aria-label="Images" data-tip="Images  Alt+4">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
+      </button>
+      <button data-screen="assistant" class="nav-btn" aria-label="Assistant" data-tip="Assistant  Alt+5">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-6 4.5V5Z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/></svg>
+      </button>
+      <button data-screen="progress" class="nav-btn" aria-label="Progress" data-tip="Progress  Alt+6">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 2 2 4-4"/><path d="M13.5 7H20"/><path d="m4 16 2 2 4-4"/><path d="M13.5 16H20"/></svg>
+      </button>
     </nav>
 
-    <main class="main">
+    <main class="workspace">
       <!-- Catalog + router -->
-      <section class="screen" id="screen-catalog" hidden>
-        <header class="screen-head">
-          <h1>Catalog</h1>
-          <p class="lede">Every model and dataset the project knows about, how far each has actually progressed, and what it is allowed to do.</p>
-        </header>
-
-        <form class="router" id="router-form">
-          <h2>Find models for a task</h2>
-          <div class="router-fields">
-            <label>Task<select name="task" required></select></label>
-            <label>Modality<select name="modality" required></select></label>
-            <label>Anatomy<select name="anatomy" required></select></label>
-            <label>Channels<input name="channels" type="number" min="1" max="16" placeholder="any"></label>
-            <label>Spatial dims<select name="spatial_dims"><option value="">any</option><option>2</option><option>3</option></select></label>
-            <button type="submit" class="btn primary">Check compatibility</button>
+      <section class="screen cols-3" id="screen-catalog" hidden>
+        <aside class="pane side">
+          <div class="pane-head"><span>Explorer</span></div>
+          <div class="pane-body flush">
+            <details class="section" open>
+              <summary>Filter</summary>
+              <div class="section-body catalog-tools">
+                <input type="search" id="catalog-search" placeholder="Search name, task, modality, license…" aria-label="Search catalog">
+                <div class="seg block" role="group" aria-label="Record type">
+                  <button type="button" data-type="" class="on">All</button>
+                  <button type="button" data-type="model">Models</button>
+                  <button type="button" data-type="dataset">Datasets</button>
+                </div>
+              </div>
+            </details>
+            <details class="section" open>
+              <summary>Evidence levels</summary>
+              <div class="section-body"><div class="ladder-key" id="ladder-key"></div></div>
+            </details>
+            <details class="section" open>
+              <summary>Compatibility check</summary>
+              <form class="section-body router" id="router-form">
+                <p class="hint">Find models for a task and see whether any can run here.</p>
+                <label>Task<select name="task" required></select></label>
+                <label>Modality<select name="modality" required></select></label>
+                <label>Anatomy<select name="anatomy" required></select></label>
+                <div class="field-row">
+                  <label>Channels<input name="channels" type="number" min="1" max="16" placeholder="any"></label>
+                  <label>Spatial dims<select name="spatial_dims"><option value="">any</option><option>2</option><option>3</option></select></label>
+                </div>
+                <button type="submit" class="btn primary block">Check compatibility</button>
+                <div id="router-result" class="router-result" aria-live="polite"></div>
+              </form>
+            </details>
           </div>
-          <div id="router-result" class="router-result" aria-live="polite"></div>
-        </form>
-
-        <div class="catalog-tools">
-          <input type="search" id="catalog-search" placeholder="Search name, task, modality, license…" aria-label="Search catalog">
-          <div class="seg" role="group" aria-label="Record type">
-            <button type="button" data-type="" class="on">All</button>
-            <button type="button" data-type="model">Models</button>
-            <button type="button" data-type="dataset">Datasets</button>
+        </aside>
+        <div class="pane center">
+          <div class="toolbar">
+            <h1>Catalog</h1>
+            <span class="toolbar-desc">Every model and dataset the project knows about, how far each has progressed, and what it is allowed to do.</span>
+          </div>
+          <div class="pane-body flush">
+            <table class="records" id="catalog-table">
+              <thead><tr><th scope="col">Evidence</th><th scope="col">Name</th><th scope="col">Modality</th><th scope="col">License</th><th scope="col" class="num">Size</th><th scope="col">Local</th></tr></thead>
+              <tbody></tbody>
+            </table>
           </div>
         </div>
-        <div class="ladder-key" id="ladder-key"></div>
-        <div class="split-view">
-          <table class="records" id="catalog-table">
-            <thead><tr><th scope="col">Evidence</th><th scope="col">Name</th><th scope="col">Modality</th><th scope="col">License</th><th scope="col" class="num">Size</th><th scope="col">Local</th></tr></thead>
-            <tbody></tbody>
-          </table>
-          <aside class="detail" id="catalog-detail" aria-live="polite">
+        <aside class="pane inspector">
+          <div class="pane-head"><span>Inspector</span></div>
+          <div class="pane-body detail" id="catalog-detail" aria-live="polite">
             <p class="empty">Select a row to see inputs, outputs, license terms, known overlaps and open questions.</p>
-          </aside>
-        </div>
+          </div>
+        </aside>
       </section>
 
       <!-- Downloads -->
-      <section class="screen" id="screen-downloads" hidden>
-        <header class="screen-head">
-          <h1>Downloads</h1>
-          <p class="lede">Fetch pinned releases into this machine. Every file is checked against the publisher's checksum and gets a provenance record.</p>
-        </header>
-        <div class="budget-band">
-          <div class="budget-numbers"><strong id="budget-used">…</strong><span id="budget-of"></span></div>
-          <div class="meter-track big"><div class="meter-fill" id="budget-fill"></div><div class="meter-plan" id="budget-plan"></div></div>
-          <p class="hint" id="budget-hint">Select items to see how much they add.</p>
+      <section class="screen cols-2r" id="screen-downloads" hidden>
+        <div class="pane center">
+          <div class="toolbar">
+            <h1>Downloads</h1>
+            <span class="toolbar-desc">Fetch pinned releases into this machine. Every file is checked against the publisher's checksum and gets a provenance record.</span>
+          </div>
+          <div class="pane-body"><div id="tiers"></div></div>
+          <div class="action-bar footer" id="dl-actions">
+            <span id="dl-selected">Nothing selected</span>
+            <label class="check"><input type="checkbox" id="allow-big"> Allow big-machine models</label>
+            <button class="btn" id="dl-plan">Check plan</button>
+            <button class="btn primary" id="dl-start">Download selected</button>
+          </div>
         </div>
-        <div id="tiers"></div>
-        <div class="action-bar" id="dl-actions">
-          <span id="dl-selected">Nothing selected</span>
-          <label class="check"><input type="checkbox" id="allow-big"> Allow big-machine models</label>
-          <button class="btn" id="dl-plan">Check plan</button>
-          <button class="btn primary" id="dl-start">Download selected</button>
-        </div>
-        <div id="dl-plan-result"></div>
-        <h2 class="sub">Activity</h2>
-        <div id="jobs"><p class="empty">No downloads started in this session.</p></div>
+        <aside class="pane inspector">
+          <div class="pane-head"><span>Storage &amp; activity</span></div>
+          <div class="pane-body flush">
+            <details class="section" open>
+              <summary>Storage budget</summary>
+              <div class="section-body budget-band">
+                <div class="budget-numbers"><strong id="budget-used">…</strong><span id="budget-of"></span></div>
+                <div class="meter-track big"><div class="meter-fill" id="budget-fill"></div><div class="meter-plan" id="budget-plan"></div></div>
+                <p class="hint" id="budget-hint">Select items to see how much they add.</p>
+              </div>
+            </details>
+            <details class="section" open>
+              <summary>Plan</summary>
+              <div class="section-body"><div id="dl-plan-result"></div></div>
+            </details>
+            <details class="section" open>
+              <summary>Activity</summary>
+              <div class="section-body"><div id="jobs"><p class="empty">No downloads started in this session.</p></div></div>
+            </details>
+          </div>
+        </aside>
       </section>
 
       <!-- Datasets -->
-      <section class="screen" id="screen-datasets" hidden>
-        <header class="screen-head">
-          <h1>Datasets</h1>
-          <p class="lede">Inspect what is on disk, audit manifests for leakage and missing grouping, and make patient-grouped splits.</p>
-        </header>
-        <div class="two-col">
-          <div>
-            <h2 class="sub">On this machine</h2>
-            <ul class="plain-list" id="local-datasets"></ul>
-            <div id="inventory"></div>
+      <section class="screen cols-2l" id="screen-datasets" hidden>
+        <aside class="pane side">
+          <div class="pane-head"><span>Datasets</span></div>
+          <div class="pane-body flush">
+            <details class="section" open>
+              <summary>On this machine</summary>
+              <div class="section-body"><ul class="plain-list tree" id="local-datasets"></ul></div>
+            </details>
+            <details class="section" open>
+              <summary>Manifests</summary>
+              <div class="section-body">
+                <ul class="plain-list tree" id="manifest-list"></ul>
+                <p class="hint">A manifest is a CSV with one row per image: sample_id, patient_id, duplicate_group, partition, label. Workstream A writes <code>data/btxrd/manifest.csv</code>.</p>
+                <button class="btn block" id="audit-synthetic">Try the audit on synthetic data</button>
+              </div>
+            </details>
           </div>
-          <div>
-            <h2 class="sub">Manifests</h2>
-            <ul class="plain-list" id="manifest-list"></ul>
-            <p class="hint">A manifest is a CSV with one row per image: sample_id, patient_id, duplicate_group, partition, label. Workstream A writes <code>data/btxrd/manifest.csv</code>.</p>
-            <button class="btn" id="audit-synthetic">Try the audit on synthetic data</button>
+        </aside>
+        <div class="pane center">
+          <div class="toolbar">
+            <h1>Datasets</h1>
+            <span class="toolbar-desc">Inspect what is on disk, audit manifests for leakage and missing grouping, and make patient-grouped splits.</span>
+          </div>
+          <div class="pane-body ds-work">
+            <p class="empty-state ds-empty">Select a dataset to see its files, or a manifest to audit it.</p>
+            <div id="inventory"></div>
+            <div id="audit-panel"></div>
           </div>
         </div>
-        <div id="audit-panel"></div>
       </section>
 
       <!-- Images -->
-      <section class="screen" id="screen-images" hidden>
-        <header class="screen-head">
-          <p class="eyebrow">Image workspace</p>
-          <h1>Review & score images</h1>
-          <p class="lede">Choose a baseline, select images, and follow live scoring from preparation to results.</p>
-        </header>
-        <p class="explore-banner">Exploratory software output from image-level baselines without patient grouping. Nothing on this screen is a diagnosis or a validated model.</p>
-        <form class="img-tools" id="img-tools">
-          <div class="seg" id="img-source" role="group" aria-label="Image source">
-            <button type="button" data-src="btxrd" class="on">BTXRD</button>
-            <button type="button" data-src="uploads">Uploads</button>
+      <section class="screen cols-3" id="screen-images" hidden>
+        <aside class="pane side">
+          <div class="pane-head"><span>Images</span></div>
+          <div class="pane-body flush">
+            <details class="section" open>
+              <summary>Source &amp; run</summary>
+              <div class="section-body">
+                <form class="img-tools" id="img-tools">
+                  <div class="seg block" id="img-source" role="group" aria-label="Image source">
+                    <button type="button" data-src="btxrd" class="on">BTXRD</button>
+                    <button type="button" data-src="uploads">Uploads</button>
+                  </div>
+                  <label>Baseline run<select name="run"></select></label>
+                  <label>Protocol · endpoint · encoder<select name="result" disabled></select></label>
+                </form>
+                <p class="hint run-context" id="img-run-context">Choose a baseline run to review predictions or score images live.</p>
+                <div class="upload-zone" id="upload-zone" hidden>
+                  <label class="btn primary upload-btn">Upload JPEG or PNG<input type="file" id="upload-input" accept="image/jpeg,image/png" multiple></label>
+                  <p class="hint">Or drop files here. Upload de-identified images only. Files stay in <code>data/uploads/</code> on this machine, unchanged, including any embedded metadata. They have no reference label, so a score on them can't be checked.</p>
+                </div>
+              </div>
+            </details>
+            <details class="section" open>
+              <summary>Filters</summary>
+              <div class="section-body"><form class="img-filters" id="img-filters"></form></div>
+            </details>
           </div>
-          <label>Baseline run<select name="run"></select></label>
-          <label>Protocol · endpoint · encoder<select name="result" disabled></select></label>
-        </form>
-        <p class="hint run-context" id="img-run-context">Choose a baseline run to review predictions or score images live.</p>
-        <div class="upload-zone" id="upload-zone" hidden>
-          <label class="btn primary upload-btn">Upload JPEG or PNG images<input type="file" id="upload-input" accept="image/jpeg,image/png" multiple></label>
-          <p class="hint">Or drop files here. Upload de-identified images only. Files stay in <code>data/uploads/</code> on this machine, unchanged, including any embedded metadata. They have no reference label, so a score on them can't be checked.</p>
-        </div>
-        <div class="action-bar" id="img-actions">
-          <div class="selection-info"><strong id="img-selected">No images selected</strong><span id="img-ready" class="hint">Select images to start.</span></div>
-          <button class="btn" id="img-select-page" type="button">Select up to 24</button>
-          <button class="btn" id="img-clear" type="button">Clear selection</button>
-          <button class="btn primary" id="img-score" type="button">Score selected live</button>
-        </div>
-        <p class="hint" id="img-ml"></p>
-        <section id="img-scoring" class="scoring-panel" aria-labelledby="img-scoring-title" hidden>
-          <div class="scoring-head"><div><p class="eyebrow">Live scoring</p><h2 id="img-scoring-title">Preparing batch</h2></div><span id="img-elapsed" class="hint"></span></div>
-          <p id="img-scoring-context" class="hint"></p>
-          <ol class="scoring-steps" id="img-scoring-steps" aria-label="Scoring stages"></ol>
-          <div class="scoring-count"><strong id="img-score-count" role="status" aria-live="polite"></strong><span id="img-score-outcomes"></span></div>
-          <progress id="img-score-progress" value="0" max="1" aria-label="Images processed"></progress>
-          <p id="img-score-current" class="hint" role="status"></p>
-          <p id="img-score-error" class="err-text" role="alert" hidden></p>
-          <button id="img-score-reconnect" class="btn small" type="button" hidden>Reconnect to scoring</button>
-          <ul id="img-score-queue" class="score-queue" aria-label="Batch images"></ul>
-        </section>
-        <div id="img-live"></div>
-        <div class="browse-head"><h2>Browse images</h2><span class="hint">Open a thumbnail to inspect · tick an image to select</span></div>
-        <form class="img-filters" id="img-filters"></form>
-        <p class="img-summary" id="img-summary" aria-live="polite"></p>
-        <div class="split-view img-view">
-          <div>
+        </aside>
+        <div class="pane center">
+          <div class="toolbar">
+            <h1>Review &amp; score</h1>
+            <span class="toolbar-desc">Choose a baseline, select images, and follow live scoring from preparation to results.</span>
+          </div>
+          <p class="banner warn explore-banner">Exploratory software output from image-level baselines without patient grouping. Nothing on this screen is a diagnosis or a validated model.</p>
+          <div class="action-bar" id="img-actions">
+            <div class="selection-info"><strong id="img-selected">No images selected</strong><span id="img-ready" class="hint">Select images to start.</span></div>
+            <button class="btn" id="img-select-page" type="button">Select up to 24</button>
+            <button class="btn" id="img-clear" type="button">Clear selection</button>
+            <button class="btn primary" id="img-score" type="button">Score selected live</button>
+          </div>
+          <p class="banner info" id="img-ml"></p>
+          <div class="pane-body">
+            <p class="img-summary" id="img-summary" aria-live="polite"></p>
             <div class="img-grid" id="img-grid"></div>
             <div class="pager" id="img-pager"></div>
           </div>
-          <aside class="detail" id="img-detail" aria-live="polite">
-            <p class="empty">Open an image to see it full size, with its annotations, metadata and predictions.</p>
-          </aside>
+          <div class="dock" id="img-dock">
+            <section id="img-scoring" class="scoring-panel" aria-labelledby="img-scoring-title" hidden>
+              <div class="scoring-head"><div><p class="eyebrow">Live scoring</p><h2 id="img-scoring-title">Preparing batch</h2></div><span id="img-elapsed" class="hint"></span></div>
+              <p id="img-scoring-context" class="hint"></p>
+              <ol class="scoring-steps" id="img-scoring-steps" aria-label="Scoring stages"></ol>
+              <div class="scoring-count"><strong id="img-score-count" role="status" aria-live="polite"></strong><span id="img-score-outcomes"></span></div>
+              <progress id="img-score-progress" value="0" max="1" aria-label="Images processed"></progress>
+              <p id="img-score-current" class="hint" role="status"></p>
+              <p id="img-score-error" class="err-text" role="alert" hidden></p>
+              <button id="img-score-reconnect" class="btn small" type="button" hidden>Reconnect to scoring</button>
+              <ul id="img-score-queue" class="score-queue" aria-label="Batch images"></ul>
+            </section>
+            <div id="img-live"></div>
+          </div>
         </div>
+        <aside class="pane inspector">
+          <div class="pane-head"><span>Inspector</span></div>
+          <div class="pane-body detail" id="img-detail" aria-live="polite">
+            <p class="empty">Open an image to see it full size, with its annotations, metadata and predictions.</p>
+          </div>
+        </aside>
       </section>
 
       <!-- Assistant -->
-      <section class="screen" id="screen-assistant" hidden>
-        <header class="screen-head">
-          <h1>Assistant</h1>
-          <p class="lede">Ask any configured model. It can search the catalog, check compatibility and run installed specialists; every tool call and its real result is shown.</p>
-        </header>
-        <div class="assistant">
-          <aside class="profiles">
-            <div class="profiles-head">
-              <h2 class="sub">Models</h2>
-              <button class="btn small" id="profile-new">Add</button>
-            </div>
+      <section class="screen cols-2l" id="screen-assistant" hidden>
+        <aside class="pane side">
+          <div class="pane-head"><span>Models</span><button class="btn small" id="profile-new">Add</button></div>
+          <div class="pane-body">
             <p class="hint" id="config-file"></p>
             <ul id="profile-list" class="profile-list"></ul>
             <form id="profile-form" class="profile-form" hidden>
@@ -202,32 +266,59 @@
                 <button type="button" class="btn danger" id="profile-delete" hidden>Delete</button>
               </div>
             </form>
-          </aside>
-          <div class="chat">
-            <div id="chat-columns" class="chat-columns"><p class="empty">Tick one model to chat, or several to compare their answers side by side.</p></div>
-            <form id="ask-form" class="ask">
-              <textarea name="question" rows="2" placeholder="Which models could segment a four-sequence brain MRI, and can any of them run here?" required></textarea>
-              <div class="ask-row">
-                <label class="check"><input type="checkbox" name="synthetic_demo"> Include the synthetic test model</label>
-                <button type="button" class="btn" id="chat-reset">New conversation</button>
-                <button type="submit" class="btn primary">Ask</button>
-              </div>
-            </form>
           </div>
+        </aside>
+        <div class="pane center">
+          <div class="toolbar">
+            <h1>Assistant</h1>
+            <span class="toolbar-desc">Ask any configured model. It can search the catalog, check compatibility and run installed specialists; every tool call and its real result is shown.</span>
+          </div>
+          <div class="pane-body">
+            <div id="chat-columns" class="chat-columns"><p class="empty">Tick one model to chat, or several to compare their answers side by side.</p></div>
+          </div>
+          <form id="ask-form" class="ask">
+            <textarea name="question" rows="2" placeholder="Which models could segment a four-sequence brain MRI, and can any of them run here?" required></textarea>
+            <div class="ask-row">
+              <label class="check"><input type="checkbox" name="synthetic_demo"> Include the synthetic test model</label>
+              <span class="hint kbd-hint">⌘/Ctrl + Enter to send</span>
+              <button type="button" class="btn" id="chat-reset">New conversation</button>
+              <button type="submit" class="btn primary">Ask</button>
+            </div>
+          </form>
         </div>
       </section>
 
       <!-- Progress -->
-      <section class="screen" id="screen-progress" hidden>
-        <header class="screen-head">
-          <h1>Progress</h1>
-          <p class="lede">The project checklist from PROGRESS.md. Changes here are written straight back to the file.</p>
-        </header>
-        <h2 class="sub">Who owns what</h2>
-        <table class="records owners" id="owners"><thead><tr><th scope="col">Workstream</th><th scope="col">Focus</th><th scope="col">Depends on</th><th scope="col">Owner</th></tr></thead><tbody></tbody></table>
-        <div id="checklist"></div>
+      <section class="screen cols-2l" id="screen-progress" hidden>
+        <aside class="pane side">
+          <div class="pane-head"><span>Outline</span></div>
+          <div class="pane-body flush"><ul class="plain-list tree outline" id="progress-outline"></ul></div>
+        </aside>
+        <div class="pane center">
+          <div class="toolbar">
+            <h1>Progress</h1>
+            <span class="toolbar-desc">The project checklist from PROGRESS.md. Changes here are written straight back to the file.</span>
+          </div>
+          <div class="pane-body doc">
+            <h2 class="sub" id="owners-head">Who owns what</h2>
+            <table class="records owners" id="owners"><thead><tr><th scope="col">Workstream</th><th scope="col">Focus</th><th scope="col">Depends on</th><th scope="col">Owner</th></tr></thead><tbody></tbody></table>
+            <div id="checklist"></div>
+          </div>
+        </div>
       </section>
     </main>
+
+    <footer class="statusbar">
+      <div class="status-item storage" id="storage-meter" title="Downloaded data and weights against the storage budget">
+        <span>Storage</span>
+        <div class="meter-track"><div class="meter-fill" id="storage-fill"></div></div>
+        <span id="storage-text">…</span>
+      </div>
+      <span class="status-item token-state" id="hf-state"></span>
+      <span class="status-item activity" id="status-activity" hidden></span>
+      <span class="status-spacer"></span>
+      <span class="status-item muted">Research software. Nothing here is a validated medical result.</span>
+    </footer>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/app.js"></script>

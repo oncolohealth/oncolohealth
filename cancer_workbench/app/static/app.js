@@ -49,6 +49,21 @@ async function guard(fn) {
   try { return await fn(); } catch (e) { toast(e.message, true); }
 }
 
+/* ---------------- theme ---------------- */
+// Dark by default; the choice is a per-browser convenience, so storage failures are ignored.
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const next = theme === "dark" ? "light" : "dark";
+  $("#theme-toggle").setAttribute("aria-label", `Switch to ${next} theme`);
+  $("#theme-toggle").title = `Switch to ${next} theme`;
+}
+try { setTheme(localStorage.getItem("cw-theme") === "light" ? "light" : "dark"); } catch { setTheme("dark"); }
+$("#theme-toggle").addEventListener("click", () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  setTheme(theme);
+  try { localStorage.setItem("cw-theme", theme); } catch { /* not persisted */ }
+});
+
 /* ---------------- navigation ---------------- */
 const SCREENS = ["catalog", "downloads", "datasets", "images", "assistant", "progress"];
 const loaders = {};
@@ -56,10 +71,24 @@ function show(name) {
   if (!SCREENS.includes(name)) name = "catalog";
   for (const s of SCREENS) $(`#screen-${s}`).hidden = s !== name;
   $$(".nav-btn").forEach(b => { if (b.dataset.screen !== name) b.removeAttribute("aria-current"); else b.setAttribute("aria-current", "page"); });
+  $("#title-screen").textContent = $(`.nav-btn[data-screen="${name}"]`).getAttribute("aria-label");
   if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
   loaders[name]?.();
 }
 $$(".nav-btn").forEach(b => b.addEventListener("click", () => show(b.dataset.screen)));
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+document.addEventListener("keydown", e => {
+  const n = Number(e.key);
+  if (e.altKey && !e.ctrlKey && !e.metaKey && n >= 1 && n <= SCREENS.length) { e.preventDefault(); show(SCREENS[n - 1]); }
+});
+// Status bar: background downloads and live scoring keep running while you switch screens.
+function updateActivity() {
+  const dl = state.jobs.some(j => j.state === "running" || j.state === "planning");
+  const sc = img.scoring?.state === "running" ? `Scoring ${img.scoring.done} of ${img.scoring.total} images` : "";
+  const text = [dl ? "Downloading" : "", sc].filter(Boolean).join(" · ");
+  $("#status-activity").textContent = text;
+  $("#status-activity").hidden = !text;
+}
 
 /* ---------------- shared state ---------------- */
 const state = { records: [], byId: {}, storage: null, selected: new Set(), jobs: [], typeFilter: "" };
@@ -80,7 +109,7 @@ async function loadStorage() {
   $("#budget-used").textContent = fmtBytes(s.used);
   $("#budget-of").textContent = `used of ${fmtBytes(s.budget)} budget`;
   const hf = $("#hf-state");
-  hf.className = `token-state ${s.hf_token ? "ok" : "no"}`;
+  hf.className = `status-item token-state ${s.hf_token ? "ok" : "no"}`;
   hf.textContent = s.hf_token ? "Hugging Face token set" : "No Hugging Face token";
   updateSelection();
 }
@@ -101,7 +130,7 @@ function ladder(s) {
 }
 function ladderBig(s) {
   const r = rank(s);
-  return `<div class="ladder-big" aria-hidden="true">${LADDER.map((_, i) => `<div class="${i <= r ? "on" : ""}" style="height:${8 + i * 6}px"></div>`).join("")}</div>
+  return `<div class="ladder-big" aria-hidden="true">${LADDER.map((_, i) => `<div class="${i <= r ? "on" : ""}"></div>`).join("")}</div>
     <div class="ladder-big-labels">${LADDER.map(([, l], i) => `<span class="${i === r ? "cur" : ""}">${esc(l)}</span>`).join("")}</div>`;
 }
 $("#ladder-key").innerHTML = LADDER.map(([k, l]) => `<span>${ladder(k)} ${esc(l)}</span>`).join("");
@@ -295,7 +324,7 @@ async function pollJobs() {
   const { jobs } = await api("/api/jobs");
   const wasActive = state.jobs.some(j => j.state === "running" || j.state === "planning");
   state.jobs = jobs;
-  renderJobs();
+  renderJobs(); updateActivity();
   const active = jobs.some(j => j.state === "running" || j.state === "planning");
   if (active) pollTimer = setTimeout(() => guard(pollJobs), 1000);
   if (wasActive && !active) {
@@ -312,9 +341,10 @@ function renderJobs() {
       <ul class="job-items">${j.items.map(i => {
         const pct = i.total ? Math.min(100, (i.done / i.total) * 100) : i.state === "done" ? 100 : 0;
         return `<li><div class="row"><span>${esc(state.byId[i.id]?.name || i.id)}</span><span class="state ${esc(i.state)}">${esc(i.state)}${i.total && i.state === "downloading" ? ` ${fmtBytes(i.done)} of ${fmtBytes(i.total)}` : ""}</span></div>
-          <div class="meter-track"><div class="meter-fill" style="width:${pct}%"></div></div>${i.error ? `<small class="state failed">${esc(i.error)}</small>` : ""}</li>`;
+          <div class="meter-track"><div class="meter-fill" data-w="${pct}"></div></div>${i.error ? `<small class="state failed">${esc(i.error)}</small>` : ""}</li>`;
       }).join("")}</ul>
       ${j.log.length ? `<div class="log">${esc(j.log.join("\n"))}</div>` : ""}</div>`).join("");
+  setWidths($("#jobs"));
 }
 $("#jobs").addEventListener("click", e => {
   const b = e.target.closest("[data-cancel]");
@@ -335,6 +365,7 @@ async function loadDatasets() {
 $("#local-datasets").addEventListener("click", e => {
   const b = e.target.closest("[data-inv]");
   if (!b) return;
+  markActive(b);
   guard(async () => {
     const inv = await api(`/api/inventory/${encodeURIComponent(b.dataset.inv)}`);
     $("#inventory").innerHTML = `<h3>${esc(state.byId[inv.id].name)}</h3>
@@ -345,9 +376,10 @@ $("#local-datasets").addEventListener("click", e => {
 });
 $("#manifest-list").addEventListener("click", e => {
   const b = e.target.closest("[data-audit]");
-  if (b) runAudit({ path: b.dataset.audit, dataset_id: b.dataset.ds });
+  if (b) { markActive(b); runAudit({ path: b.dataset.audit, dataset_id: b.dataset.ds }); }
 });
 $("#audit-synthetic").addEventListener("click", () => runAudit({ synthetic: true }));
+function markActive(b) { $$("#screen-datasets .tree .linkish").forEach(x => x.classList.toggle("active", x === b)); }
 function runAudit(src) {
   guard(async () => {
     currentAudit = src;
@@ -720,7 +752,7 @@ function renderScoring() {
     const status = e?.refused ? "Refused" : e?.error ? "Failed" : e?.probs ? `Scored · ${e.pred}` : j.current === it.key ? "Processing" : j.state === "failed" ? "Not processed" : "Queued";
     return `<li><button class="linkish mono" type="button" data-open="${esc(it.key)}">${esc(it.title)}</button><span class="${e?.error || e?.refused ? "err-text" : e?.probs ? "ok-text" : "hint"}">${esc(status)}</span></li>`;
   }).join("");
-  updateScoreClock(); updateImgSelection();
+  updateScoreClock(); updateImgSelection(); updateActivity();
 }
 async function pollScore() {
   clearTimeout(img.scoreTimer);
@@ -938,19 +970,28 @@ function renderProgress(p) {
     if (s.level === 2 || !blocks.length) blocks.push({ title: s.title, parts: [] });
     blocks[blocks.length - 1].parts.push(s);
   }
-  $("#checklist").innerHTML = blocks.map(b => {
-    const items = b.parts.flatMap(s => s.items);
-    const done = items.filter(i => i.mark === "x").length;
-    return `<section class="section-block"><div class="section-head"><h2>${md(b.title)}</h2><span class="count">${done} of ${items.length} done</span></div>
-      <div class="section-bar"><div style="width:${items.length ? (done / items.length) * 100 : 0}%"></div></div>
+  const tally = b => { const items = b.parts.flatMap(s => s.items); return [items.filter(i => i.mark === "x").length, items.length]; };
+  $("#progress-outline").innerHTML = `<li><button class="linkish" data-goto="owners-head">Who owns what</button></li>` + blocks.map((b, n) => {
+    const [done, total] = tally(b);
+    return `<li><button class="linkish" data-goto="sec-${n}"><span>${md(b.title)}</span><span class="cnt">${done}/${total}</span></button></li>`;
+  }).join("");
+  $("#checklist").innerHTML = blocks.map((b, n) => {
+    const [done, total] = tally(b);
+    return `<section class="section-block" id="sec-${n}"><div class="section-head"><h2>${md(b.title)}</h2><span class="count">${done} of ${total} done</span></div>
+      <div class="section-bar"><div data-w="${total ? (done / total) * 100 : 0}"></div></div>
       ${b.parts.map(s => `${s.level === 3 ? `<h3 class="lvl3">${md(s.title)}</h3>` : ""}<ul class="items">${s.items.map(i => `
         <li class="${i.mark === "x" ? "done" : ""} ${i.blocked ? "blocked" : ""}">
           <button class="mark ${i.mark === "x" ? "x" : i.mark === "~" ? "p" : ""}" data-line="${i.line}" data-mark="${esc(i.mark)}"
             aria-label="${i.mark === "x" ? "Done" : i.mark === "~" ? "In progress" : "Not started"}. Change status"></button>
           <span class="txt">${md(i.text.replace("🔒", "").trim())}</span></li>`).join("")}</ul>`).join("")}</section>`;
   }).join("");
+  setWidths($("#checklist"));
   state.progress = p;
 }
+$("#progress-outline").addEventListener("click", e => {
+  const b = e.target.closest("[data-goto]");
+  if (b) document.getElementById(b.dataset.goto)?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 $("#checklist").addEventListener("click", e => {
   const b = e.target.closest("button.mark");
   if (!b) return;
