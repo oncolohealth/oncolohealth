@@ -47,16 +47,19 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/config.py` | Named profiles from `configs/coordinator.json` or `configs/coordinator.example.json` | done |
 | `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist` | done |
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
+| `coordinator/evaluation.py`, `scripts/evaluate_coordinator.py` | Versioned public development workflows, observed trace checks, partial failure capture; offline scripted mode and explicitly selected live profile | done (live evaluation pending) |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
-| `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (library only; never executes) |
+| `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (Experiments UI/API now connected; never executes) |
+| `experiments/workspace.py` | Durable non-authorizing draft JSON and bounded read-only ExperimentRecord history/detail, preserved provenance and bad-file warnings | done (stdlib) |
 | `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, heads, records; `baseline` CLI | done (`ml` extra) |
 | `experiments/btxrd_source_shift.py` | Source hold-out only: one head per preprocessing variant, pick by center-1 val macro ROC-AUC (ties to `pad`), test only the pick and `pad`; `source-shift` CLI. Centers 2 + 3 were already seen in the first baseline run | done (`ml` extra) |
 | `experiments/btxrd_near_duplicates.py` | Ranks image pairs by the lower of the RAD-DINO and ResNet-50 cosine similarities; writes `candidates.csv` + `summary.json` for review, changes no split or group; `near-duplicates` CLI | done (needs numpy) |
 | `experiments/explore.py` | Images screen backend: `list_runs`, `review` (stored val/test predictions joined with the split, stdlib), `head_for` (load or verified refit of a run's head), `score` (live encoder + head on chosen images; refuses training images). Bypasses `execute_specialist` on purpose; not in the coordinator tool box | done (`score`/`head_for` need `ml`) |
-| `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing variant hash | done (`ml` extra) |
+| `learning/features.py` | `extract_features` → atomic `.npz` with measured source/model/processor binding and feature-payload digest; verified readers for fitting/review | done (`ml` extra) |
+| `learning/provenance.py` | Stdlib source/model/config/processor identities and exact manifest snapshot | done (local consistency, not authenticity or medical validation) |
 | `learning/heads.py` | `validate_head_inputs` (shapes, finite features, unique ids, class coverage, patient or duplicate group spanning partitions) runs before any fit; `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals, `save_head`/`load_head` (plain-array `.npz`, no pickle) | done (`ml` extra; distillation not implemented) |
-| `evaluation/metrics.py` | `binary_report`, `multiclass_report` (bootstrap CIs), `calibration` | done (`ml` extra) |
-| `evaluation/thresholds.py` | `choose_threshold` on development data (`youden`, `sensitivity>=X`) | done (`ml` extra) |
+| `evaluation/metrics.py` | Validated binary/multiclass reports, calibration; grouped bootstrap draw accounting and explicit undefined results | done (`ml` extra) |
+| `evaluation/thresholds.py` | Validated development-only Youden/sensitivity selection, including a finite no-positive-prediction threshold | done (`ml` extra) |
 | `evaluation/aggregate.py` | Binary patient max/mean aggregation; declared IDs and consistent labels/partition required | done (stdlib) |
 | `evaluation/leakage.py` | Declared split and namespaced pretraining overlap; unresolved coverage stays explicit | done (stdlib; no pixel or identity inference) |
 | `evaluation/comparison.py` | Binary ROC-AUC/AP, paired patient-cluster bootstrap differences and invalid-draw accounting | done (stdlib; not wired into baseline) |
@@ -130,13 +133,27 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 **Coordinator turn** (`coordinator ask` CLI or the Assistant screen):
 `make_provider(profile)` → `run_turn(provider, default_toolbox(catalog), question)`. The model sees `SYSTEM_PROMPT` and tool schemas, and each tool call goes through `ToolBox.call`, which validates arguments and returns `{result}` or `{error}`. The turn ends when the model answers without tool calls, or after `max_steps`. The app runs several profiles in parallel for side-by-side comparison.
 
+`ToolBox.call` validates types/enums and the documented nested schema subset
+before handler invocation. It keeps top-level arguments closed, preserves
+declared nested open objects and rejects non-finite JSON values. This is not
+a full JSON Schema engine. `scripts/demo_observed_results.py` provides an
+offline synthetic/scripted demonstration of observed outcomes.
+
+**Feature-head input checks:** `train_feature_head` validates aligned feature
+tables, finite numeric data, class/encoder declarations, split membership and
+train/validation class coverage before any learner is constructed. Declared
+sample, patient, duplicate-group and image-hash overlap is rejected before C
+selection. `head_inputs` carries BTXRD duplicate/hash metadata. Unknown patient
+IDs still prevent independence claims; these checks do not discover near
+duplicates or unrecorded patient links. Saved-head file format is unchanged.
+
 **Audit and split** (Datasets screen):
 `read_manifest` → `audit_dataset(spec, rows)` → `grouped_split(rows, fractions, seed)` → re-audit. A saved split goes to `data/<id>/splits/<name>.csv` with a `.json` sidecar recording the source manifest hash, fractions, seed and audit.
 
 **Images screen** (replay and live scoring):
 `GET /api/images/btxrd` (manifest rows) + `/media/btxrd/<file>?t=<token>` (pixels, path-checked against the image root) + `/api/annotation/btxrd/<id>` (LabelMe shapes).
 Replay: `POST /api/runs/review` → `explore.review` joins `runs/<id>/splits/<protocol>.csv`, the endpoint cohort and `predictions/<result>.json`; binary verdicts use the stored val threshold (`>=`, as in `binary_report`).
-Live UI: `POST /api/score/start` validates inputs and starts a `ScoringJobs` worker → `explore.score` reports preparation stages and each processed image → browser polls `GET /api/score/jobs/<id>` for counts, partial results and final output. `GET /api/score/current` restores the latest batch, selected image keys and run context after a page reload, including completed results. Jobs live only in the app process; restart clears them, and history is capped at eight batches. `POST /api/score` keeps the synchronous API for existing clients. Scoring itself is unchanged: `head_for` loads `heads/<result>.npz` or refits from the split + feature cache and keeps it only if it reproduces the stored val probabilities → refuse training images → `FrozenEncoderAdapter.embed` per image → head probabilities. Uploads go to `data/uploads/<sha256[:16]>.<ext>` with a JSON sidecar via `POST /api/uploads/add`.
+Live UI: `POST /api/score/start` validates inputs and starts a `ScoringJobs` worker → `explore.score` reports preparation stages and each processed image → browser polls `GET /api/score/jobs/<id>` for counts, partial results and final output. `GET /api/score/current` restores the latest batch, selected image keys and run context after a page reload, including completed results. Jobs live only in the app process; restart clears them, and history is capped at eight batches. `POST /api/score` keeps the synchronous API for existing clients. `head_for` requires a measured input binding and fitted-head fingerprint; a missing head must reproduce both fitted identity and stored validation probabilities. Scoring verifies model context and selected image bytes, refuses recorded training IDs, then embeds and scores. Legacy unbound runs retain replay only. See `docs/reports/E-feature-provenance.md`. Uploads go to `data/uploads/<sha256[:16]>.<ext>` with a JSON sidecar via `POST /api/uploads/add`.
 
 **Experiment draft** (library only):
 `plan_experiment(path, model, audit, budget)` checks declared immutable identity, reuse rights, audit findings and explicit storage amounts. It returns `blocked` or `ready_for_review`, always `execution_authorized: false`. It changes no catalog state and launches nothing. See `docs/reports/B-plan-contract.md`.
@@ -174,10 +191,15 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 | `test_datasets.py` | Audit findings, grouped splits |
 | `test_btxrd.py` | `.xlsx` reader, BTXRD describe and manifest on a synthetic release |
 | `test_experiment_plan.py` | Three draft paths, reviewed rights, audit and budget refusal; synthetic records |
+| `test_experiment_workspace.py` | Draft preview/save and restart persistence, exact manifest identity, save-time rechecks, unknown-authority refusal and bounded read-only history |
+| `test_metric_validation.py` | Invalid metric inputs, missing classes, bootstrap accounting, threshold edge cases and undefined summary rendering |
 | `test_evaluation_protocol.py` | Patient aggregation, declared/pretraining overlap, paired comparisons and 1,134 metric oracle cases |
 | `test_learning_eval.py` | Split protocols, heads (incl. save/load round trip), metrics, thresholds, preprocessing (ML tests skip without the `ml` extra) |
 | `test_coordinator.py` | Tool loop with `ScriptedProvider`; OpenAI-compatible client against a local fake server |
+| `test_coordinator_evaluation.py` | Trace checks, fabricated completion failure, partial provider failure, step limits and fixture versions |
+| `test_hosted_profile.py` | Fake hosted tool round trip, credential requirement, optional workspace header, profile preservation and redirect boundaries |
 | `test_app.py` | `PROGRESS.md` editing, API functions, uploads, media path checks, run replay, server Host and token guards (including scoring recovery) |
+| `test_encoder_provenance.py`, `test_feature_provenance.py` | Synthetic custom-root/source/model binding, atomic failures, fit/refit/ranking refusals and head identity |
 | `test_scoring.py` | Scoring progress across success/refusal/error, concurrent-batch refusal, failure preservation, recovery snapshots, bounded history and API input resolution |
 | `helpers.py` | `LocalServer` fixture |
 

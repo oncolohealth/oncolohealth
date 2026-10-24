@@ -10,9 +10,11 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 from typing import Any, Protocol
 
 
@@ -55,6 +57,19 @@ class Provider(Protocol):
     def chat(self, messages: list[dict], tools: list[dict] | None = None, **params: Any) -> ChatResult: ...
 
 
+class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
+    """A configured model endpoint must not redirect requests to another origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        def origin(url):
+            p = urllib.parse.urlsplit(url)
+            return p.scheme.lower(), p.hostname, p.port or (443 if p.scheme == "https" else 80)
+
+        if origin(req.full_url) != origin(newurl):
+            raise ProviderError("Model endpoint redirected to another origin; request refused.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 @dataclasses.dataclass
 class OpenAICompatibleProvider:
     profile: str
@@ -65,12 +80,28 @@ class OpenAICompatibleProvider:
     default_params: dict[str, Any] = dataclasses.field(default_factory=dict)
     extra_body: dict[str, Any] = dataclasses.field(default_factory=dict)  # server-specific fields
     supports_tools: bool = True
+    require_api_key: bool = False
+    extra_headers_env: dict[str, str] = dataclasses.field(default_factory=dict)
 
     def _headers(self) -> dict[str, str]:
         h = {"Content-Type": "application/json"}
         key = os.environ.get(self.api_key_env) if self.api_key_env else None
+        if self.require_api_key and not key:
+            raise ProviderError(f"[{self.profile}] missing required credential environment variable {self.api_key_env!r}")
         if key:
             h["Authorization"] = f"Bearer {key}"
+        if not isinstance(self.extra_headers_env, dict):
+            raise ProviderError(f"[{self.profile}] extra_headers_env must map header names to environment-variable names")
+        reserved = {"authorization", "host", "content-type", "content-length", "connection", "transfer-encoding"}
+        for name, env in self.extra_headers_env.items():
+            if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9-]+", name)
+                    or name.lower() in reserved or not isinstance(env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env)):
+                raise ProviderError(f"[{self.profile}] invalid extra_headers_env entry")
+            value = os.environ.get(env)
+            if value:
+                if "\r" in value or "\n" in value:
+                    raise ProviderError(f"[{self.profile}] invalid header value from environment variable {env!r}")
+                h[name] = value
         return h
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
@@ -78,7 +109,7 @@ class OpenAICompatibleProvider:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, method=method, headers=self._headers())
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+            with urllib.request.build_opener(_SameOriginRedirects()).open(req, timeout=self.timeout_s) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:500]

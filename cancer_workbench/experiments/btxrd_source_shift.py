@@ -38,9 +38,10 @@ def select(val_scores: dict[str, float]) -> str:
 
 def run(encoders=ENCODERS, endpoints=tuple(CLASSES), variants=VARIANTS, *, out_dir: Path | None = None,
         seed: str = "0", n_boot: int = 1000, features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
-    from ..adapters.encoder import preprocessing, preprocessing_hash, revision
-    from ..learning.features import cache_path, extract_features, load_features
-    from ..learning.heads import save_head, train_feature_head
+    from ..adapters.encoder import preprocessing
+    from ..learning.features import bound_source_rows, ensure_features
+    from ..learning.provenance import manifest_snapshot
+    from ..learning.heads import head_fingerprint, save_head, train_feature_head
 
     if "pad" not in variants or set(variants) - set(VARIANTS):
         raise ValueError(f"variants must include 'pad' and come from {VARIANTS}")
@@ -49,19 +50,14 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), variants=VARIANTS, *, out_d
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = Path(out_dir or PROJECT_ROOT / "runs" / f"btxrd-source-shift-{stamp}")
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = read_manifest(MANIFEST_PATH)
-    manifest_sha = hash_file(MANIFEST_PATH)["sha256"]
+    rows, manifest_sha = manifest_snapshot(MANIFEST_PATH)
     source_rev = _git_revision()
 
     feats = {}
     for enc in encoders:
         for v in variants:
-            path = cache_path(enc, "btxrd", features_dir, v)
-            if not path.exists():
-                extract_features(enc, rows, RAW_DIR, path, variant=v)
-            f = load_features(path)
-            if f["preprocessing_hash"] != preprocessing_hash(enc, v) or f["revision"] != str(revision(enc)):
-                raise ValueError(f"{path} was made with different preprocessing or weights")
+            f, path = ensure_features(enc, rows, RAW_DIR, features_dir, v)
+            rows = bound_source_rows(rows, f)
             feats[enc, v] = (f, {sid: i for i, sid in enumerate(f["sample_ids"].tolist())}, path)
 
     split = make_split(rows, "source_holdout", seed)
@@ -84,10 +80,13 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), variants=VARIANTS, *, out_d
                                "C": {v: fitted[v][0].C for v in variants}, "selected": chosen})
             for v in dict.fromkeys(("pad", chosen)):  # TEST only for the baseline and the pick
                 head, data, fit_seconds = fitted[v]
+                f, _, fpath = feats[enc, v]
                 t0 = time.monotonic()
                 val, test, report = evaluate(head, data, endpoint, n_boot)
                 run_id = f"source_holdout.{endpoint}.{enc}.{v}"
                 results.append({"id": run_id, "protocol": "source_holdout", "endpoint": endpoint, "encoder": enc,
+                                "feature_cache": feats[enc, v][2].name, "feature_binding_sha256": f["feature_binding_sha256"],
+                                "head_fingerprint": head_fingerprint(head),
                                 "variant": v, "selected": v == chosen, "label": LABEL, "C": head.C,
                                 "val_macro_roc_auc": head.val_score,
                                 "counts": {p: sum(1 for r in er if r["partition"] == p) for p in ("train", "val", "test")},
@@ -96,7 +95,6 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), variants=VARIANTS, *, out_d
                 (out_dir / "predictions" / f"{run_id}.json").write_text(json.dumps({"val": val, "test": test}) + "\n")
                 (out_dir / "heads").mkdir(exist_ok=True)
                 save_head(head, out_dir / "heads" / f"{run_id}.npz")
-                f, _, fpath = feats[enc, v]
                 records.append(record(
                     f"{out_dir.name}/{run_id}", endpoint, enc, f, f"{split_path.name} (source_holdout, seed {seed}); {GROUPING}",
                     seed, preprocessing(enc, v), source_rev, manifest_sha, fit_seconds + time.monotonic() - t0,

@@ -510,6 +510,32 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
 .live th { color: var(--text-2); font-weight: 600; font-size: 11.5px; }
 .live th, .live td { padding: 5px 12px 5px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 
+/* ---------------- Experiments: drafts and saved reproducibility records ---------------- */
+.experiment-form { display: grid; gap: 10px; }
+.experiment-form select, .experiment-form input[type="number"], .experiment-search input { width: 100%; }
+.experiment-preview, .experiment-detail { padding: 12px 14px; background: var(--raised); border: 1px solid var(--line); border-radius: 5px; }
+.experiment-preview h2, .experiment-detail h2 { margin-top: 0; }
+.experiment-review-head, .experiment-history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.experiment-facts { display: grid; grid-template-columns: minmax(110px, 0.6fr) minmax(0, 1.4fr); gap: 6px 14px; }
+.experiment-facts dt { color: var(--text-2); }
+.experiment-facts dd { margin: 0; overflow-wrap: anywhere; }
+.experiment-blockers { padding-left: 18px; overflow-wrap: anywhere; }
+.experiment-blockers li { margin: 4px 0; }
+.experiment-history-head { margin-top: 24px; }
+.experiment-history-head p { margin: 4px 0 10px; }
+.experiment-search { max-width: 40rem; margin-bottom: 10px; }
+#experiment-history { max-height: 30rem; overflow: auto; border: 1px solid var(--line); border-radius: 5px; }
+#experiment-history > .empty { padding: 12px; margin: 0; }
+#experiment-history th, #experiment-history td { display: table-cell; overflow-wrap: anywhere; }
+#experiment-history table { min-width: 680px; }
+#experiment-history th:last-child { min-width: 9rem; }
+#experiment-history tbody tr { cursor: default; }
+#experiment-history .link { text-align: left; overflow-wrap: anywhere; border: 0; padding: 0; margin-right: 6px; background: none; color: var(--accent); cursor: pointer; }
+#experiment-history .link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.experiment-detail { margin: 14px 0 10px; }
+.experiment-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40rem; overflow-y: auto; font: 12px/1.5 var(--mono); }
+@media (max-width: 720px) { .experiment-facts { grid-template-columns: minmax(0, 1fr); } .experiment-facts dd { margin-bottom: 6px; } }
+
 /* ---------------- Toast: notification card above the status bar ---------------- */
 .toast {
   position: fixed; right: 16px; bottom: 36px; max-width: min(90vw, 420px); z-index: 30;
@@ -539,7 +565,7 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
   .pane { overflow: visible; }
   .pane.side, .pane.inspector { border: 0; border-bottom: 1px solid var(--line); }
   .pane.center { order: -1; }
-  #screen-catalog .pane.side, #screen-images .pane.side, #screen-datasets .pane.side, #screen-assistant .pane.side { order: -2; }
+  #screen-catalog .pane.side, #screen-images .pane.side, #screen-datasets .pane.side, #screen-experiments .pane.side, #screen-assistant .pane.side { order: -2; }
   .pane-body { overflow: visible; padding: 14px 16px; }
   .pane-body.flush { padding: 0; }
   .toolbar { flex-wrap: wrap; padding: 10px 16px; }

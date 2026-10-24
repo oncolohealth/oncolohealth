@@ -16,13 +16,13 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 | WS | Focus | Module(s) | Depends on | Owner |
 |---|---|---|---|---|
 | A | Dataset & evidence curator | `datasets/`, `acquisition/`, `catalog/datasets.json` | none | |
-| B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | Codex (planner + protocol draft) |
+| B | Bone-model experiment design | `experiments/`, `docs/reports/B-*` | A (endpoint, grouping) | Inam Qasimi (planner + protocol draft) |
 | C | Registry & specialist adapters | `registry/`, `routing/`, `adapters/`, `catalog/models.json` | none | |
 | D | Coordinator & retrieval | `coordinator/`, `retrieval/`, `curriculum/` | C (tool schemas) | |
 | E | Transfer learning & distillation | `learning/` | A (manifest), F (metrics) | |
-| F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Codex (utilities + protocol draft) |
-| G | Researcher UI & API | `api/` (new), `ui/` (new) | C, D interfaces | |
-| H | Independent review | `docs/reports/H-*` | all | Codex (source check only; independent review pending) |
+| F | Evaluation & scientific quality | `evaluation/`, audit rules in `datasets/audit.py` | A | Inam Qasimi (utilities + protocol draft) |
+| G | Researcher UI & API | `app/`, `experiments/workspace.py` | B, C, D interfaces | Sebastian (local app); Inam Qasimi (Experiments) |
+| H | Independent review | `docs/reports/H-*` | all | Inam Qasimi (source check only; independent review pending) |
 
 ## Phase 0: Foundation (done in this session)
 
@@ -59,17 +59,20 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [~] Arms (Hub Q03, decided 2026-10-23): frozen RAD-DINO + linear head vs. frozen ResNet-50 + linear head, both already downloaded. MedSigLIP joins as a second medical arm once its gated access is granted
 - [~] Check MedSigLIP/RAD-DINO pretraining overlap with BTXRD sources. RAD-DINO: chest X-rays only per its card (no overlap expected; `training_images.csv` not checked). MedSigLIP: not acquired
 - [x] `experiments/plan.py::plan_experiment`: side-effect-free draft gates for three reuse paths, pinned identity, reviewed rights, dataset findings and storage. Eight synthetic tests. Contract: `docs/reports/B-plan-contract.md`; no execution or catalog promotion
+- [x] Experiments UI/API: current catalog/manifest/storage draft preview, save-time rechecks, durable non-authorizing drafts and read-only recorded-run history. Synthetic example covers the three reuse paths. Sixteen integration/storage regressions; details in `docs/reports/B-experiment-workspace.md`. No training dispatch
 
 ### C: Registry and adapters
 - [x] Encoder adapter (`adapters/encoder.py`) wrapping a frozen backbone → embedding envelope (RAD-DINO, ResNet-50; contract in `docs/reports/C-model-cards.md`)
 - [ ] Bone classifier adapter once E produces a head. Heads now persist (`learning/heads.py::save_head`/`load_head`, plain arrays, no pickle) and the Images screen scores with them through a separate exploratory path (`experiments/explore.py`); a gated adapter through `execute_specialist` still needs a reviewed catalog promotion
 - [ ] Full input validation: geometry, bit depth, channels, normalization
-- [ ] Convert exceptions from adapter validation into failed result envelopes (H source check)
+- [x] Convert exceptions from adapter validation into failed result envelopes (H source check); synthetic regression verifies that `run` is not called after validation throws
 - [ ] Promote models' `evidence_state` via PR as each one is actually run
 
 ### E: Transfer learning
 - [x] `learning/features.py::extract_features` (RAD-DINO and ResNet-50 over all 3,746 BTXRD images; cached in `runs/features/`)
 - [x] `learning/heads.py::train_feature_head` / `evaluate_head` (logistic / linear head). Existing exploratory report: `docs/reports/E-btxrd-exploratory-baseline.md`. Reported image-level and source-holdout estimates have not been independently reproduced in this checkout; they do not establish equivalence between encoders or medical performance
+- [x] Pre-fit train/val identity, duplicate, shape, finite-feature and class-coverage validation (H source check); reject declared overlap before C selection. Duplicate groups and file hashes now pass from the BTXRD manifest to this check. Unknown patient identity still prevents independence claims
+
 - [x] Pre-fit validation (H source check): `learning/heads.py::validate_head_inputs` runs before any C is tried and refuses misaligned or non-finite features, repeated or blank sample ids, unknown partitions, a train or val partition missing a class, and any patient or duplicate group (`group_ids`, now passed from `duplicate_group`) spanning train/val/test. Synthetic tests confirm no fit starts on bad input; both existing runs' real inputs pass and their heads still rebuild to the stored val predictions
 - [x] Source-shift check (2026-10-24, [E-btxrd-source-shift.md](docs/reports/E-btxrd-source-shift.md)): preprocessing variants `pad_pstretch` and `native_crop` (`adapters/encoder.py::VARIANTS`; default `pad` hash unchanged), one variant picked per encoder × endpoint on center-1 val, test only for the pick and `pad`. Contrast stretch never won; native crop won for ResNet-50 only (test ROC-AUC benign vs malignant 0.623 → 0.690, three-class 0.609 → 0.637, tumor vs normal 0.621 → 0.623, overlapping image-level CIs). The gap to center-1 val (0.84–0.94) stays. Centers 2 + 3 were already seen in the first baseline run, so this is a hint, not a held-out result; a fair test needs an unseen source
 - [ ] Optional: teacher-student distillation, after a baseline exists and with teacher rights checked
@@ -77,13 +80,13 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 ### F: Evaluation
 - [~] Review draft `docs/reports/F-evaluation-protocol.md`: actual baseline recipe, patient aggregation policy, paired grouped CIs, calibration, development-only choices and overlap review. Endpoint/patient/reference-standard evidence still unresolved; protocol not approved
 - [x] Stdlib `evaluation/aggregate.py`, `leakage.py`, `comparison.py`: explicit binary patient aggregation, declared split/pretraining overlap and paired patient-cluster ROC-AUC/AP differences. 22 new synthetic tests, including 1,134 small metric oracle cases; no patient identities inferred
-- [~] Existing ML `evaluation/metrics.py` and `thresholds.py`: implemented but still need input/non-finite/invalid-bootstrap-draw hardening (see H source check); new utilities are not automatically wired into the baseline
+- [x] F metric/threshold follow-up against merged main `bff6ea4`: validated inputs/groups, explicit undefined metrics, invalid-bootstrap draw accounting and null-safe baseline summaries; 24 synthetic regression tests pass. Patient aggregate/paired utilities remain separate from the baseline
 - [x] Empty error-review template `docs/reports/F-error-review-template.csv` and subgroup policy in F protocol; no real cases reviewed
 
 ### D: Coordinator
 - [ ] 🔒 Live Qwen endpoint. Blocked on the GPU machine: confirm its VRAM to choose BF16 (~80 GB) or FP8 (~40–48 GB). See `docs/big-machine.md`
 - [ ] Develop locally against a small model via an Ollama/LM Studio profile meanwhile
-- [ ] Enforce coordinator tool argument types/enums and nested schema constraints before calling handlers (H source check)
+- [x] Enforce coordinator tool argument types/enums and the documented nested schema subset before calling handlers (H source check); synthetic tests cover rejected values and unchanged valid arguments
 - [ ] Held-out workflow evaluation set: missing inputs, unknown models, catalog-only models, tool failures, unsupported requests, conflicting sources
 - [ ] Compare profiles on that set (routing accuracy, invalid args, invented results, latency)
 - [ ] `retrieval/`: PubMed E-utilities search + MedCPT rerank; citation-support check
@@ -97,9 +100,9 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] Images UI cleanup: baseline context and selection actions above the gallery; batch selection caps at 24; visible readiness guidance; background scoring reports preparation stages, current image, processed/total counts, scored/refused/failed outcomes, elapsed time and incremental results. The latest batch and results recover after page reload while the app process stays running; reconnect handles interrupted progress requests. One live UI batch at a time, with bounded in-memory history; app restart clears it. Verified a 24-image live RAD-DINO batch, reload during and after scoring, training-image refusal, an unreadable SYNTHETIC upload and simulated progress-connection failure/reconnect in the browser
 - [x] Images screen handles preprocessing variants (2026-10-24): run results show their variant (`· native_crop (selected)`), and live scoring loads the encoder with the head's own variant, so source-shift heads score instead of being refused. A head whose variant doesn't match its result is still refused before any image is embedded. Live scores of 4 real test images matched the source-shift run's stored test predictions within 1e-16 for both the `native_crop` and `pad` ResNet-50 heads. Not yet checked in a browser
 - [ ] "Analyze an image" through a validated adapter → native result envelope. Still blocked until C ships a reviewed adapter and the catalog promotes a model; until then the assistant must say no model can run
-- [ ] Experiment runs screen (plans, states, records), once B/E land
-- [x] Desktop-tool redesign (2026-10-24): app shell with title bar, icon activity bar (Alt+1–6), per-screen side panel / workspace / inspector panes that scroll on their own, a bottom dock for live scoring results on Images, and a status bar for storage, HF token and running downloads or scoring. Neutral graphite dark theme by default with a light toggle (remembered per browser), one blue accent, compact 13px type, inline SVG icons, still no build step or external assets. Inline `style=` attributes, which the page's CSP blocked, were replaced, so download meters, checklist bars and the large evidence ladder now render. Progress screen gained a section outline. API untouched; 106 unit tests pass
-- [~] Visual QA pass in a real browser (light + dark, phone width). After the redesign every screen was checked at about 1360 px wide in dark, Images, Assistant and Progress also in light, and Datasets at 800 px (stacked layout); a 2-image live RAD-DINO batch ran through the new dock with no console errors. Not yet checked: phone width (390 px) after the redesign, uploads, profile editing, and a running download
+- [x] Experiments screen: draft checks/save plus recorded states, lineage, scope and blockers. Full guided execution/queueing remains separate. Ported into the desktop-tool shell when the demo-readiness branch was merged (2026-10-24): form in the side panel, draft review, history and record detail in the workspace, Alt+5
+- [x] Desktop-tool redesign (2026-10-24): app shell with title bar, icon activity bar (now Alt+1–7), per-screen side panel / workspace / inspector panes that scroll on their own, a bottom dock for live scoring results on Images, and a status bar for storage, HF token and running downloads or scoring. Neutral graphite dark theme by default with a light toggle (remembered per browser), one blue accent, compact 13px type, inline SVG icons, still no build step or external assets. Inline `style=` attributes, which the page's CSP blocked, were replaced, so download meters, checklist bars and the large evidence ladder now render. Progress screen gained a section outline. API untouched; 106 unit tests passed at the time
+- [~] Visual QA pass in a real browser (light + dark, phone width). After the redesign every screen was checked at about 1360 px wide in dark, Images, Assistant and Progress also in light, and Datasets at 800 px (stacked layout); a 2-image live RAD-DINO batch ran through the new dock with no console errors. Before the redesign, the branch's updated Images screen was checked at 1440×1000 and 390×844 in both palettes. Not yet checked: phone width (390 px) after the redesign, the ported Experiments screen beyond a smoke check, uploads, profile editing, and a running download
 
 Team Hub checklist update for this UI work is prepared in `DOCS.md` for the project lead to paste; direct editing is blocked by Google sign-in.
 
@@ -145,7 +148,51 @@ Historical verification from the incoming branch's source checkout:
 - Integrated `origin/codex/experiment-evaluation` at `d718b41195543c3bd7c1ef590c222dd3f9f53e4b` with main's existing Images screen, saved heads and scoring recovery. Resolved documentation conflicts by retaining both workstreams' additions.
 - `.venv/bin/python -m unittest discover -s tests`: **98 tests, all passing**, including the optional ML tests. `python3 -m unittest discover -s tests`: **98 tests, OK with 7 optional ML tests skipped**.
 - `.venv/bin/python -m cancer_workbench catalog validate`: **16 models, 14 datasets valid**. `git diff --check` is clean. These checks establish software behavior only; no medical workload or catalog promotion was performed during the merge.
-- Team Hub checklist synchronization remains blocked: opening the document redirects to Google sign-in. The B/F completion items and current verification results above await synchronization after access is restored.
+- The connected Team Hub has since been read and already records the merge and 98-test results. The follow-up synchronized B/F verification and attribution in the Local build checklist; attribution-only corrections were also applied to the earlier contribution check-ins.
+
+
+## Inam Qasimi: merged-main evaluation follow-up (2026-10-24)
+
+- Based on clean merged main `bff6ea43ca8996d1a6959ebbb1a1bea5bc274089` at `/home/inamqasimi/Documents/BETA_TEST`.
+- B/F ownership and source-check attribution corrected to Inam Qasimi. `.mailmap` maps the earlier assistant author identity for Git reporting; future branch commits use the repository's configured human email. Existing shared commit objects are unchanged.
+- `docs/reports/F-metric-hardening.md` describes the fix, compatibility changes and verification. Scientific endpoint/patient/source evidence and independent review remain unresolved. E/C/D source findings remained open at that checkpoint and are addressed in the subsequent demo-readiness branch below.
+- Verified with a temporary test environment: NumPy 2.5.4, scikit-learn 1.9.1 and SciPy 1.18.1. **122 tests: 121 pass, 1 skipped** (Torch preprocessing unavailable), including all 24 new tests. Before this change, merged main ran **98 tests: 97 pass, 1 skipped** in the same environment and emitted single-class metric warnings; the patched suite does not emit those warnings.
+- Plain `python3`: **122 tests: 93 pass, 29 skipped** because optional scikit-learn/Torch tests are unavailable; the newly added plain-Python summary tests pass. Before this change: **98 tests: 91 pass, 7 skipped**.
+- Catalog remains 16 models and 14 datasets. No UI/learning/coordinator/adapter/catalog/shared-contract changes, medical data downloads, inference, training or evidence promotions.
+
+## Inam Qasimi: execution checks and presentation follow-up (2026-10-24)
+
+- Separate `codex/demo-readiness` branch, based on `df45e78`, in an isolated local
+  clone. The user's `/home/inamqasimi/Documents/BETA_TEST` checkout and checked-out
+  branch are unchanged. This work is not merged or pushed.
+- E: reject invalid feature tables and declared sample/patient/duplicate/hash
+  overlap before fitting or selecting a head. Manifest duplicate/hash metadata
+  reaches the head inputs. Missing patient IDs remain unknown.
+- C: adapter validation exceptions become failed result envelopes, with identity
+  and synthetic provenance retained. D: enforce the documented tool-schema
+  subset before invoking handlers, without coercion.
+- Added 17 synthetic regression tests. Available ML environment: **139 discovered,
+  138 pass, 1 Torch preprocessing skip**. Plain Python: **139 discovered, 103 pass,
+  36 optional-ML skips**. Catalog: 16 models and 14 datasets valid. The full socket
+  tests passed after the sandbox network grant. No medical workload was run.
+- Added `scripts/demo_observed_results.py`; actual catalog refusal, argument
+  rejection, synthetic success/failure and scripted observed-result feedback
+  execute offline. This does not evaluate live LLM reasoning.
+- Browser navigation checked on all six screens in a source-only desktop app.
+  Catalog compatibility/refusal and the built-in 240-row synthetic audit worked.
+  Screenshots captured for the presentation. This is not a full light/dark/mobile
+  QA pass; downloaded-image inference remains unavailable in this checkout.
+- Prepared an editable 12-slide presentation (seven-slide pitch, four appendices,
+  alternate cover), original conceptual artwork, native chart/tables, real app
+  captures, speaker notes, a timed demo script, claims/source ledger, researcher
+  feedback guide and proposed cloud sequence. These are separate chat outputs,
+  not app features. Sponsor integrations/public cloud hosting remain proposed.
+- Next: independent code review and full Torch regression checks before merging;
+  genuine patient mapping or an independent cohort and protocol review before
+  stronger scientific claims; configured live endpoint for held-out coordinator
+  evaluation. `docs/reports/demo-readiness.md` records details and limits.
+
+- The incoming main checkpoint reported Hub sign-in blocked. Inam has since synchronized the Local build checklist through the connected document tools.
 
 ### Pre-fit checks and source-shift run (2026-10-24)
 
@@ -159,4 +206,118 @@ Historical verification from the incoming branch's source checkout:
 - [x] Add `.github/workflows/tests.yml`: core unittest suite on every push and pull request, Ubuntu, Python 3.11–3.14. Official actions pinned to verified release commits; read-only repository permission; no dependency installs or artifact downloads.
 - [x] Local verification: workflow YAML parses and its triggers/matrix match the requested settings. Clean Python 3.12.13 and 3.14.3 environments each discover **98 tests, OK with 8 optional ML tests skipped**. `git diff --check` passes. These are synthetic software checks only.
 - [ ] Verify the first GitHub-hosted run after the workflow is committed and pushed; Python 3.11/3.13 and Ubuntu have not been exercised locally.
-- [ ] Synchronize this CI checklist with the Team Hub's Local build checklist tab. Access still redirects to Google sign-in; no remote checklist changes were made.
+- [x] The latest pushed CI/source-work checkpoint is recorded in the Team Hub; the new integrated branch verification is recorded separately below.
+
+### Integrated with latest pushed team work
+
+- Fetched and integrated `upstream/main` at `acb8e298e196cb86187d879b00a25bc1c50a2cd9`
+  into the isolated demo-readiness branch. Retained Sebastian's source-shift
+  variants, near-duplicate search, shared evaluation/record helpers, public
+  `validate_head_inputs`, canonical `group_ids`, unassigned-row behavior and CI.
+  His overlapping E checks are existing team work; this contribution adds the
+  stricter identity/hash/option checks and C/D fixes.
+- Resolved the baseline helper refactor with the earlier F null-safe rendering.
+  Both baseline and source-shift summaries now use the same null-safe cells.
+  Added one integration regression, bringing this follow-up to 18 new tests.
+- Current integrated suite: **146 discovered, 144 pass, 2 Torch preprocessing
+  skips** in the available ML environment; plain Python **146 discovered,
+  106 pass, 40 optional-ML skips**. Earlier 139/122/104 counts are checkpoints,
+  not the integrated count. No medical artifacts or reported scores reproduced.
+- At this checkpoint, `c13a74a` was unavailable. It was subsequently pushed and
+  reconciled in the autonomous refinement below. No remote branch was pushed.
+
+### Autonomous refinement and five pitch alternatives (2026-10-24)
+
+- [x] Fetched and integrated pushed main `c13a74a15fdd636249899a587a239cb000107e6d`,
+  preserving Sebastian's Images preprocessing selection/refit/cache fix and
+  variant UI labels. Two incoming regressions are included. The user checkout
+  remains untouched; all work is on the isolated `codex/demo-readiness` branch.
+- [x] Prepared `claude-research` through the compatible provider. Credentials
+  and optional workspace header come from environment references; missing key
+  refuses before transport and cross-origin redirects refuse. Seven local fake-
+  server/profile tests pass. No real key, live Claude call or sponsor eligibility
+  is claimed. See `docs/claude-profile.md`.
+- [x] Added versioned public coordinator development fixtures and runner, with
+  eight offline smoke cases and six optional live cases. Actual tool results and
+  next-request feedback are checked, errors retain partial traces, and final
+  answer quality stays unscored. Seven regressions pass. No held-out/live model
+  reasoning score or medical execution was produced.
+- [x] Reviewed primary BTXRD/CLAIM sources and re-read Figshare version/license
+  metadata. Corrected baseline equivalence and patient-independence overclaims
+  without altering reported scores. Recorded protocol/reference-standard gaps
+  in `docs/reports/research-evidence-review.md`.
+- [x] Prepared five additional seven-slide editable presentation alternatives:
+  research evidence, product demo, public benefit, cloud collaboration and
+  engineering reliability. Each has intro/evidence/conclusion, 180-second script
+  and alternate opening/close. Added short fallback, Q&A and source/visual check.
+  All 35 slides inspected, spacing fixes rechecked and numeric claims matched.
+- [x] Integrated software checkpoint: **162 discovered, 160 pass, 2 Torch skips**
+  in the available ML environment; plain Python **162 discovered, 122 pass,
+  40 optional-ML skips**. The deck's 155-test chart is explicitly the earlier
+  source-integration/hosted-profile checkpoint. Counts are never summed.
+- [ ] Full Torch checks, independent code/protocol review, live coordinator
+  evaluation and reviewed specialist promotion remain. Genuine patient mapping
+  or an independent cohort, primary endpoint and reference-standard/protocol
+  review require scientific evidence. Public cloud remains unprovisioned.
+
+### Experiment planning and recorded-run workspace (2026-10-24)
+
+- [x] Added a seventh local screen, Experiments, connecting the existing planner
+  to current catalog models, on-disk manifests and the server's storage budget.
+  Browser-supplied audit/rights/budget/authorization objects are refused. Audits
+  and exact manifest-byte identity are recomputed at preview and save time.
+- [x] Saved blocked or review-ready drafts have UUID identity, UTC time, source
+  revision, manifest hash, audit and `execution_authorized: false`. Exclusive
+  creation does not overwrite an existing draft. A synthetic 12-row example
+  illustrates all three reuse paths without any training or medical execution.
+- [x] Added searchable history and readable lineage/scope/blocker summaries for
+  saved drafts and existing ExperimentRecord files, with expandable/downloadable
+  JSON. Browsing does not load models, refit heads or change run states. Invalid
+  files warn while valid records remain available; paths/read volumes are bounded.
+- [x] Sixteen synthetic integration/storage regressions pass. The full suite
+  checkpoint is **178 discovered, 176 pass, two Torch preprocessing skips** in
+  the available ML environment; plain Python **178 discovered, 138 pass,
+  40 optional-ML skips**. Earlier counts are separate dated checkpoints.
+- [x] Desktop browser check: synthetic preview/save, history search, readable
+  details and page-reload/app-restart persistence. Simplified the example form
+  and moved raw JSON behind an expandable section after visual review. Screenshots
+  use an isolated QA folder. Mobile/light-theme coverage is not claimed.
+- [ ] Authorized job dispatch, a complete guided training workflow, independent
+  code/protocol review and scientific eligibility remain open. This screen is a
+  completed planning/review component; it does not turn unresolved data or model
+  permissions into approval. No cloud or hosted-model call was made.
+
+### Measured input/cache/head repair (2026-10-24)
+
+- [x] Independently reproduced custom model-root revision and stale source-cache
+  defects at `96f2fb2` using synthetic files and mocked fitting boundaries. No
+  medical inference, actual fitting, model weights or historical score changes.
+- [x] Bound new feature caches to measured image bytes, actual model/config files,
+  processor/source/version context and ordered feature payloads. Atomic writes,
+  later-arm source hashes and per-variant result references preserve consistency.
+- [x] Baseline/source-shift, near-duplicate ranking and head rebuilding check the
+  binding before downstream work. Review-only ranking never extracts a cache.
+  Fitted head fingerprints and identity-aware memory caches guard live scoring.
+- [x] Legacy stored predictions remain replayable; unbound live scoring/refitting
+  refuses until an explicitly reviewed new run is generated. Browser verified the
+  replay-only explanation/disabled live button using an isolated synthetic fixture.
+- [x] Current integrated suite: **218 discovered, 216 pass, two Torch skips** in
+  the available ML environment. System Python: **218 discovered, 178 pass, 40
+  optional-ML skips**. This adds 40 regressions to the 178-test workspace checkpoint.
+  Catalog remains 16 model / 14 dataset records. JavaScript/whitespace checks pass.
+- [ ] Independent review and full Torch/model-loading regression remain open.
+  Hashing overhead is unbenchmarked; before/after checks are not file locks. Local
+  hashes do not establish rights, authentic labels/patients, publisher trust or
+  clinical validity. Migration/limits: `docs/reports/E-feature-provenance.md`.
+
+### Demo-readiness branch merged into main (2026-10-24)
+
+- [x] Merged `inam-demo-readiness-review` (head `d8066fb`) into main after the
+  desktop-tool redesign. The branch's Experiments screen was ported into the new
+  shell (activity bar entry, Alt+5; Assistant and Progress moved to Alt+6 and
+  Alt+7) and the Images binding check kept main's wording.
+- [x] `.venv/bin/python -m unittest discover -s tests`: **218 tests, all passing**
+  on this machine (no skips). `node --check` on `app.js` passes. Browser smoke
+  check: a synthetic draft previewed on the Experiments screen and saved history
+  loaded, with no console errors. Phone width and light theme of that screen are
+  not yet checked.

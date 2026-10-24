@@ -2,7 +2,7 @@
 
 A researcher-focused workspace: **question → evidence → eligible data → compatible model → reproducible experiment → measured result**. Background and scientific ground rules: [Cancer-AI-Research-Context.md](Cancer-AI-Research-Context.md). Status and task checklist: [PROGRESS.md](PROGRESS.md).
 
-> No trained cancer model, clinical validation or medical-performance claim exists here. Synthetic fixtures test software only.
+> Research prototype. The team has reported exploratory frozen-encoder/head experiments on BTXRD. No clinical validation or patient-independent performance is established. Synthetic fixtures test software only.
 
 ## Quick start (no installs needed for the core)
 
@@ -10,7 +10,16 @@ A researcher-focused workspace: **question → evidence → eligible data → co
 python3 -m cancer_workbench app                  # opens the researcher app at http://127.0.0.1:8765
 ```
 
-The app has six screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Images** browses BTXRD and uploaded images with their annotations and metadata, replays a baseline run's stored predictions image by image (filter by errors, sort by confidence), and scores selected images live with that run's frozen encoder and head. **Assistant** chats with or compares any OpenAI-compatible model. **Progress** shows the team checklist. It runs on localhost only. Everything except live scoring needs nothing installed; live scoring needs the `ml` extra, so start the app with `.venv/bin/python -m cancer_workbench app`. Live scores are exploratory: they do not go through `execute_specialist`, no catalog model is cleared to run, and the assistant can't call them.
+The app has seven screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Images** browses BTXRD and uploaded images with their annotations and metadata, replays a baseline run's stored predictions image by image (filter by errors, sort by confidence), and scores selected images live with that run's frozen encoder and head. **Experiments** previews and saves non-authorizing drafts and inspects recorded run lineage, scope and blockers. **Assistant** chats with or compares any OpenAI-compatible model. **Progress** shows the team checklist. It runs on localhost only. Everything except live scoring needs nothing installed; live scoring needs the `ml` extra, so start the app with `.venv/bin/python -m cancer_workbench app`. Live scores are exploratory: they do not go through `execute_specialist`, no catalog model is cleared to run, and the assistant can't call them.
+
+The [experiment workspace](docs/reports/B-experiment-workspace.md) includes a
+synthetic planning example. Saving a draft does not start training or grant
+execution permission. Existing run records retain their stated limitations.
+
+[Measured feature provenance](docs/reports/E-feature-provenance.md) binds new
+exploratory caches and heads to measured inputs. Existing unbound runs retain
+stored-prediction replay; live scoring/refitting requires a newly generated bound
+run. Regeneration is an explicit reviewed ML operation, not an automatic migration.
 
 Command-line equivalents:
 
@@ -22,7 +31,18 @@ python3 -m cancer_workbench fetch plan --tier default
 python3 -m cancer_workbench fetch get --tier default
 python3 -m cancer_workbench route --task feature_extraction --modality xray --anatomy bone
 python3 -m cancer_workbench coordinator profiles
+python3 scripts/demo_observed_results.py       # offline SYNTHETIC software demo; no live LLM
+python3 scripts/evaluate_coordinator.py        # versioned public development trace suite, offline by default
 ```
+
+The offline demo exercises actual catalog/execution calls and a scripted
+coordinator feedback cycle. It needs no medical data or model weights and does
+not demonstrate live model reasoning. See [demo readiness](docs/reports/demo-readiness.md).
+
+[Coordinator evaluation](docs/coordinator-evaluation.md) separates scripted smoke
+checks, optional live trace checks and unscored human answer review. The
+[Claude example profile](docs/claude-profile.md) is locally tested preparation;
+no real hosted call has been verified.
 
 ML work needs the pinned extras: `uv venv; uv pip install -e ".[ml]"` (add `imaging`, `clip` as needed).
 

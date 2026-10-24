@@ -65,7 +65,7 @@ $("#theme-toggle").addEventListener("click", () => {
 });
 
 /* ---------------- navigation ---------------- */
-const SCREENS = ["catalog", "downloads", "datasets", "images", "assistant", "progress"];
+const SCREENS = ["catalog", "downloads", "datasets", "images", "experiments", "assistant", "progress"];
 const loaders = {};
 function show(name) {
   if (!SCREENS.includes(name)) name = "catalog";
@@ -622,10 +622,12 @@ $("#img-clear").addEventListener("click", () => { img.sel.clear(); renderImages(
 function scoringActive() { return img.scoring?.state === "running"; }
 function updateImgSelection() {
   const n = img.sel.size, max = img.meta?.max_score ?? 24, sr = selectedResult(), busy = scoringActive();
+  const selectedMetadata = sr && img.runs.find(r => r.id === sr.run)?.results.find(r => r.id === sr.result);
+  const bound = selectedMetadata?.has_binding === true;
   const shown = (img.pageItems || []).filter(it => img.sel.has(it.key)).length;
   $("#img-selected").textContent = n ? `${n} of ${max} images selected` : "No images selected";
   const b = $("#img-score");
-  const why = busy ? "Scoring this batch. You can keep browsing images." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !sr ? "Choose a training run and trained model first." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
+  const why = busy ? "Scoring this batch. You can keep browsing images." : !sr ? "Choose a training run and trained model first." : !bound ? "Replay only: this legacy run needs measured feature/head bindings before live scoring." : img.meta?.ml_missing?.length ? "Live scoring needs the ml extra; see the note below." : !n ? "Tick images below to build a scoring batch." : n > max ? `Select at most ${max} images.` : "";
   $("#img-ready").textContent = why || `Ready to score${n > shown ? ` · ${n - shown} selected outside this page` : ""}`;
   b.disabled = !!why; b.title = why;
   b.textContent = busy ? "Scoring…" : n ? `Score ${n} image${n === 1 ? "" : "s"} live` : "Score selected live";
@@ -637,7 +639,7 @@ function updateImgSelection() {
   $("#img-tools").result.disabled = busy || !sr;
   $$("[data-pick]", $("#img-grid")).forEach(cb => { cb.disabled = busy; });
   if ($("#img-delete")) $("#img-delete").disabled = busy;
-  $("#img-run-context").textContent = img.review ? `Predictions are checked against each image's dataset label: green tags match it, red ✗ tags disagree. Saved predictions cover validation and test images. Live scoring runs ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} with this ${humanize(img.review.endpoint)} classifier and refuses the images it was trained on.` : "Pick a training run, then one of the models it trained. Its predictions are checked against each image's label from the dataset.";
+  $("#img-run-context").textContent = img.review ? `Predictions are checked against each image's dataset label: green tags match it, red ✗ tags disagree. Saved predictions cover validation and test images. ${bound ? `Live scoring checks the measured identity of ${img.review.encoder}${img.review.variant !== "pad" ? ` (${img.review.variant} preprocessing)` : ""} and this ${humanize(img.review.endpoint)} classifier, and refuses the images it was trained on.` : "This legacy run can be replayed but not scored live. Regenerate a bound exploratory run first."}` : "Pick a training run, then one of the models it trained. Its predictions are checked against each image's label from the dataset.";
 }
 
 function probBars(probs, classes, pred, threshold) {
@@ -1005,6 +1007,128 @@ $("#owners").addEventListener("change", e => {
   if (inp) guard(async () => { renderProgress(await api("/api/progress/owner", { line: Number(inp.dataset.ownerLine), ws: inp.dataset.ws, name: inp.value })); toast(`Workstream ${inp.dataset.ws} owner saved.`); });
 });
 loaders.progress = () => guard(async () => renderProgress(await api("/api/progress")));
+
+/* ---------------- experiments ---------------- */
+const experiments = { items: [], preview: null, detail: null };
+const experimentForm = $("#experiment-form");
+const PATH_NAMES = { specialist_tools: "Specialist tool", transfer_learning: "Transfer learning", distillation: "Teacher-guided distillation" };
+const experimentStateLabel = s => String(s ?? "unknown").replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
+
+function experimentInputs() {
+  return { question: experimentForm.question.value, reuse_path: experimentForm.reuse_path.value,
+    model_id: experimentForm.model_id.value, manifest: experimentForm.manifest.value,
+    planned_bytes: Number(experimentForm.planned_bytes.value), synthetic: experimentForm.synthetic.checked };
+}
+function experimentMode() {
+  const synthetic = experimentForm.synthetic.checked;
+  for (const name of ["model_id", "manifest", "planned_bytes"]) experimentForm[name].closest("label").hidden = synthetic;
+  $("#experiment-example-note").hidden = !synthetic;
+  experimentForm.model_id.disabled = synthetic;
+  experimentForm.manifest.disabled = synthetic;
+  experimentForm.planned_bytes.disabled = synthetic;
+  if (synthetic) experimentForm.planned_bytes.value = "0";
+}
+function invalidateExperiment() {
+  experiments.preview = null;
+  $("#experiment-save").disabled = true;
+  $("#experiment-error").textContent = "";
+  $("#experiment-preview").innerHTML = `<h2>Draft review</h2><p class="empty">Inputs changed. Preview the current draft to refresh its checks.</p>`;
+}
+function renderExperimentPreview(d) {
+  experiments.preview = d;
+  const p = d.plan;
+  $("#experiment-preview").innerHTML = `<div class="experiment-review-head"><h2>${p.state === "blocked" ? "Needs review" : "Draft checks passed"}</h2>${d.synthetic ? '<span class="badge synthetic">Synthetic example</span>' : ""}</div>
+    <p>${p.state === "blocked" ? "Resolve these blockers before progressing the experiment." : "This draft is ready for protocol review. It does not authorize execution."}</p>
+    <dl class="experiment-facts"><dt>Model</dt><dd>${esc(p.model_id)}</dd><dt>Reuse path</dt><dd>${esc(PATH_NAMES[p.path])}</dd>
+      <dt>Dataset</dt><dd>${esc(d.audit.dataset_id)} · ${d.audit.rows} rows</dd><dt>Manifest identity</dt><dd class="mono">${esc(d.manifest.sha256)}</dd>
+      <dt>Storage reservation</dt><dd>${fmtBytes(p.budget.planned_bytes)} additional · ${fmtBytes(p.budget.used_bytes)} used of ${fmtBytes(p.budget.limit_bytes)}</dd></dl>
+    ${p.blockers.length ? `<h3>Blockers</h3><ul class="experiment-blockers">${p.blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+    <h3>Dataset audit</h3>${d.audit.findings.length ? `<ul class="experiment-blockers">${d.audit.findings.map(f => `<li>${esc(f.code)}: ${esc(f.detail)}</li>`).join("")}</ul>` : '<p>No findings in these declared-record checks.</p>'}
+    <p class="hint">${esc(p.note)}</p><p class="hint">${esc(d.note)}</p>`;
+  $("#experiment-save").disabled = false;
+}
+function renderExperimentHistory() {
+  const query = $("#experiment-search").value.toLowerCase();
+  const items = experiments.items.filter(r => [r.id, r.model, r.task, r.state, r.kind].join(" ").toLowerCase().includes(query));
+  $("#experiment-history").innerHTML = items.length ? `<table class="records"><thead><tr><th scope="col">Record</th><th scope="col">Question / task</th><th scope="col">Model</th><th scope="col">Saved state</th></tr></thead><tbody>${items.map(r => `<tr><td><button class="link" type="button" data-experiment-key="${esc(r.key)}">${r.kind === "draft" ? "Draft" : "Run record"} ${esc(r.id)}</button>${r.synthetic ? '<span class="badge synthetic">Synthetic</span>' : ""}</td><td>${esc(r.task)}</td><td>${esc(r.model)}</td><td>${esc(experimentStateLabel(r.state))}</td></tr>`).join("")}</tbody></table>` : `<p class="empty">${experiments.items.length ? "No records match this search." : "No saved drafts or experiment records yet. Preview a draft above to start."}</p>`;
+}
+async function refreshExperimentHistory() {
+  const history = await api("/api/experiments/history");
+  experiments.items = history.items;
+  $("#experiment-history-warnings").innerHTML = history.warnings.length ? `<ul class="experiment-blockers">${history.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : "";
+  renderExperimentHistory();
+}
+async function openExperiment(key) {
+  const d = await api("/api/experiments/record", { key });
+  experiments.detail = d;
+  const el = $("#experiment-detail");
+  el.hidden = false;
+  const r = d.record, draft = d.kind === "draft", p = r.plan || {};
+  const facts = draft ? [["Saved state", experimentStateLabel(p.state)], ["Question", r.question || "Unspecified"], ["Model", p.model_id],
+    ["Dataset", p.dataset_id], ["Manifest SHA-256", r.manifest?.sha256], ["Created", r.created_at],
+    ["Source revision", r.source_revision], ["Execution scope", "Review only. This draft authorizes no execution."]] :
+    [["Recorded state", experimentStateLabel(r.state)], ["Task", r.task], ["Model", r.model], ["Cohort", r.cohort], ["Split", r.split],
+     ["Source revision", r.source_revision], ["Execution scope", r.execution_scope], ["Outputs", list(r.outputs) || "Not recorded"]];
+  const blockers = draft ? p.blockers || [] : r.blockers || [];
+  el.innerHTML = `<h2>${draft ? "Saved draft" : "Recorded experiment"}${r.synthetic ? ' <span class="badge synthetic">Synthetic</span>' : ""}</h2>
+    <p class="mono">${esc(d.file)}</p><p class="hint">${esc(d.note || r.note)}</p>
+    <dl class="experiment-facts">${facts.map(([label, value]) => `<dt>${esc(label)}</dt><dd>${esc(value ?? "Not recorded")}</dd>`).join("")}</dl>
+    ${blockers.length ? `<h3>Recorded blockers</h3><ul class="experiment-blockers">${blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+    <details><summary>Full record JSON</summary><pre tabindex="0" aria-label="Saved record JSON">${esc(JSON.stringify(r, null, 2))}</pre></details>`;
+  $("#experiment-export").hidden = false;
+}
+experimentForm.addEventListener("input", invalidateExperiment);
+experimentForm.synthetic.addEventListener("change", () => { experimentMode(); invalidateExperiment(); });
+experimentForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  const button = experimentForm.querySelector('[type="submit"]');
+  button.disabled = true;
+  $("#experiment-save").disabled = true;
+  $("#experiment-error").textContent = "";
+  const inputs = experimentInputs();
+  try {
+    const result = await api("/api/experiments/preview", inputs);
+    if (JSON.stringify(inputs) === JSON.stringify(experimentInputs())) renderExperimentPreview(result);
+  }
+  catch (err) { $("#experiment-error").textContent = err.message; }
+  finally { button.disabled = false; }
+});
+$("#experiment-save").addEventListener("click", async () => {
+  $("#experiment-save").disabled = true;
+  const inputs = experimentInputs();
+  try {
+    const result = await api("/api/experiments/save", inputs);
+    if (JSON.stringify(inputs) === JSON.stringify(experimentInputs())) renderExperimentPreview(result.draft);
+    await refreshExperimentHistory();
+    await openExperiment(result.key);
+    toast("Draft saved. No experiment was launched.");
+  } catch (err) { $("#experiment-error").textContent = err.message; }
+  finally { $("#experiment-save").disabled = !experiments.preview; }
+});
+$("#experiment-history").addEventListener("click", e => {
+  const button = e.target.closest("[data-experiment-key]");
+  if (button) guard(() => openExperiment(button.dataset.experimentKey));
+});
+$("#experiment-refresh").addEventListener("click", () => guard(refreshExperimentHistory));
+$("#experiment-search").addEventListener("input", renderExperimentHistory);
+$("#experiment-export").addEventListener("click", () => {
+  if (!experiments.detail) return;
+  const blob = new Blob([JSON.stringify(experiments.detail.record, null, 2) + "\n"], { type: "application/json" });
+  const url = URL.createObjectURL(blob), link = document.createElement("a");
+  link.href = url; link.download = "oncolohealth-experiment-record.json"; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+loaders.experiments = () => guard(async () => {
+  const options = await api("/api/experiments/options");
+  for (const [field, rows, empty] of [["model_id", options.models.map(m => [m.id, m.name]), "Select a model"],
+    ["manifest", options.manifests.map(m => [m.path, m.path]), "Select a local manifest"]]) {
+    const prior = experimentForm[field].value;
+    experimentForm[field].innerHTML = `<option value="">${empty}</option>` + rows.map(([v, label]) => `<option value="${esc(v)}">${esc(label)}</option>`).join("");
+    if (rows.some(([v]) => v === prior)) experimentForm[field].value = prior;
+  }
+  experimentMode();
+  await refreshExperimentHistory();
+});
 
 /* ---------------- boot ---------------- */
 guard(async () => {

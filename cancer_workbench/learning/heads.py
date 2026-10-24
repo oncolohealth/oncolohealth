@@ -3,14 +3,12 @@
 Contract change from the package docstring: the head is an L2-regularized
 logistic regression (scikit-learn, lbfgs) on standardized features, with
 balanced class weights. Its regularization strength is picked from `c_grid`
-on VAL rows only; the head is fit on TRAIN rows only, after
-`validate_head_inputs` refuses leaking or malformed inputs. Distillation
+on VAL rows only; the head is fit on TRAIN rows only. Distillation
 (`teacher_weight > 0`) is not implemented yet. `save_head` / `load_head`
 store a head as plain arrays so a run's head can be reused for scoring.
 """
 from __future__ import annotations
 
-import collections
 import dataclasses
 from typing import Any
 
@@ -39,68 +37,78 @@ def _rows(data: dict, partition: str):
     return idx
 
 
-def _check(data: dict) -> None:
+def _check(data: dict) -> dict:
+    """Normalize and validate a feature table before any fitting or prediction.
+
+    Empty patient/duplicate identities remain unknown. These checks detect
+    declared overlap only and cannot establish independence from missing IDs.
+    """
+    import numpy as np
+
     for k in ("features", "labels", "partitions", "sample_ids", "classes", "encoder"):
         if k not in data:
             raise ValueError(f"data lacks {k!r}")
-    unknown = set(data["labels"].tolist()) - set(data["classes"])
+    checked = dict(data)
+    classes = data["classes"]
+    if not isinstance(classes, (list, tuple)) or len(classes) < 2 or any(
+            not isinstance(c, str) or not c.strip() for c in classes) or len(set(classes)) != len(classes):
+        raise ValueError("classes must contain at least two unique nonempty strings")
+    X = np.asarray(data["features"])
+    if X.ndim != 2 or 0 in X.shape or X.dtype.kind not in "iuf":
+        raise ValueError("features must be a nonempty real numeric N x D array")
+    X = X.astype(np.float64, copy=False)
+    if not np.isfinite(X).all():
+        raise ValueError("features must be finite")
+    checked["features"] = X
+    for key in ("labels", "partitions", "sample_ids", "patient_ids", "group_ids", "duplicate_groups", "image_hashes"):
+        if key not in data or (key in ("patient_ids", "group_ids", "duplicate_groups", "image_hashes") and data[key] is None):
+            checked.pop(key, None)
+            continue
+        col = np.asarray(data[key])
+        if col.ndim != 1 or len(col) != len(X):
+            raise ValueError(f"{key} must be one-dimensional and aligned with features")
+        if any(not isinstance(v, str) for v in col.tolist()):
+            raise ValueError(f"{key} must contain strings")
+        if key in ("labels", "partitions", "sample_ids") and any(not v.strip() for v in col.tolist()):
+            raise ValueError(f"{key} must contain nonempty strings")
+        checked[key] = col
+    if len(set(checked["sample_ids"].tolist())) != len(X):
+        raise ValueError("sample_ids must be unique; duplicate samples cannot enter head fitting")
+    if set(checked["partitions"].tolist()) - {"train", "val", "test", "unassigned"}:
+        raise ValueError("partitions must be train, val, test or unassigned")
+    unknown = set(checked["labels"].tolist()) - set(classes)
     if unknown:
         raise ValueError(f"labels outside the declared classes: {sorted(unknown)}")
+    enc = data["encoder"]
+    if not isinstance(enc, dict) or any(not isinstance(enc.get(k), str) or not enc[k].strip()
+                                          for k in ("encoder_id", "revision", "preprocessing_hash")):
+        raise ValueError("encoder must declare nonempty encoder_id, revision and preprocessing_hash")
+    for key in ("patient_ids", "group_ids", "duplicate_groups", "image_hashes"):
+        seen = {}
+        for identity, part in zip(checked.get(key, []), checked["partitions"]):
+            if not identity.strip() or part == "unassigned":
+                continue
+            if identity in seen and seen[identity] != part:
+                raise ValueError(f"{key} overlap across {seen[identity]} and {part} partitions")
+            seen[identity] = part
+    return checked
 
 
 PARTITIONS = ("train", "val", "test", "unassigned")
 
 
 def validate_head_inputs(data: dict[str, Any]) -> None:
-    """Refuse inputs a head must not be fit on, before any candidate C sees val.
+    """Public pre-fit guard retained from the source-shift implementation.
 
-    Checks array shapes and alignment, finite numeric features, unique sample
-    ids, known partitions, class coverage in train and val, and that no patient
-    (`patient_ids`) or duplicate group (`group_ids`) spans train, val and test.
-    Blank patient or group ids mean unknown and are not compared.
+    Uses the shared normalized table checks, including canonical group_ids.
+    Unassigned rows may share declared groups but never enter head fitting.
+    Missing identities remain unknown and do not establish independence.
     """
-    import numpy as np
-
-    _check(data)
-    X = np.asarray(data["features"])
-    if X.ndim != 2 or 0 in X.shape:
-        raise ValueError(f"features must be a non-empty N x D array, got shape {X.shape}")
-    if X.dtype.kind not in "fiu":
-        raise ValueError(f"features must be numeric, got dtype {X.dtype}")
-    if not np.isfinite(X).all():
-        raise ValueError(f"{int((~np.isfinite(X)).any(1).sum())} feature rows contain NaN or infinite values")
-    n = X.shape[0]
-    for k in ("labels", "partitions", "sample_ids", "patient_ids", "group_ids"):
-        if data.get(k) is not None and np.shape(data[k]) != (n,):
-            raise ValueError(f"{k} has shape {np.shape(data[k])} but features have {n} rows")
-    classes = list(data["classes"])
-    if len(classes) < 2 or len(set(classes)) != len(classes):
-        raise ValueError(f"classes must be at least two distinct names, got {classes}")
-    ids = data["sample_ids"].tolist()
-    if "" in ids:
-        raise ValueError("blank sample ids")
-    if len(set(ids)) != n:
-        dupes = sorted(i for i, c in collections.Counter(ids).items() if c > 1)
-        raise ValueError(f"{len(dupes)} sample ids appear more than once, e.g. {dupes[:3]}")
-    parts = data["partitions"].tolist()
-    if unknown := set(parts) - set(PARTITIONS):
-        raise ValueError(f"unknown partitions: {sorted(unknown)}")
-    labels = data["labels"].tolist()
-    for p in ("train", "val"):
-        seen = {l for l, q in zip(labels, parts) if q == p}
-        if not seen:
-            raise ValueError(f"no {p!r} rows")
-        if missing := [c for c in classes if c not in seen]:
-            raise ValueError(f"{p} rows do not cover every class; missing {missing}")
-    for k, what in (("patient_ids", "patients"), ("group_ids", "duplicate groups")):
-        if data.get(k) is None:
-            continue
-        where: dict[str, set] = {}
-        for g, q in zip(data[k].tolist(), parts):
-            if g and q != "unassigned":
-                where.setdefault(g, set()).add(q)
-        if spanning := sorted(g for g, qs in where.items() if len(qs) > 1):
-            raise ValueError(f"{len(spanning)} {what} span more than one partition, e.g. {spanning[:3]}")
+    data = _check(data)
+    for name in ("train", "val"):
+        idx = _rows(data, name)
+        if set(data["labels"][idx].tolist()) != set(data["classes"]):
+            raise ValueError(f"{name} rows do not cover every class")
 
 
 def _auc(y, probs, n_classes):
@@ -110,16 +118,27 @@ def _auc(y, probs, n_classes):
 
 
 def train_feature_head(data: dict[str, Any], *, c_grid=C_GRID, teacher_weight: float = 0.0) -> HeadModel:
-    """`data`: features (N x D), labels, partitions, sample_ids, optional patient_ids and group_ids, ordered classes, encoder ref.
+    """Fit after `validate_head_inputs` checks the normalized feature table.
 
-    `validate_head_inputs` runs first, so leaking or malformed inputs are refused before any fit.
+    `data` has features (N x D), labels, partitions, sample_ids, optional
+    patient_ids/group_ids/image_hashes, ordered classes and encoder identity.
     """
     import numpy as np
     from sklearn.linear_model import LogisticRegression
 
     if teacher_weight:
         raise NotImplementedError("distillation needs a reviewed teacher and permission; not implemented")
+    data = _check(data)
     validate_head_inputs(data)
+    if isinstance(c_grid, (str, bytes)):
+        raise ValueError("c_grid must contain finite positive numbers")
+    try:
+        c_grid = tuple(c_grid)
+    except TypeError as e:
+        raise ValueError("c_grid must contain finite positive numbers") from e
+    if not c_grid or any(isinstance(c, (bool, np.bool_)) or not isinstance(c, (int, float, np.integer, np.floating))
+                         or not np.isfinite(c) or c <= 0 for c in c_grid):
+        raise ValueError("c_grid must contain finite positive numbers")
     classes = list(data["classes"])
     y = np.array([classes.index(l) for l in data["labels"]])
     tr, va = _rows(data, "train"), _rows(data, "val")
@@ -142,7 +161,7 @@ def evaluate_head(model: HeadModel, data: dict[str, Any], partition: str = "test
     """Predict `partition` rows. Refuses leakage or a mismatched encoder/class order; computes no headline metrics."""
     import numpy as np
 
-    _check(data)
+    data = _check(data)
     if dict(data["encoder"]) != model.encoder:
         raise ValueError(f"encoder mismatch: head trained on {model.encoder}, data from {dict(data['encoder'])}")
     if list(data["classes"]) != model.classes:
@@ -185,6 +204,24 @@ def save_head(model: HeadModel, path) -> None:
     np.savez(path, mean=model.mean, scale=model.scale, coef=model.clf.coef_, intercept=model.clf.intercept_,
              classes=np.array(model.classes), C=model.C, val_score=model.val_score, encoder=json.dumps(model.encoder),
              train_ids=np.array(sorted(model.train_ids)), train_patients=np.array(sorted(model.train_patients)))
+
+
+def head_fingerprint(model: HeadModel) -> str:
+    """Identity of fitted arrays and their context, independent of NPZ timestamps."""
+    import hashlib
+    import json
+    import numpy as np
+
+    metadata = {"schema_version": 1, "encoder": model.encoder, "classes": model.classes, "C": float(model.C), "val_score": float(model.val_score),
+                "train_ids": sorted(model.train_ids), "train_patients": sorted(model.train_patients)}
+    sha = hashlib.sha256(json.dumps(metadata, sort_keys=True, allow_nan=False).encode())
+    for name, value in (("mean", model.mean), ("scale", model.scale), ("coef", model.clf.coef_), ("intercept", model.clf.intercept_)):
+        array = np.asarray(value)
+        if array.dtype.kind not in "fi" or not np.isfinite(array).all():
+            raise ValueError("Head fingerprint requires finite numeric fitted arrays.")
+        sha.update(json.dumps({"name": name, "shape": list(array.shape), "dtype": array.dtype.str}, sort_keys=True).encode())
+        sha.update(array.tobytes(order="C"))
+    return sha.hexdigest()
 
 
 def load_head(path) -> HeadModel:

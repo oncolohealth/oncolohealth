@@ -4,7 +4,7 @@
 
 ## Summary
 
-Frozen RAD-DINO and frozen ResNet-50 features with a linear head separate the BTXRD classes well when train and test images come from the same sources (ROC-AUC 0.83 to 0.86), but drop to 0.60 to 0.62 when the model is trained on center 1 and tested on centers 2 and 3. The chest-pretrained RAD-DINO shows no advantage over the ImageNet ResNet-50 on any endpoint: every pair of confidence intervals overlaps. The drop under the source hold-out is the main finding. It means the image-level numbers should not be read as how well these features would work on radiographs from a new source.
+Frozen RAD-DINO and frozen ResNet-50 features with a linear head have image-level ROC-AUC estimates of 0.83 to 0.86 when train and test images come from the same sources, and 0.60 to 0.62 when trained on center 1 and tested on centers 2 and 3. The confidence intervals overlap, but this does not establish equivalence or the absence of an encoder benefit. The source protocols use different test cohorts. Their descriptive contrast is the main observation; it does not establish patient-independent performance or isolate a causal effect of source shift.
 
 ## Setup
 
@@ -42,8 +42,8 @@ Positive class: tumor for `tumor_vs_normal`, malignant for `benign_vs_malignant`
 
 ## What this does and does not show
 
-- **Encoders.** No measurable difference between RAD-DINO and ResNet-50 at this sample size. Chest-only pretraining did not help on bone radiographs here.
-- **Source shift.** Centers 2 and 3 are teaching-file collections, which may differ from hospital images in acquisition, cropping, annotation marks and case mix. The hold-out result mixes that shift with the removal of any same-patient overlap between train and test. These cannot be separated without patient identifiers.
+- **Encoders.** Point estimates are similar in these exploratory comparisons. Overlapping marginal intervals do not test a paired difference or establish equivalence. The effect of pretraining is unresolved by this comparison.
+- **Source shift.** Centers 2 and 3 are teaching-file collections, which may differ from hospital images in acquisition, cropping, annotation marks and case mix. Holding sources apart does not verify that patients or lesions are disjoint. Source differences and unrecorded overlap cannot be separated without additional identity/provenance evidence.
 - **Thresholds.** Thresholds chosen on center-1 validation data transfer poorly: specificity falls to about 0.4 on the other sources.
 - **Image-level optimism.** The `image_stratified` numbers are likely optimistic, because several views of one lesion can fall on both sides of the split.
 - **Not shown.** Patient-level performance, external validity, calibration on a new population, or any clinical usefulness.
