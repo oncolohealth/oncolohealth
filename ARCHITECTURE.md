@@ -220,3 +220,6 @@ Downloaded files are untrusted. Some weights are pickles, so load them with `tor
 ## Candidate offline release/evidence review
 
 `datasets/release_audit.py` audits an already-local BTXRD ZIP and prepares an evidence template. `datasets/evidence.py` binds returned records to source bytes and reports declared evidence gaps without exporting supplied identity/reference values. `datasets/btxrd_review.py` owns the `btxrd-review audit|template|check` CLI. These are independent utilities; they do not replace the current manifest/audit path, alter training/evaluation, or create a cohort. See [the candidate contract and verification](docs/reports/A-offline-release-review.md).
+
+
+Rebase integration: the active root uses main 79c51d5's `learning/provenance.py` and measured input/model/payload/head contracts, preserving its current consumers and UI. The original source-image-only helper/consumer repair is historical and is not layered over that broader implementation. The independent `datasets/release_audit.py`, `datasets/evidence.py` and `btxrd-review` entry point remain additive offline review tools.

@@ -338,3 +338,10 @@ The following records the earlier c13a74a-based handoff. The active rebase prese
 ## Organization handoff publication
 
 The review branch consolidates all three local patches and provides readable research/evidence reports plus complete standalone source snapshots under `docs/research-handoff/`. The combined code passes 149 tests with 11 optional ML skips (160 discovered) with NumPy/Pillow. A proposed Gemma 4 31B coordinator profile is the shipped example default; no endpoint/model run is established. Main and the unavailable unpushed team branch remain unreconciled. Follow the integration plan before real execution.
+
+
+## Main rebased onto the research handoff branch
+
+The user corrected the operation to rebase `research/overnight-integration` onto main, leaving main unchanged. The branch now contains main `79c51d5ac9d508b602193fd0e457a8a5eecec3c5`, including Inam's demo-readiness and Sebastian's desktop/Experiments integration. Conflicts preserve upstream's broader model/processor/image/payload/head provenance and its existing tests; the earlier narrower overlapping repair commits and incompatible duplicate cache tests are superseded. The original patches/source archive remain historical artifacts. No shared main merge is performed.
+
+The new offline release/evidence review adds 25 tests to main's 218. Current local suite: **243 discovered, 203 pass, 40 optional ML skips**. Catalog: 16 model / 14 dataset records valid. Gemma example default/profile parsing and whitespace checks pass. The current upstream app, coordinator, evaluation, learning, encoder and encoder-provenance test paths match the rebased main checkpoint byte-for-byte. Full supported ML/Torch checks remain open; no actual medical inference, training, acquisition or cluster run occurred. Patient/lesion grouping and per-row diagnostic-reference evidence remain unresolved.

@@ -1,0 +1,29 @@
+{
+  "rebased_onto_main": "79c51d5ac9d508b602193fd0e457a8a5eecec3c5",
+  "previous_branch_head": "d5bdc325692dc508b5d5eae192223cd2c9681c3c",
+  "verified_code_commit": "da5cbe9d28a71f3ca4a102aa04b785bd9bbfec2f",
+  "test_suite": {
+    "discovered": 243,
+    "passed": 203,
+    "skipped": 40,
+    "scope": "synthetic software; optional ML dependencies unavailable"
+  },
+  "catalog": {
+    "models": 16,
+    "datasets": 14
+  },
+  "gemma_example_selected": true,
+  "upstream_preserved_paths": [
+    "cancer_workbench/adapters",
+    "cancer_workbench/learning",
+    "cancer_workbench/experiments",
+    "cancer_workbench/app",
+    "cancer_workbench/coordinator",
+    "cancer_workbench/evaluation",
+    "tests/test_encoder_provenance.py"
+  ],
+  "upstream_path_differences": [],
+  "obsolete_overlap": "upstream broader provenance retained; original narrow patches and export preserved as historical records",
+  "main_merge_performed": false,
+  "medical_inference_training_or_cluster_run_performed": false
+}
