@@ -54,11 +54,15 @@ Code: `cancer_workbench/adapters/encoder.py` (`FrozenEncoderAdapter`), following
 
 The policy, size, mean and std are hashed; feature files carry that hash and the weight revision, and stale features are refused.
 
+**Variants for the source-shift check** (`encoder.VARIANTS`; `pad` above stays the default everywhere, so its hash and cached features are unchanged):
+- `pad_pstretch`: after grayscale, a per-image 1st–99th percentile contrast stretch (`ImageOps.autocontrast`, cutoff 1 %), then the same padding and resize.
+- `native_crop`: after grayscale, bicubic resize of the shortest edge to the input size, then a center crop to a square. This matches RAD-DINO's processor (shortest edge 518, crop 518) and timm's test config for ResNet-50 (288 px, `test_crop_pct` 1.0). It can cut off part of a long radiograph, including a lesion near the edge.
+
 **Weights.** Loaded only from the local `model.safetensors` (no pickles, no network).
 
 **Output.** `run` returns `{"type": "embedding", "dim", "embedding", "encoder", "revision", "preprocessing", "note"}` inside the standard `ResultEnvelope`. `embed(paths)` returns an N × dim array for batches. An embedding is a representation, not a diagnosis.
 
-**Head contract.** `learning/heads.py` takes features with ordered classes, labels, partitions and the encoder reference. It fits on TRAIN only, chooses regularization on VAL only, and `evaluate_head` refuses rows that were trained on, shared patients, a different encoder reference or a different class order. Output is per-class probabilities in the declared class order.
+**Head contract.** `learning/heads.py` takes features with ordered classes, labels, partitions and the encoder reference. Before any fit, `validate_head_inputs` refuses misaligned or non-finite inputs, repeated sample ids, a train or val partition missing a class, and any patient or duplicate group that spans partitions. It fits on TRAIN only, chooses regularization on VAL only, and `evaluate_head` refuses rows that were trained on, shared patients, a different encoder reference or a different class order. Output is per-class probabilities in the declared class order.
 
 ## Open questions
 

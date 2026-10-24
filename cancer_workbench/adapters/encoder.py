@@ -6,6 +6,10 @@ crop that could cut a lesion off) -> bicubic resize to the encoder's input
 size -> 3 identical channels -> scale to [0, 1] -> the encoder's published
 mean/std. Weights load only from local .safetensors files: no pickles, no network.
 
+`VARIANTS` names two alternatives for the source-shift check: a per-image
+contrast stretch before padding, and each encoder's native shortest-edge
+resize and center crop. `pad` stays the default for every caller.
+
 Import this module explicitly; it is not re-exported from `adapters` so the
 core package stays standard-library only.
 """
@@ -29,15 +33,29 @@ ENCODERS: dict[str, dict[str, Any]] = {
                          "source": "timm pretrained_cfg mean/std; 288 px test_input_size"},
 }
 PAD_POLICY = "JPEG draft decode >= target, grayscale, pad to square (black), bicubic resize, replicate to 3 channels"
+VARIANTS = {
+    "pad": PAD_POLICY,
+    "pad_pstretch": "JPEG draft decode >= target, grayscale, per-image 1st-99th percentile contrast stretch, "
+                    "pad to square (black), bicubic resize, replicate to 3 channels",
+    # RAD-DINO's processor and timm's test config (crop_pct 1.0 at 288) both resize the shortest edge, then center crop
+    "native_crop": "JPEG draft decode >= target, grayscale, bicubic resize of the shortest edge to the input size, "
+                   "center crop to square, replicate to 3 channels",
+}
 
 
-def preprocessing(encoder_id: str) -> dict[str, Any]:
+def _variant(variant: str) -> str:
+    if variant not in VARIANTS:
+        raise ValueError(f"unknown preprocessing variant {variant!r}; known: {sorted(VARIANTS)}")
+    return variant
+
+
+def preprocessing(encoder_id: str, variant: str = "pad") -> dict[str, Any]:
     spec = ENCODERS[encoder_id]
-    return {"policy": PAD_POLICY, "size": spec["size"], "mean": spec["mean"], "std": spec["std"]}
+    return {"policy": VARIANTS[_variant(variant)], "size": spec["size"], "mean": spec["mean"], "std": spec["std"]}
 
 
-def preprocessing_hash(encoder_id: str) -> str:
-    return hashlib.sha256(json.dumps(preprocessing(encoder_id), sort_keys=True).encode()).hexdigest()[:12]
+def preprocessing_hash(encoder_id: str, variant: str = "pad") -> str:
+    return hashlib.sha256(json.dumps(preprocessing(encoder_id, variant), sort_keys=True).encode()).hexdigest()[:12]
 
 
 def revision(encoder_id: str) -> str | None:
@@ -45,18 +63,28 @@ def revision(encoder_id: str) -> str | None:
     return json.loads(prov.read_text())["source"].get("revision") if prov.exists() else None
 
 
-def load_image(path: Path, size: int):
-    """Return a 3 x size x size float tensor in [0, 1] (not yet normalized)."""
+def load_image(path: Path, size: int, variant: str = "pad"):
+    """Return a 3 x size x size float tensor in [0, 1] (not yet normalized), preprocessed as `VARIANTS[variant]`."""
     import torch
-    from PIL import Image
+    from PIL import Image, ImageOps
 
+    _variant(variant)
     with Image.open(path) as im:
         im.draft("L", (size, size))  # JPEG: decode at a reduced scale that stays >= the target size
         im = im.convert("L")
+    if variant == "pad_pstretch":
+        im = ImageOps.autocontrast(im, cutoff=1)  # before padding, so the black border doesn't count
+    if variant == "native_crop":
+        scale = size / min(im.size)
+        w, h = max(size, round(im.width * scale)), max(size, round(im.height * scale))
+        im = im.resize((w, h), Image.Resampling.BICUBIC)
+        left, top = (w - size) // 2, (h - size) // 2
+        canvas = im.crop((left, top, left + size, top + size))
+    else:
         side = max(im.size)
         canvas = Image.new("L", (side, side), 0)
         canvas.paste(im, ((side - im.width) // 2, (side - im.height) // 2))
-    canvas = canvas.resize((size, size), Image.Resampling.BICUBIC)
+        canvas = canvas.resize((size, size), Image.Resampling.BICUBIC)
     t = torch.frombuffer(bytearray(canvas.tobytes()), dtype=torch.uint8).reshape(size, size).float() / 255.0
     return t.unsqueeze(0).expand(3, size, size).clone()
 
@@ -90,10 +118,11 @@ class FrozenEncoderAdapter:
 
     synthetic = False
 
-    def __init__(self, encoder_id: str, device: str | None = None, models_dir: Path = MODELS_DIR):
+    def __init__(self, encoder_id: str, device: str | None = None, models_dir: Path = MODELS_DIR, variant: str = "pad"):
         if encoder_id not in ENCODERS:
             raise KeyError(f"no encoder spec for {encoder_id!r}; known: {sorted(ENCODERS)}")
         self.encoder_id = encoder_id
+        self.variant = _variant(variant)
         self.id = f"frozen-encoder:{encoder_id}"
         self.spec = ENCODERS[encoder_id]
         self.root = Path(models_dir) / encoder_id
@@ -137,7 +166,7 @@ class FrozenEncoderAdapter:
         size, chunks = self.spec["size"], []
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
             for start in range(0, len(paths), batch_size):
-                imgs = list(pool.map(lambda p: load_image(p, size), paths[start:start + batch_size]))
+                imgs = list(pool.map(lambda p: load_image(p, size, self.variant), paths[start:start + batch_size]))
                 chunks.append(self._forward(torch.stack(imgs)).numpy())
                 if progress:
                     progress(min(start + batch_size, len(paths)), len(paths))
@@ -146,5 +175,5 @@ class FrozenEncoderAdapter:
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         emb = self.embed([Path(inputs["image_path"])], batch_size=1)[0]
         return {"type": "embedding", "dim": int(emb.shape[0]), "embedding": emb.tolist(), "encoder": self.encoder_id,
-                "revision": revision(self.encoder_id), "preprocessing": preprocessing(self.encoder_id),
+                "revision": revision(self.encoder_id), "preprocessing": preprocessing(self.encoder_id, self.variant),
                 "note": "Frozen-encoder features, not a diagnosis."}

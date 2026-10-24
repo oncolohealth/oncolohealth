@@ -1,4 +1,4 @@
-"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|baseline> ..."""
+"""CLI: python -m cancer_workbench <app|fetch|catalog|route|coordinator|btxrd|baseline|source-shift|near-duplicates> ..."""
 from __future__ import annotations
 
 import argparse
@@ -129,6 +129,37 @@ def _baseline(argv: list[str]) -> int:
     return 0
 
 
+def _source_shift(argv: list[str]) -> int:
+    from .experiments import btxrd_baseline as bb
+    from .experiments import btxrd_source_shift as ss
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench source-shift", description=ss.LABEL)
+    ap.add_argument("--encoder", action="append", choices=bb.ENCODERS)
+    ap.add_argument("--endpoint", action="append", choices=sorted(bb.CLASSES))
+    ap.add_argument("--variant", action="append", choices=ss.VARIANTS, help="repeatable; pad is always included")
+    ap.add_argument("--seed", default="0")
+    ap.add_argument("--n-boot", type=int, default=1000)
+    a = ap.parse_args(argv)
+    variants = tuple(v for v in ss.VARIANTS if v == "pad" or v in (a.variant or ss.VARIANTS))
+    out = ss.run(a.encoder or bb.ENCODERS, a.endpoint or tuple(bb.CLASSES), variants, seed=a.seed, n_boot=a.n_boot)
+    print((out / "summary.md").read_text())
+    print(f"wrote {out}")
+    return 0
+
+
+def _near_duplicates(argv: list[str]) -> int:
+    from .experiments import btxrd_near_duplicates as nd
+
+    ap = argparse.ArgumentParser(prog="python -m cancer_workbench near-duplicates", description=nd.__doc__.splitlines()[0])
+    ap.add_argument("--top", type=int, default=300, help="how many pairs to list")
+    ap.add_argument("--seed", default="0", help="split seed used for the cross-split flags")
+    a = ap.parse_args(argv)
+    out = nd.run(top=a.top, seed=a.seed)
+    print((out / "summary.json").read_text())
+    print(f"wrote {out}")
+    return 0
+
+
 def _app(argv: list[str]) -> int:
     from .app.server import serve
 
@@ -142,13 +173,16 @@ def _app(argv: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "baseline": _baseline, "app": _app}
+    commands = {"fetch": None, "catalog": _catalog, "route": _route, "coordinator": _coordinator, "btxrd": _btxrd, "baseline": _baseline,
+                "source-shift": _source_shift, "near-duplicates": _near_duplicates, "app": _app}
     if not argv or argv[0] not in commands:
         print(__doc__ + "\n  app          open the local researcher app in your browser\n"
               "  fetch        list/plan/get datasets and weights\n  catalog      validate/show catalog records\n"
               "  route        list compatible models for a task\n  coordinator  profiles/ping/ask OpenAI-compatible endpoints\n"
               "  btxrd        describe the BTXRD release / build its manifest\n"
-              "  baseline     exploratory frozen-encoder baseline on BTXRD (needs the ml extra)")
+              "  baseline     exploratory frozen-encoder baseline on BTXRD (needs the ml extra)\n"
+              "  source-shift compare preprocessing variants under the BTXRD source hold-out (needs the ml extra)\n"
+              "  near-duplicates  rank BTXRD image pairs by feature similarity for review (needs numpy)")
         return 0 if not argv else 2
     if argv[0] == "fetch":
         from .acquisition.fetch import main as fetch_main

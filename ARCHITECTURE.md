@@ -25,7 +25,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 
 | Path | Role | Status |
 |---|---|---|
-| `cancer_workbench/__main__.py` | CLI dispatcher: `app`, `fetch`, `catalog`, `route`, `coordinator`, `btxrd`, `baseline` | done |
+| `cancer_workbench/__main__.py` | CLI dispatcher: `app`, `fetch`, `catalog`, `route`, `coordinator`, `btxrd`, `baseline`, `source-shift`, `near-duplicates` | done |
 | `common/types.py` | Shared types: `EvidenceState`, `Permission`, `ResultStatus`, `ResultEnvelope` | done; changes need cross-workstream review |
 | `common/paths.py` | `PROJECT_ROOT`, `CATALOG_DIR`, `CONFIG_DIR`, `DATA_DIR`, `MODELS_DIR` (env-overridable) | done |
 | `registry/store.py` | `load_catalog()` → `Catalog` (models + datasets tagged with `_kind`, duplicate-id check, lookup, search) | done |
@@ -33,7 +33,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `routing/router.py` | `route_models`, `compatibility_reasons`, `runnable_blockers` | done (basic checks only, see docstring) |
 | `adapters/base.py` | `Adapter` protocol + `execute_specialist`, the only way a model runs | done |
 | `adapters/synthetic.py` | `SyntheticThresholdAdapter` + `SYNTHETIC_MODEL_RECORD`, test-only fakes | done |
-| `adapters/encoder.py` | `FrozenEncoderAdapter` (RAD-DINO, ResNet-50): shared pad-to-square preprocessing, safetensors-only loading; `ml` extra, import explicitly | done |
+| `adapters/encoder.py` | `FrozenEncoderAdapter` (RAD-DINO, ResNet-50): shared pad-to-square preprocessing by default, plus `VARIANTS` `pad_pstretch` (per-image 1st–99th percentile stretch) and `native_crop` (shortest-edge resize + center crop) for the source-shift check; safetensors-only loading; `ml` extra, import explicitly | done |
 | `acquisition/sources.py` | Per-publisher resolvers (Hugging Face, Zenodo, figshare, TCIA, plain URL) → `FilePlan`s | done |
 | `acquisition/download.py` | Resumable download, checksum verification, safe zip extraction, cross-host auth stripping | done |
 | `acquisition/fetch.py` | Plan/fetch catalog records, write `PROVENANCE.json`; `fetch` CLI | done |
@@ -50,9 +50,11 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
 | `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (library only; never executes) |
 | `experiments/btxrd_baseline.py` | Exploratory BTXRD runs: split protocols × endpoints × encoders → `runs/<id>/` results, predictions, heads, records; `baseline` CLI | done (`ml` extra) |
+| `experiments/btxrd_source_shift.py` | Source hold-out only: one head per preprocessing variant, pick by center-1 val macro ROC-AUC (ties to `pad`), test only the pick and `pad`; `source-shift` CLI. Centers 2 + 3 were already seen in the first baseline run | done (`ml` extra) |
+| `experiments/btxrd_near_duplicates.py` | Ranks image pairs by the lower of the RAD-DINO and ResNet-50 cosine similarities; writes `candidates.csv` + `summary.json` for review, changes no split or group; `near-duplicates` CLI | done (needs numpy) |
 | `experiments/explore.py` | Images screen backend: `list_runs`, `review` (stored val/test predictions joined with the split, stdlib), `head_for` (load or verified refit of a run's head), `score` (live encoder + head on chosen images; refuses training images). Bypasses `execute_specialist` on purpose; not in the coordinator tool box | done (`score`/`head_for` need `ml`) |
-| `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing hash | done (`ml` extra) |
-| `learning/heads.py` | `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals, `save_head`/`load_head` (plain-array `.npz`, no pickle) | done (`ml` extra; distillation not implemented) |
+| `learning/features.py` | `extract_features` → `.npz` cache keyed by encoder revision + preprocessing variant hash | done (`ml` extra) |
+| `learning/heads.py` | `validate_head_inputs` (shapes, finite features, unique ids, class coverage, patient or duplicate group spanning partitions) runs before any fit; `train_feature_head` (logistic regression, C chosen on val), `evaluate_head` with leakage refusals, `save_head`/`load_head` (plain-array `.npz`, no pickle) | done (`ml` extra; distillation not implemented) |
 | `evaluation/metrics.py` | `binary_report`, `multiclass_report` (bootstrap CIs), `calibration` | done (`ml` extra) |
 | `evaluation/thresholds.py` | `choose_threshold` on development data (`youden`, `sensitivity>=X`) | done (`ml` extra) |
 | `evaluation/aggregate.py` | Binary patient max/mean aggregation; declared IDs and consistent labels/partition required | done (stdlib) |
@@ -77,8 +79,8 @@ registry        ◄── acquisition.fetch, coordinator.tools, app, __main__
 routing         ◄── adapters.base, coordinator.tools, app, __main__
 adapters        ◄── coordinator.tools, app, learning.features (encoder)
 acquisition     ◄── datasets.audit + datasets.btxrd (hash_file), app, __main__
-datasets        ◄── app, __main__, experiments.btxrd_baseline, experiments.explore
-learning, evaluation ◄── experiments.btxrd_baseline, experiments.explore (learning only)
+datasets        ◄── app, __main__, experiments.btxrd_baseline, experiments.btxrd_source_shift, experiments.btxrd_near_duplicates, experiments.explore
+learning, evaluation ◄── experiments.btxrd_baseline, experiments.btxrd_source_shift, experiments.explore (learning only)
 experiments.explore ◄── app
 coordinator     ◄── app, __main__
 app             ◄── __main__

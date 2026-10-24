@@ -7,11 +7,11 @@ from pathlib import Path
 
 
 def extract_features(encoder_id: str, manifest_rows: list[dict], data_root: Path, out_path: Path,
-                     *, batch_size: int = 16, device: str | None = None, quiet: bool = False) -> Path:
+                     *, batch_size: int = 16, device: str | None = None, quiet: bool = False, variant: str = "pad") -> Path:
     """Embed every manifest row's `file` (relative to `data_root`) and write an .npz.
 
     The file holds sample_ids, patient_ids, partitions, labels, features (N x D), plus
-    encoder id, revision and preprocessing hash so a stale cache is never reused silently.
+    encoder id, revision, preprocessing variant and hash so a stale cache is never reused silently.
     """
     import numpy as np
 
@@ -20,7 +20,7 @@ def extract_features(encoder_id: str, manifest_rows: list[dict], data_root: Path
     missing = [r["sample_id"] for r in manifest_rows if not r.get("file")]
     if missing:
         raise ValueError(f"{len(missing)} rows have no file, e.g. {missing[:3]}")
-    adapter = FrozenEncoderAdapter(encoder_id, device=device)
+    adapter = FrozenEncoderAdapter(encoder_id, device=device, variant=variant)
     t0 = time.monotonic()
 
     def progress(done, total):
@@ -36,16 +36,16 @@ def extract_features(encoder_id: str, manifest_rows: list[dict], data_root: Path
     col = lambda k: np.array([r.get(k, "") for r in manifest_rows])
     np.savez(out_path, sample_ids=col("sample_id"), patient_ids=col("patient_id"), partitions=col("partition"),
              labels=col("label"), features=feats, encoder_id=encoder_id, revision=str(revision(encoder_id)),
-             preprocessing_hash=preprocessing_hash(encoder_id), device=str(adapter.device),
+             preprocessing_hash=preprocessing_hash(encoder_id, variant), variant=variant, device=str(adapter.device),
              seconds=round(time.monotonic() - t0, 1))
     return out_path
 
 
-def cache_path(encoder_id: str, dataset_id: str, root: Path) -> Path:
+def cache_path(encoder_id: str, dataset_id: str, root: Path, variant: str = "pad") -> Path:
     """Feature file name pinned to encoder revision and preprocessing, so changes never reuse stale features."""
     from ..adapters.encoder import preprocessing_hash, revision
 
-    return Path(root) / f"{dataset_id}-{encoder_id}-{str(revision(encoder_id))[:8]}-{preprocessing_hash(encoder_id)}.npz"
+    return Path(root) / f"{dataset_id}-{encoder_id}-{str(revision(encoder_id))[:8]}-{preprocessing_hash(encoder_id, variant)}.npz"
 
 
 def load_features(path: Path) -> dict:

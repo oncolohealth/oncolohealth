@@ -3,12 +3,14 @@
 Contract change from the package docstring: the head is an L2-regularized
 logistic regression (scikit-learn, lbfgs) on standardized features, with
 balanced class weights. Its regularization strength is picked from `c_grid`
-on VAL rows only; the head is fit on TRAIN rows only. Distillation
+on VAL rows only; the head is fit on TRAIN rows only, after
+`validate_head_inputs` refuses leaking or malformed inputs. Distillation
 (`teacher_weight > 0`) is not implemented yet. `save_head` / `load_head`
 store a head as plain arrays so a run's head can be reused for scoring.
 """
 from __future__ import annotations
 
+import collections
 import dataclasses
 from typing import Any
 
@@ -46,6 +48,61 @@ def _check(data: dict) -> None:
         raise ValueError(f"labels outside the declared classes: {sorted(unknown)}")
 
 
+PARTITIONS = ("train", "val", "test", "unassigned")
+
+
+def validate_head_inputs(data: dict[str, Any]) -> None:
+    """Refuse inputs a head must not be fit on, before any candidate C sees val.
+
+    Checks array shapes and alignment, finite numeric features, unique sample
+    ids, known partitions, class coverage in train and val, and that no patient
+    (`patient_ids`) or duplicate group (`group_ids`) spans train, val and test.
+    Blank patient or group ids mean unknown and are not compared.
+    """
+    import numpy as np
+
+    _check(data)
+    X = np.asarray(data["features"])
+    if X.ndim != 2 or 0 in X.shape:
+        raise ValueError(f"features must be a non-empty N x D array, got shape {X.shape}")
+    if X.dtype.kind not in "fiu":
+        raise ValueError(f"features must be numeric, got dtype {X.dtype}")
+    if not np.isfinite(X).all():
+        raise ValueError(f"{int((~np.isfinite(X)).any(1).sum())} feature rows contain NaN or infinite values")
+    n = X.shape[0]
+    for k in ("labels", "partitions", "sample_ids", "patient_ids", "group_ids"):
+        if data.get(k) is not None and np.shape(data[k]) != (n,):
+            raise ValueError(f"{k} has shape {np.shape(data[k])} but features have {n} rows")
+    classes = list(data["classes"])
+    if len(classes) < 2 or len(set(classes)) != len(classes):
+        raise ValueError(f"classes must be at least two distinct names, got {classes}")
+    ids = data["sample_ids"].tolist()
+    if "" in ids:
+        raise ValueError("blank sample ids")
+    if len(set(ids)) != n:
+        dupes = sorted(i for i, c in collections.Counter(ids).items() if c > 1)
+        raise ValueError(f"{len(dupes)} sample ids appear more than once, e.g. {dupes[:3]}")
+    parts = data["partitions"].tolist()
+    if unknown := set(parts) - set(PARTITIONS):
+        raise ValueError(f"unknown partitions: {sorted(unknown)}")
+    labels = data["labels"].tolist()
+    for p in ("train", "val"):
+        seen = {l for l, q in zip(labels, parts) if q == p}
+        if not seen:
+            raise ValueError(f"no {p!r} rows")
+        if missing := [c for c in classes if c not in seen]:
+            raise ValueError(f"{p} rows do not cover every class; missing {missing}")
+    for k, what in (("patient_ids", "patients"), ("group_ids", "duplicate groups")):
+        if data.get(k) is None:
+            continue
+        where: dict[str, set] = {}
+        for g, q in zip(data[k].tolist(), parts):
+            if g and q != "unassigned":
+                where.setdefault(g, set()).add(q)
+        if spanning := sorted(g for g, qs in where.items() if len(qs) > 1):
+            raise ValueError(f"{len(spanning)} {what} span more than one partition, e.g. {spanning[:3]}")
+
+
 def _auc(y, probs, n_classes):
     from sklearn.metrics import roc_auc_score
 
@@ -53,18 +110,19 @@ def _auc(y, probs, n_classes):
 
 
 def train_feature_head(data: dict[str, Any], *, c_grid=C_GRID, teacher_weight: float = 0.0) -> HeadModel:
-    """`data`: features (N x D), labels, partitions, sample_ids, optional patient_ids, ordered classes, encoder ref."""
+    """`data`: features (N x D), labels, partitions, sample_ids, optional patient_ids and group_ids, ordered classes, encoder ref.
+
+    `validate_head_inputs` runs first, so leaking or malformed inputs are refused before any fit.
+    """
     import numpy as np
     from sklearn.linear_model import LogisticRegression
 
     if teacher_weight:
         raise NotImplementedError("distillation needs a reviewed teacher and permission; not implemented")
-    _check(data)
+    validate_head_inputs(data)
     classes = list(data["classes"])
     y = np.array([classes.index(l) for l in data["labels"]])
     tr, va = _rows(data, "train"), _rows(data, "val")
-    if len(set(y[tr])) < len(classes):
-        raise ValueError("train rows do not cover every class")
     X = data["features"].astype(np.float64)
     mean, scale = X[tr].mean(0), X[tr].std(0) + 1e-6
     Z = (X - mean) / scale
