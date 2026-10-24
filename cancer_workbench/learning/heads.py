@@ -56,12 +56,13 @@ def _check(data: dict) -> dict:
     X = np.asarray(data["features"])
     if X.ndim != 2 or 0 in X.shape or X.dtype.kind not in "iuf":
         raise ValueError("features must be a nonempty real numeric N x D array")
-    X = X.astype(np.float64)
+    X = X.astype(np.float64, copy=False)
     if not np.isfinite(X).all():
         raise ValueError("features must be finite")
     checked["features"] = X
-    for key in ("labels", "partitions", "sample_ids", "patient_ids", "duplicate_groups", "image_hashes"):
-        if key not in data:
+    for key in ("labels", "partitions", "sample_ids", "patient_ids", "group_ids", "duplicate_groups", "image_hashes"):
+        if key not in data or (key in ("patient_ids", "group_ids", "duplicate_groups", "image_hashes") and data[key] is None):
+            checked.pop(key, None)
             continue
         col = np.asarray(data[key])
         if col.ndim != 1 or len(col) != len(X):
@@ -73,8 +74,8 @@ def _check(data: dict) -> dict:
         checked[key] = col
     if len(set(checked["sample_ids"].tolist())) != len(X):
         raise ValueError("sample_ids must be unique; duplicate samples cannot enter head fitting")
-    if set(checked["partitions"].tolist()) - {"train", "val", "test"}:
-        raise ValueError("partitions must be train, val or test")
+    if set(checked["partitions"].tolist()) - {"train", "val", "test", "unassigned"}:
+        raise ValueError("partitions must be train, val, test or unassigned")
     unknown = set(checked["labels"].tolist()) - set(classes)
     if unknown:
         raise ValueError(f"labels outside the declared classes: {sorted(unknown)}")
@@ -82,15 +83,32 @@ def _check(data: dict) -> dict:
     if not isinstance(enc, dict) or any(not isinstance(enc.get(k), str) or not enc[k].strip()
                                           for k in ("encoder_id", "revision", "preprocessing_hash")):
         raise ValueError("encoder must declare nonempty encoder_id, revision and preprocessing_hash")
-    for key in ("patient_ids", "duplicate_groups", "image_hashes"):
+    for key in ("patient_ids", "group_ids", "duplicate_groups", "image_hashes"):
         seen = {}
         for identity, part in zip(checked.get(key, []), checked["partitions"]):
-            if not identity.strip():
+            if not identity.strip() or part == "unassigned":
                 continue
             if identity in seen and seen[identity] != part:
                 raise ValueError(f"{key} overlap across {seen[identity]} and {part} partitions")
             seen[identity] = part
     return checked
+
+
+PARTITIONS = ("train", "val", "test", "unassigned")
+
+
+def validate_head_inputs(data: dict[str, Any]) -> None:
+    """Public pre-fit guard retained from the source-shift implementation.
+
+    Uses the shared normalized table checks, including canonical group_ids.
+    Unassigned rows may share declared groups but never enter head fitting.
+    Missing identities remain unknown and do not establish independence.
+    """
+    data = _check(data)
+    for name in ("train", "val"):
+        idx = _rows(data, name)
+        if set(data["labels"][idx].tolist()) != set(data["classes"]):
+            raise ValueError(f"{name} rows do not cover every class")
 
 
 def _auc(y, probs, n_classes):
@@ -100,13 +118,18 @@ def _auc(y, probs, n_classes):
 
 
 def train_feature_head(data: dict[str, Any], *, c_grid=C_GRID, teacher_weight: float = 0.0) -> HeadModel:
-    """`data`: features (N x D), labels, partitions, sample_ids, optional patient_ids, ordered classes, encoder ref."""
+    """Fit after `validate_head_inputs` checks the normalized feature table.
+
+    `data` has features (N x D), labels, partitions, sample_ids, optional
+    patient_ids/group_ids/image_hashes, ordered classes and encoder identity.
+    """
     import numpy as np
     from sklearn.linear_model import LogisticRegression
 
     if teacher_weight:
         raise NotImplementedError("distillation needs a reviewed teacher and permission; not implemented")
     data = _check(data)
+    validate_head_inputs(data)
     if isinstance(c_grid, (str, bytes)):
         raise ValueError("c_grid must contain finite positive numbers")
     try:
@@ -119,9 +142,6 @@ def train_feature_head(data: dict[str, Any], *, c_grid=C_GRID, teacher_weight: f
     classes = list(data["classes"])
     y = np.array([classes.index(l) for l in data["labels"]])
     tr, va = _rows(data, "train"), _rows(data, "val")
-    for name, idx in (("train", tr), ("val", va)):
-        if len(set(y[idx])) < len(classes):
-            raise ValueError(f"{name} rows do not cover every class")
     X = data["features"].astype(np.float64)
     mean, scale = X[tr].mean(0), X[tr].std(0) + 1e-6
     Z = (X - mean) / scale

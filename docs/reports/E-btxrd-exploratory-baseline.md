@@ -52,11 +52,11 @@ Positive class: tumor for `tumor_vs_normal`, malignant for `benign_vs_malignant`
 
 - **21 pairs of byte-identical images.** Feature extraction showed identical embeddings; the manifest confirmed identical file hashes. Each pair now shares a `duplicate_group` and is kept within one partition.
 - **2 duplicate pairs carry conflicting labels.** IMG000591 is labeled benign but is identical to IMG003456 (normal), and IMG000707 (benign) is identical to IMG003346 (normal). All four images are unlabeled in the manifest. Several other pairs disagree on age or sex. This is direct evidence of label or metadata errors in the release; a question for the maintainers (Hub Q01).
-- Near-duplicates (same image re-saved or cropped) were not searched for.
+- Near-duplicates (same image re-saved or cropped) were not searched for here. The follow-up search is in [E-btxrd-source-shift.md](E-btxrd-source-shift.md).
 
 ## Next steps
 
 - Agree the endpoint (Q02) with these numbers and their limits in view.
 - Ask the maintainers about patient grouping and the conflicting duplicate labels (Q01).
-- Try a small set of changes that the source shift suggests, chosen on center-1 validation data only: per-image intensity normalization, the native center crop instead of padding, and a near-duplicate search with feature similarity.
+- Done October 24: the changes the source shift suggested, chosen on center-1 validation data only (per-image intensity normalization, the native center crop instead of padding), and a near-duplicate search with feature similarity. See [E-btxrd-source-shift.md](E-btxrd-source-shift.md); neither change closes the gap.
 - Add MedSigLIP as a second medical arm once its gated terms are accepted.

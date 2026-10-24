@@ -28,6 +28,8 @@ PROTOCOLS = ("image_stratified", "source_holdout")
 CLASSES = {"three_class": ["normal", "benign", "malignant"], "tumor_vs_normal": ["normal", "tumor"],
            "benign_vs_malignant": ["benign", "malignant"]}  # binary: index 1 is the positive class
 LABEL = "EXPLORATORY: image-level, no patient grouping, single source dataset. Not medical performance."
+GROUPING = ("grouping: no patient ids; declared duplicate groups in image_stratified, centers held out in source_holdout; "
+            "declared cross-partition overlap rejected before fitting")
 
 
 def make_split(rows: list[dict], protocol: str, seed: str = "0") -> list[dict]:
@@ -52,10 +54,14 @@ def head_inputs(er: list[dict], f: dict, index: dict[str, int], endpoint: str) -
     idx = [index[r["sample_id"]] for r in er]
     col = lambda k: np.array([r[k] for r in er])
     return {"features": f["features"][idx], "labels": col("label"), "partitions": col("partition"), "sample_ids": col("sample_id"),
-            "patient_ids": col("patient_id"), "classes": CLASSES[endpoint],
-            "duplicate_groups": np.array([r.get("duplicate_group", "") for r in er]),
+            "patient_ids": col("patient_id"), "group_ids": col("duplicate_group"), "classes": CLASSES[endpoint],
             "image_hashes": np.array([r.get("sha256", "") for r in er]),
             "encoder": {"encoder_id": str(f["encoder_id"]), "revision": f["revision"], "preprocessing_hash": f["preprocessing_hash"]}}
+
+
+def rel(path: Path) -> str:
+    """`path` relative to the project when it is inside it, else as given."""
+    return str(path.relative_to(PROJECT_ROOT)) if path.is_relative_to(PROJECT_ROOT) else str(path)
 
 
 def _git_revision() -> str:
@@ -75,13 +81,49 @@ def _environment(device: str) -> dict[str, str]:
             "numpy": numpy.__version__, "scikit-learn": sklearn.__version__, "device": device}
 
 
+def evaluate(head, data: dict, endpoint: str, n_boot: int) -> tuple[dict, dict, dict]:
+    """VAL and TEST predictions, and the TEST report. A binary threshold is chosen on VAL and applied unchanged."""
+    from ..evaluation.metrics import binary_report, calibration, multiclass_report
+    from ..evaluation.thresholds import choose_threshold
+    from ..learning.heads import evaluate_head
+
+    val, test = evaluate_head(head, data, "val"), evaluate_head(head, data, "test")
+    if len(CLASSES[endpoint]) == 2:
+        pos = lambda pred: [p[1] for p in pred["probs"]]
+        threshold = choose_threshold(val["y_true"], pos(val), "youden")
+        report = binary_report(test["y_true"], pos(test), threshold, n_boot=n_boot)
+        report["calibration"] = calibration(test["y_true"], pos(test))
+        report["positive_class"] = CLASSES[endpoint][1]
+    else:
+        report = multiclass_report(test["y_true"], test["probs"], CLASSES[endpoint], n_boot=n_boot)
+    return val, test, report
+
+
+def record(record_id: str, endpoint: str, enc: str, f: dict, split: str, seed: str, preprocessing: dict, source_rev: str,
+           manifest_sha: str, seconds: float, outputs: list[str], blockers: list[str],
+           scope: str = "local laptop; exploratory image-level run authorized 2026-10-23") -> dict:
+    """One completed `ExperimentRecord` (as a dict) for a fitted and evaluated head."""
+    rec = ExperimentRecord(
+        id=record_id, path="transfer_learning", task=f"btxrd_{endpoint}_image",
+        cohort=f"btxrd {RELEASE}; manifest sha256 {manifest_sha}", split=split, model=f"{enc}@{f['revision']}",
+        source_revision=source_rev, environment=_environment(str(f["device"])), preprocessing=preprocessing,
+        objective="logistic regression on standardized frozen features, balanced class weights; C and threshold chosen on val",
+        metrics=["roc_auc", "pr_auc", "sensitivity", "specificity", "calibration"] if len(CLASSES[endpoint]) == 2
+        else ["macro_roc_auc", "balanced_accuracy", "per_class_recall"],
+        seed_policy=f"split seed {seed}; bootstrap seed 0; lbfgs is deterministic",
+        execution_scope=scope,
+        state=JobState.COMPLETED,
+        resource_profile={"feature_seconds": float(f["seconds"]), "feature_device": str(f["device"]),
+                          "head_and_eval_seconds": round(seconds, 2)},
+        outputs=outputs, blockers=blockers)
+    return dict(dataclasses.asdict(rec), state=rec.state.value)
+
+
 def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out_dir: Path | None = None,
         seed: str = "0", n_boot: int = 1000, features_dir: Path = PROJECT_ROOT / "runs" / "features") -> Path:
     from ..adapters.encoder import preprocessing, preprocessing_hash, revision
-    from ..evaluation.metrics import binary_report, calibration, multiclass_report
-    from ..evaluation.thresholds import choose_threshold
     from ..learning.features import cache_path, extract_features, load_features
-    from ..learning.heads import evaluate_head, save_head, train_feature_head
+    from ..learning.heads import save_head, train_feature_head
 
     if not MANIFEST_PATH.exists():
         raise FileNotFoundError(f"{MANIFEST_PATH} missing; run `python -m cancer_workbench btxrd manifest` first")
@@ -115,15 +157,7 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
                 data = head_inputs(er, f, index, endpoint)
                 t0 = time.monotonic()
                 head = train_feature_head(data)
-                val, test = evaluate_head(head, data, "val"), evaluate_head(head, data, "test")
-                if len(CLASSES[endpoint]) == 2:
-                    pos = lambda pred: [p[1] for p in pred["probs"]]
-                    threshold = choose_threshold(val["y_true"], pos(val), "youden")
-                    report = binary_report(test["y_true"], pos(test), threshold, n_boot=n_boot)
-                    report["calibration"] = calibration(test["y_true"], pos(test))
-                    report["positive_class"] = CLASSES[endpoint][1]
-                else:
-                    report = multiclass_report(test["y_true"], test["probs"], CLASSES[endpoint], n_boot=n_boot)
+                val, test, report = evaluate(head, data, endpoint, n_boot)
                 run_id = f"{protocol}.{endpoint}.{enc}"
                 results.append({"id": run_id, "protocol": protocol, "endpoint": endpoint, "encoder": enc, "label": LABEL,
                                 "C": head.C, "val_macro_roc_auc": head.val_score,
@@ -133,24 +167,11 @@ def run(encoders=ENCODERS, endpoints=tuple(CLASSES), protocols=PROTOCOLS, *, out
                 (out_dir / "predictions" / f"{run_id}.json").write_text(json.dumps({"val": val, "test": test}) + "\n")
                 (out_dir / "heads").mkdir(exist_ok=True)
                 save_head(head, out_dir / "heads" / f"{run_id}.npz")
-                rec = ExperimentRecord(
-                    id=f"{out_dir.name}/{run_id}", path="transfer_learning", task=f"btxrd_{endpoint}_image",
-                    cohort=f"btxrd {RELEASE}; manifest sha256 {manifest_sha}", split=f"{split_path.name} ({protocol}, seed {seed}); "
-                    "grouping: declared duplicate groups in image_stratified; centers held out in source_holdout; "
-                    "declared cross-partition overlap rejected before fitting; patient identities unavailable",
-                    model=f"{enc}@{f['revision']}",
-                    source_revision=source_rev, environment=_environment(str(f["device"])), preprocessing=preprocessing(enc),
-                    objective="logistic regression on standardized frozen features, balanced class weights; C and threshold chosen on val",
-                    metrics=["roc_auc", "pr_auc", "sensitivity", "specificity", "calibration"] if len(CLASSES[endpoint]) == 2
-                    else ["macro_roc_auc", "balanced_accuracy", "per_class_recall"],
-                    seed_policy=f"split seed {seed}; bootstrap seed 0; lbfgs is deterministic",
-                    execution_scope="local laptop; exploratory image-level run authorized 2026-10-23",
-                    state=JobState.COMPLETED,
-                    resource_profile={"feature_seconds": float(f["seconds"]), "feature_device": str(f["device"]),
-                                      "head_and_eval_seconds": round(time.monotonic() - t0, 2)},
-                    outputs=[str(fpath.relative_to(PROJECT_ROOT)), f"predictions/{run_id}.json", f"heads/{run_id}.npz"],
-                    blockers=[x["detail"] for x in audit["findings"] if x["severity"] == "error"])
-                records.append(dict(dataclasses.asdict(rec), state=rec.state.value))
+                records.append(record(
+                    f"{out_dir.name}/{run_id}", endpoint, enc, f, f"{split_path.name} ({protocol}, seed {seed}); {GROUPING}",
+                    seed, preprocessing(enc), source_rev, manifest_sha, time.monotonic() - t0,
+                    [rel(fpath), f"predictions/{run_id}.json", f"heads/{run_id}.npz"],
+                    [x["detail"] for x in audit["findings"] if x["severity"] == "error"]))
 
     (out_dir / "results.json").write_text(json.dumps({"label": LABEL, "results": results}, indent=2) + "\n")
     (out_dir / "records.json").write_text(json.dumps(records, indent=2) + "\n")
@@ -168,17 +189,21 @@ def _fmt_metric(v):
     return "undefined" if v is None else f"{v:.2f}"
 
 
+def test_cells(t: dict) -> tuple[str, str]:
+    """The ROC-AUC (95% CI) and decision-summary cells of a summary table for one TEST report."""
+    if "roc_auc" in t:
+        return (_fmt_ci(t["roc_auc"], t["roc_auc_ci95"]),
+                f"sens {_fmt_metric(t['sensitivity'])}, spec {_fmt_metric(t['specificity'])} ({t['positive_class']} positive)")
+    return (_fmt_ci(t["macro_roc_auc"], t["macro_roc_auc_ci95"]) + " macro",
+            f"bal. acc {_fmt_metric(t['balanced_accuracy'])}; recall " + ", ".join(f"{c} {_fmt_metric(v)}" for c, v in t["recall"].items()))
+
+
 def summary(results: list[dict]) -> str:
     lines = [f"**{LABEL}**", "", "| Protocol | Endpoint | Encoder | Test n | ROC-AUC (95% CI) | At val threshold / argmax |",
              "|---|---|---|---|---|---|"]
     for r in results:
         t = r["test"]
-        if "roc_auc" in t:
-            auc = _fmt_ci(t["roc_auc"], t["roc_auc_ci95"])
-            dec = f"sens {_fmt_metric(t['sensitivity'])}, spec {_fmt_metric(t['specificity'])} ({t['positive_class']} positive)"
-        else:
-            auc = _fmt_ci(t["macro_roc_auc"], t["macro_roc_auc_ci95"]) + " macro"
-            dec = f"bal. acc {_fmt_metric(t['balanced_accuracy'])}; recall " + ", ".join(f"{c} {_fmt_metric(v)}" for c, v in t["recall"].items())
+        auc, dec = test_cells(t)
         lines.append(f"| {r['protocol']} | {r['endpoint']} | {r['encoder']} | {t['n']} | {auc} | {dec} |")
     lines += ["", "CIs resample images, so they are too narrow if images share patients."]
     return "\n".join(lines) + "\n"

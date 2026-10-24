@@ -47,7 +47,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 ### A: Dataset curator
 - [x] Inventory `data/btxrd/BTXRD/BTXRD/` (`python3 -m cancer_workbench btxrd describe`): 3,746 images (3,719 .jpeg + 27 .jpg), 1,867 LabelMe 5.4.1 annotation JSONs (2,324 rectangles + 2,318 polygons, one file per tumor image), `dataset.xlsx` (Sheet1 only; Sheet2/3 empty), plus a stray 165-byte Office lock file. Every image, row and annotation ID reconciles. 37 columns: image_id, center (1/2/3: 2,938/549/259), age, gender, 15 site flags, tumor/benign/malignant, 9 subtype flags, region (upper/lower limb, pelvis), view (frontal/lateral/oblique). Exactly one region and one view per row
 - [~] Recover patient grouping if the release provides it. **Checked 2026-10-23: it does not.** `dataset.xlsx` has no patient, case or lesion column. Many consecutive rows share center, age and gender (e.g. IMG000002/3), consistent with several views per patient, but grouping must not be derived from that (Hub D04). Next: ask the maintainers for a pseudonymous mapping (Hub Q01). If it doesn't, document which claims become unsupported and propose an alternative (e.g. near-duplicate clustering + per-center grouping)
-- [~] Near-duplicate / same-patient detection. Exact duplicates done: 21 byte-identical pairs now share a `duplicate_group`; 2 pairs have conflicting labels (IMG000591 benign = IMG003456 normal, IMG000707 benign = IMG003346 normal) and all 4 images are unlabeled. Near-duplicates (re-saved, cropped) not searched yet; feature similarity is the next tool
+- [~] Near-duplicate / same-patient detection. Exact duplicates done: 21 byte-identical pairs now share a `duplicate_group`; 2 pairs have conflicting labels (IMG000591 benign = IMG003456 normal, IMG000707 benign = IMG003346 normal) and all 4 images are unlabeled. Near-duplicate search done 2026-10-24 (`near-duplicates` CLI, [E-btxrd-source-shift.md](docs/reports/E-btxrd-source-shift.md)): besides the 21 exact pairs, IMG002677/IMG002686 (same radiograph with an added text label) and IMG000155/IMG000157 (same image re-cropped), plus many likely same-patient pairs; of the top 279 new pairs, 131 cross the image-stratified split. Candidates only: no `duplicate_group` changed yet. Next: a person reviews the list and adds confirmed same-image pairs
 - [ ] Confirm label meanings and reference standard (histopathology vs. radiologic) from the paper. Indicators are clean: only 000 (1,879 normal), 110 (1,525 benign), 101 (342 malignant). One row, IMG001276, lists two benign subtypes (osteochondroma + synovial osteochondroma) while its annotation says synovial osteochondroma only; it is flagged in the manifest
 - [ ] Check source overlap with other public bone X-ray sets
 - [x] `build_manifest` → `data/btxrd/manifest.csv`, with `partition=unassigned` (`python3 -m cancer_workbench btxrd manifest [--endpoint three_class|tumor_vs_normal|benign_vs_malignant]`). 3,746 rows, all image sha256s verified by the audit; `patient_id` empty everywhere, so the audit reports `missing_patient_id` and `ready_for_training: false`
@@ -71,6 +71,9 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] `learning/features.py::extract_features` (RAD-DINO and ResNet-50 over all 3,746 BTXRD images; cached in `runs/features/`)
 - [x] `learning/heads.py::train_feature_head` / `evaluate_head` (logistic / linear head). Existing exploratory report: `docs/reports/E-btxrd-exploratory-baseline.md`. Reported image-level and source-holdout estimates have not been independently reproduced in this checkout; they do not establish equivalence between encoders or medical performance
 - [x] Pre-fit train/val identity, duplicate, shape, finite-feature and class-coverage validation (H source check); reject declared overlap before C selection. Duplicate groups and file hashes now pass from the BTXRD manifest to this check. Unknown patient identity still prevents independence claims
+
+- [x] Pre-fit validation (H source check): `learning/heads.py::validate_head_inputs` runs before any C is tried and refuses misaligned or non-finite features, repeated or blank sample ids, unknown partitions, a train or val partition missing a class, and any patient or duplicate group (`group_ids`, now passed from `duplicate_group`) spanning train/val/test. Synthetic tests confirm no fit starts on bad input; both existing runs' real inputs pass and their heads still rebuild to the stored val predictions
+- [x] Source-shift check (2026-10-24, [E-btxrd-source-shift.md](docs/reports/E-btxrd-source-shift.md)): preprocessing variants `pad_pstretch` and `native_crop` (`adapters/encoder.py::VARIANTS`; default `pad` hash unchanged), one variant picked per encoder × endpoint on center-1 val, test only for the pick and `pad`. Contrast stretch never won; native crop won for ResNet-50 only (test ROC-AUC benign vs malignant 0.623 → 0.690, three-class 0.609 → 0.637, tumor vs normal 0.621 → 0.623, overlapping image-level CIs). The gap to center-1 val (0.84–0.94) stays. Centers 2 + 3 were already seen in the first baseline run, so this is a hint, not a held-out result; a fair test needs an unseen source
 - [ ] Optional: teacher-student distillation, after a baseline exists and with teacher rights checked
 
 ### F: Evaluation
@@ -185,3 +188,36 @@ Historical verification from the incoming branch's source checkout:
   genuine patient mapping or an independent cohort and protocol review before
   stronger scientific claims; configured live endpoint for held-out coordinator
   evaluation. `docs/reports/demo-readiness.md` records details and limits.
+
+- The incoming main checkpoint reported Hub sign-in blocked. Inam has since synchronized the Local build checklist through the connected document tools.
+
+### Pre-fit checks and source-shift run (2026-10-24)
+
+- `.venv/bin/python -m unittest discover -s tests`: **104 tests, all passing** (6 new: pre-fit refusals, accepted blank groups, preprocessing variants, variant selection, source-shift summary, near-duplicate pair scoring). `python3 -m unittest discover -s tests`: **104 tests, OK with 11 optional ML tests skipped**. `node --check` on `app.js` and `git diff --check` pass.
+- Real runs: `runs/btxrd-source-shift-20261024T071226Z/` (its `pad` rows reproduce the first baseline's test numbers exactly) and `runs/btxrd-near-duplicates-20261024T071231Z/`. Four new feature files (RAD-DINO about 25 min each on MPS); `runs/features` is 123 MB. Software and exploratory image-level results only; no catalog promotion.
+
+### GitHub Actions tests
+
+- [x] Add `.github/workflows/tests.yml`: core unittest suite on every push and pull request, Ubuntu, Python 3.11–3.14. Official actions pinned to verified release commits; read-only repository permission; no dependency installs or artifact downloads.
+- [x] Local verification: workflow YAML parses and its triggers/matrix match the requested settings. Clean Python 3.12.13 and 3.14.3 environments each discover **98 tests, OK with 8 optional ML tests skipped**. `git diff --check` passes. These are synthetic software checks only.
+- [ ] Verify the first GitHub-hosted run after the workflow is committed and pushed; Python 3.11/3.13 and Ubuntu have not been exercised locally.
+- [x] The latest pushed CI/source-work checkpoint is recorded in the Team Hub; the new integrated branch verification is recorded separately below.
+
+### Integrated with latest pushed team work
+
+- Fetched and integrated `upstream/main` at `acb8e298e196cb86187d879b00a25bc1c50a2cd9`
+  into the isolated demo-readiness branch. Retained Sebastian's source-shift
+  variants, near-duplicate search, shared evaluation/record helpers, public
+  `validate_head_inputs`, canonical `group_ids`, unassigned-row behavior and CI.
+  His overlapping E checks are existing team work; this contribution adds the
+  stricter identity/hash/option checks and C/D fixes.
+- Resolved the baseline helper refactor with the earlier F null-safe rendering.
+  Both baseline and source-shift summaries now use the same null-safe cells.
+  Added one integration regression, bringing this follow-up to 18 new tests.
+- Current integrated suite: **146 discovered, 144 pass, 2 Torch preprocessing
+  skips** in the available ML environment; plain Python **146 discovered,
+  106 pass, 40 optional-ML skips**. Earlier 139/122/104 counts are checkpoints,
+  not the integrated count. No medical artifacts or reported scores reproduced.
+- The Hub reports unpushed `c13a74a` Images changes on the collaborator's machine.
+  They are unavailable in the pushed repository and are not claimed as included.
+  Review against that checkout before merging. No remote branch was pushed.

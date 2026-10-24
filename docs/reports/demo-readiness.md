@@ -2,8 +2,9 @@
 
 Inam Qasimi · October 24, 2026
 
-This follow-up builds on `df45e788b3eebb55e722bdc795f8ce633df1cb2f` on a separate
-`codex/demo-readiness` branch. It addresses three remaining source findings
+This follow-up builds on `df45e788b3eebb55e722bdc795f8ce633df1cb2f` and integrates
+latest pushed main `acb8e298e196cb86187d879b00a25bc1c50a2cd9` on a separate
+`codex/demo-readiness` branch. It addresses remaining source findings
 without downloading data or weights, choosing a scientific endpoint, or
 changing the exploratory Images scoring route.
 
@@ -36,15 +37,36 @@ changing the exploratory Images scoring route.
 
 ## Verification
 
-Seventeen new synthetic regression tests pass. They assert that learners and
+Eighteen new synthetic regression tests pass. They assert that learners and
 handlers are not invoked after invalid input, and that failures preserve their
 observed-result metadata. Existing binary/multiclass saved-head round trips and
 learning tests continue to pass in the available ML environment.
 
-Full suite in the temporary NumPy/scikit-learn environment: **139 tests,
-138 passed, 1 skipped** (Torch preprocessing unavailable). The initial full run
+Full integrated suite in the temporary NumPy/scikit-learn environment: **146 tests,
+144 passed, 2 skipped** (Torch preprocessing unavailable). Plain Python:
+**146 tests, 106 passed, 40 optional-ML skips**. The initial full run
 could not bind localhost sockets inside the sandbox. After the network grant,
 the full suite passed. These are software checks, not medical findings.
+
+## Concurrent team-work integration
+
+While this branch was being prepared, Sebastian pushed overlapping pre-fit
+checks, preprocessing variants, source-shift evaluation, near-duplicate search
+and CI to main. Those changes are retained. The public `validate_head_inputs`
+API, canonical `group_ids` metadata, and acceptance of unassigned rows remain
+compatible. Unassigned rows never enter fitting or contribute cross-partition
+overlap. The stricter shared checks add encoder/string/hash and regularization
+validation without introducing a second fitting route.
+
+The shared `evaluate`, `record`, `rel` and `test_cells` helpers remain in place.
+Null-safe formatting now applies through `test_cells` to both baseline and
+source-shift reports, with a new plain-Python integration regression. Both
+workstreams' documentation and tests are retained. Earlier 139-test counts
+describe the pre-integration checkpoint.
+
+The Hub additionally reports unpushed `c13a74a` Images/preprocessing changes.
+Those unavailable changes are not claimed as integrated or tested here. The
+branch must still be reviewed against that checkout before its eventual merge.
 
 ## Remaining limitations
 

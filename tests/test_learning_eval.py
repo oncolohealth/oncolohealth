@@ -69,6 +69,52 @@ class HeadTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluate_head(head, dict(data, classes=["pos", "neg"]))
 
+    def test_refuses_bad_inputs_before_any_fit(self):
+        from unittest import mock
+
+        import numpy as np
+
+        from cancer_workbench.learning.heads import train_feature_head
+
+        data = synthetic_data()
+        tr, va = (np.where(data["partitions"] == p)[0] for p in ("train", "val"))
+        nan = data["features"].copy()
+        nan[3, 0] = np.nan
+        dup_ids, pids, groups, no_val_pos = (data[k].copy() for k in ("sample_ids", "patient_ids", "patient_ids", "labels"))
+        dup_ids[va[0]] = dup_ids[tr[0]]
+        pids[[tr[0], va[0]]] = "p1"
+        groups[[tr[1], va[1]]] = "dup-1"
+        no_val_pos[va] = "neg"
+        cases = {
+            "non-finite": dict(data, features=nan),
+            "1-d features": dict(data, features=data["features"][:, 0]),
+            "text features": dict(data, features=data["features"].astype(str)),
+            "misaligned": dict(data, labels=data["labels"][:-1]),
+            "duplicate id": dict(data, sample_ids=dup_ids),
+            "unknown partition": dict(data, partitions=np.where(data["partitions"] == "test", "holdout", data["partitions"])),
+            "patient spans train/val": dict(data, patient_ids=pids),
+            "duplicate group spans train/val": dict(data, group_ids=groups),
+            "val misses a class": dict(data, labels=no_val_pos),
+            "repeated class": dict(data, classes=["neg", "neg"]),
+        }
+        with mock.patch("sklearn.linear_model.LogisticRegression.fit") as fit:
+            for name, bad in cases.items():
+                with self.subTest(name), self.assertRaises(ValueError):
+                    train_feature_head(bad)
+            fit.assert_not_called()
+
+    def test_blank_groups_and_unassigned_rows_are_accepted(self):
+        import numpy as np
+
+        from cancer_workbench.learning.heads import train_feature_head
+
+        data = synthetic_data()
+        groups = np.array([""] * len(data["sample_ids"]), dtype=object)
+        parts = data["partitions"].astype(object)
+        parts[-1] = "unassigned"
+        groups[[0, len(parts) - 1]] = "dup-1"  # shared only with an unassigned row
+        self.assertGreater(train_feature_head(dict(data, partitions=parts, group_ids=groups)).val_score, 0.9)
+
     def test_three_class(self):
         from cancer_workbench.evaluation.metrics import multiclass_report
         from cancer_workbench.learning.heads import evaluate_head, train_feature_head
@@ -95,6 +141,49 @@ class HeadTests(unittest.TestCase):
             self.assertEqual((back.classes, back.encoder, back.train_ids), (head.classes, head.encoder, head.train_ids))
             with self.assertRaises(ValueError):
                 evaluate_head(back, data, "train")
+
+
+class SourceShiftTests(unittest.TestCase):
+    def test_selection_prefers_val_score_then_baseline(self):
+        from cancer_workbench.experiments.btxrd_source_shift import select
+
+        self.assertEqual(select({"pad": 0.80, "pad_pstretch": 0.82, "native_crop": 0.81}), "pad_pstretch")
+        self.assertEqual(select({"native_crop": 0.85, "pad_pstretch": 0.85, "pad": 0.85}), "pad")
+        self.assertEqual(select({"native_crop": 0.85, "pad_pstretch": 0.85, "pad": 0.80}), "pad_pstretch")
+
+    def test_summary_reports_test_only_for_baseline_and_pick(self):
+        from cancer_workbench.experiments.btxrd_source_shift import LABEL, summary
+
+        t = {"n": 10, "macro_roc_auc": 0.6, "macro_roc_auc_ci95": [0.5, 0.7], "balanced_accuracy": 0.5, "recall": {"a": 0.5}}
+        sel = [{"endpoint": "three_class", "encoder": "e", "selected": "native_crop",
+                "val_macro_roc_auc": {"pad": 0.8, "pad_pstretch": 0.7, "native_crop": 0.9}}]
+        res = [{"endpoint": "three_class", "encoder": "e", "variant": v, "selected": v == "native_crop", "test": t}
+               for v in ("pad", "native_crop")]
+        text = summary(sel, res)
+        self.assertIn(LABEL, text)
+        self.assertIn("already seen", text)
+        test_rows = text.split("TEST (centers 2 + 3)")[1]
+        self.assertIn("native_crop (selected)", test_rows)
+        self.assertNotIn("pad_pstretch", test_rows)
+
+
+@unittest.skipUnless(HAS_ML, "needs the ml extra")
+class NearDuplicateTests(unittest.TestCase):
+    def test_pairs_need_both_encoders_to_agree(self):
+        import numpy as np
+
+        from cancer_workbench.experiments.btxrd_near_duplicates import pair_scores
+
+        rng = np.random.default_rng(0)  # SYNTHETIC features, not image embeddings
+        a, b = rng.normal(size=(20, 8)), rng.normal(size=(20, 8))
+        a[5], b[5] = a[2] + 0.01, b[2] + 0.01  # 2 and 5 match under both encoders
+        a[9] = a[7]  # 7 and 9 match under one encoder only
+        pairs, _ = pair_scores([a, b], top=3)
+        self.assertEqual(pairs[0][:2], (2, 5))
+        self.assertGreater(pairs[0][2], 0.99)
+        self.assertNotIn((7, 9), [p[:2] for p in pairs])
+        self.assertTrue(all(i < j for i, j, *_ in pairs))
+        self.assertEqual([p[2] for p in pairs], sorted((p[2] for p in pairs), reverse=True))
 
 
 @unittest.skipUnless(HAS_ML, "needs the ml extra")
@@ -132,6 +221,26 @@ class PreprocessingTests(unittest.TestCase):
         self.assertAlmostEqual(float(t[0, 32, 32]), 1.0, places=2)  # content kept in the middle
         self.assertAlmostEqual(float(t[0, 2, 32]), 0.0, places=2)  # black padding above
         self.assertTrue(bool((t[0] == t[1]).all()))
+
+    def test_variants(self):
+        from PIL import Image
+
+        from cancer_workbench.adapters.encoder import load_image, preprocessing_hash
+
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "wide.png"
+            im = Image.new("L", (200, 100), 100)  # SYNTHETIC: grey, with a brighter right half
+            im.paste(150, (100, 0, 200, 100))
+            im.save(p)
+            stretched = load_image(p, 64, "pad_pstretch")
+            cropped = load_image(p, 64, "native_crop")
+            with self.assertRaises(ValueError):
+                load_image(p, 64, "unknown")
+        self.assertAlmostEqual(float(stretched[0, 32, 8]), 0.0, places=2)  # grey half becomes black
+        self.assertAlmostEqual(float(stretched[0, 32, 56]), 1.0, places=2)  # brighter half becomes white
+        self.assertEqual(tuple(cropped.shape), (3, 64, 64))
+        self.assertAlmostEqual(float(cropped[0, 2, 32]), 150 / 255, places=1)  # no black padding: the crop fills the square
+        self.assertEqual(len({preprocessing_hash("rad-dino", v) for v in ("pad", "pad_pstretch", "native_crop")}), 3)
 
 
 if __name__ == "__main__":

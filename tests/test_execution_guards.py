@@ -113,7 +113,7 @@ class HeadInputGuardTests(unittest.TestCase):
     def test_patient_and_duplicate_overlap_blocks_selection(self):
         import numpy as np
 
-        for key in ("patient_ids", "duplicate_groups", "image_hashes"):
+        for key in ("patient_ids", "group_ids", "duplicate_groups", "image_hashes"):
             data = self.data()
             data[key] = np.array(["same", "", "same", "", "", ""])
             with self.subTest(key=key):
@@ -137,7 +137,7 @@ class HeadInputGuardTests(unittest.TestCase):
             ("patient_ids", np.array([None] * 6), "strings"),
             ("classes", ["n", "n"], "unique"),
             ("encoder", {"encoder_id": "synthetic"}, "encoder must declare"),
-            ("partitions", np.array(["train", "train", "unassigned", "val", "test", "test"]), "partitions must"),
+            ("partitions", np.array(["train", "train", "holdout", "val", "test", "test"]), "partitions must"),
         ]
         for key, value, message in changes:
             with self.subTest(key=key, message=message):
@@ -167,8 +167,22 @@ class HeadInputGuardTests(unittest.TestCase):
                  "duplicate_group": "dup", "sha256": "hash"}]
         features = {"features": np.ones((1, 2)), "encoder_id": "synthetic", "revision": "0", "preprocessing_hash": "0"}
         inputs = head_inputs(rows, features, {"a": 0}, "three_class")
-        self.assertEqual(inputs["duplicate_groups"].tolist(), ["dup"])
+        self.assertEqual(inputs["group_ids"].tolist(), ["dup"])
         self.assertEqual(inputs["image_hashes"].tolist(), ["hash"])
+
+
+class SharedSummaryIntegrationTests(unittest.TestCase):
+    def test_source_shift_uses_null_safe_shared_summary_cells(self):
+        from cancer_workbench.experiments.btxrd_source_shift import summary
+
+        selected = [{"endpoint": "tumor_vs_normal", "encoder": "synthetic", "selected": "pad",
+                     "val_macro_roc_auc": {"pad": 0.7}}]
+        results = [{"endpoint": "tumor_vs_normal", "encoder": "synthetic", "variant": "pad", "selected": True,
+                    "test": {"n": 0, "roc_auc": None, "roc_auc_ci95": None, "sensitivity": None,
+                             "specificity": None, "positive_class": "tumor"}}]
+        rendered = summary(selected, results, variants=("pad",))
+        self.assertIn("undefined", rendered)
+        self.assertNotIn("None", rendered)
 
 
 if __name__ == "__main__":
