@@ -474,7 +474,9 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
   decision worksheet. No medical data, actual weights, fitting, cloud workload
   or outreach used here. Sebastian's own actual-weight/MPS checks are recorded
   in his report and are not repeated or claimed as ours.
-- [ ] Publish/review this separate integration candidate; named scientific
+- [x] Published the separate candidate as draft PR #5 under Inam's account:
+  https://github.com/oncolohealth/oncolohealth/pull/5 . No merge performed.
+- [ ] Team review/merge of this candidate; named scientific
   decisions, genuine grouping/reference evidence, a real coordinator endpoint
   and specific medical execution scope remain task-specific next steps.
   Current report: `docs/reports/F-current-integration-review.md`. Earlier source,
