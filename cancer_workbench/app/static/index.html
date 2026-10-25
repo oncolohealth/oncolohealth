@@ -277,13 +277,14 @@
           </div>
         </aside>
         <div class="pane center">
-          <div class="toolbar"><h1>Input → observed result</h1><span class="toolbar-desc">Actual trained artifacts, native outputs and separate reference comparisons.</span></div>
+          <div class="toolbar"><h1>Run a specialist</h1><span class="toolbar-desc">Real local models on your own files, with every result saved and compared to a separate reference.</span></div>
           <div class="pane-body">
+            <div id="research-gallery" class="spec-gallery" aria-label="Available specialists"></div>
             <div id="research-model-detail"></div>
             <p id="research-status" role="status" class="hint"></p>
             <div id="research-result" aria-live="polite"><p class="empty">Run a compatible task to obtain an observed model result.</p></div>
-            <details class="section" open><summary>Unavailable tasks and exact dependencies</summary><div id="research-blockers" class="section-body"></div></details>
-            <details class="section"><summary>Saved observations, including failures</summary><div id="research-history" class="section-body"></div></details>
+            <details class="section"><summary>Not available yet, and why</summary><div id="research-blockers" class="section-body"></div></details>
+            <details class="section" open><summary>Recent runs, failures included</summary><div id="research-history" class="section-body"></div></details>
           </div>
         </div>
       </section>
@@ -394,7 +395,7 @@
                 </button>
               </div>
             </div>
-            <div class="ask-foot"><span>Enter to send · Shift+Enter for a new line · drop or paste a file to attach</span><span>Research tool. Not for clinical decisions.</span></div>
+            <div class="ask-foot"><span>Enter to send · Shift+Enter new line · Esc stop · Ctrl+K new chat · drop or paste a file</span><span>Research tool. Not for clinical decisions.</span></div>
           </form>
           <div class="drop-hint" aria-hidden="true"><span>Drop to attach</span></div>
         </div>

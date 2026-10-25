@@ -843,3 +843,45 @@ details.steps[open] > summary { margin-bottom: 7px; }
 .ds-card details ul { margin: 4px 0 0; padding-left: 16px; }
 @media (prefers-reduced-motion: reduce) { .ds-card { transition: none; } }
 .rc-agree { margin: 4px 0 2px; padding-left: 18px; font-size: 12px; color: var(--text-2); }
+
+/* ---------------- Research: run a specialist ---------------- */
+.spec-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.spec-card { display: grid; gap: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+.spec-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.spec-card.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.spec-pick { display: grid; gap: 2px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.spec-task { font-weight: 600; font-size: 13.5px; }
+.spec-meta { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spec-card .btn.small { justify-self: start; margin: 0 4px 4px; }
+.spec-detail { display: grid; gap: 8px; margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
+.spec-detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.spec-detail-head h2 { font-size: 17px; letter-spacing: -0.01em; }
+.spec-sub { color: var(--text-2); font-size: 12.5px; }
+.spec-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill.fmt { font-family: var(--mono); font-size: 10.5px; }
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.pill.bad { color: var(--err); border-color: color-mix(in srgb, var(--err) 35%, var(--line)); }
+#research-result .result-card { margin-bottom: 10px; }
+.blocker { padding: 10px 12px; border-radius: 10px; background: var(--canvas); border: 1px solid var(--line); }
+.blocker strong { display: block; font-size: 12.5px; margin-bottom: 2px; }
+.blocker p { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.run-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.run-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto 5.5rem; gap: 10px; align-items: center; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 12.5px; color: var(--text); text-align: left; cursor: pointer; }
+.run-row:hover { background: var(--hover); }
+.run-task { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-out { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-when { color: var(--text-3); font-size: 11px; text-align: right; }
+@media (prefers-reduced-motion: reduce) { .spec-card { transition: none; } }
+
+/* ---------------- Assistant: guided demo ---------------- */
+.demo-start { display: inline-flex; align-items: center; gap: 9px; margin-top: 22px; height: 38px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--text); color: var(--solid); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s; }
+.demo-start:hover { transform: translateY(-1px); }
+.demo-start:active { transform: scale(0.98); }
+.demo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent); }
+.demo-bar { display: flex; align-items: center; gap: 10px; justify-self: center; padding: 8px 10px 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--solid); box-shadow: var(--shadow); }
+.demo-progress { display: inline-flex; gap: 5px; margin-right: 4px; }
+.demo-progress span { width: 18px; height: 5px; border-radius: 999px; background: var(--off); }
+.demo-progress span.done { background: var(--accent); }
+.demo-progress span.now { background: color-mix(in srgb, var(--accent) 45%, var(--off)); }
+.demo-done { font-size: 12.5px; font-weight: 600; color: var(--ok); }
+@media (prefers-reduced-motion: reduce) { .demo-start { transition: none; } }

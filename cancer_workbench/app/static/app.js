@@ -1168,6 +1168,13 @@ const CHAT_EXAMPLES = [
   { title: "Licenses", q: "Find a pathology encoder and tell me its license." },
 ];
 const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+// Guided demo for presenting: one click per step, each a real question to the real local stack.
+const DEMO_STEPS = [
+  { title: "Search the catalog", q: "Which pathology datasets in the catalog can I use commercially?" },
+  { title: "Run the bone X-ray specialist", sample: "btxrd-resnet50-three-class", q: "What does the model find here, and how much should I trust it?" },
+  { title: "Segment a brain MRI", sample: "monai-brats-segresnet-local", q: "What did the segmentation find, and how well does it match the reference?" },
+  { title: "Ask for something that isn't there", q: "Can I run a whole-slide pathology model on a full slide here?" },
+];
 const cleanError = e => String(e).replace(/^\[[^\]]+\]\s*/, "").replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
 // The server only talks to model endpoints on this PC, so remote profiles are listed but not offered for chat.
 const isLocal = p => { try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(p.base_url).hostname); } catch { return false; } };
@@ -1333,7 +1340,7 @@ $("#chat-list").addEventListener("click", e => {
 });
 $("#chat-new").addEventListener("click", () => {
   if (chat.running.size) { toast("Wait for the answer, or press Stop first."); return; }
-  chat.convo = newConvo(); renderChatList(); renderThread(); $("#ask-form").question.focus();
+  chat.demo = null; chat.convo = newConvo(); renderChatList(); renderThread(); $("#ask-form").question.focus();
 });
 
 /* ---- describing tool calls in plain language ---- */
@@ -1373,6 +1380,8 @@ function friendlyError(name, err) {
     return { title: "Only models on this PC can answer", body: `${name} points to a remote server. Research questions, inputs and results stay on this PC, so pick a local model.`, detail: msg };
   const key = msg.match(/missing required credential environment variable '([^']+)'/);
   if (key) return { title: `${name} needs an API key`, body: `Set ${key[1]} in the environment the workbench app runs in, then restart the app and retry.`, detail: msg };
+  if (/exceeds the available context size|context length|too many tokens/i.test(msg))
+    return { title: "This chat is longer than the model can hold", body: "The local model can only keep a short conversation in mind. Retry, or start a new chat; earlier answers stay saved here.", detail: msg };
   if (/HTTP 4\d\d/.test(msg)) return { title: `${name} refused the request`, body: "The server answered with an error. Check the model name and settings in the Models tab.", detail: msg };
   return { title: `${name} hit a problem`, body: "The answer could not be completed.", detail: msg };
 }
@@ -1381,7 +1390,13 @@ function friendlyError(name, err) {
 const composer = $("#ask-form").question;
 function growComposer() { composer.style.height = "auto"; composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`; }
 // Plain task names come from the model's own name ("Bone X-ray: BTXRD ResNet-50…" → "Bone X-ray").
-const taskLabel = m => (m?.name || m?.id || "").split(":")[0].trim();
+const taskLabelBase = m => (m?.name || m?.id || "").split(":")[0].trim();
+// When two installed models share a plain name ("Lung CT"), add the task so they can be told apart.
+const taskLabel = m => {
+  const base = taskLabelBase(m);
+  const peers = (chat.research?.models || []).filter(x => taskLabelBase(x) === base);
+  return m && peers.length > 1 ? `${base} · ${plainWords(m.task).toLowerCase()}` : base;
+};
 const plainWords = s => String(s ?? "").replace(/[-_]+/g, " ").replace(/^./, ch => ch.toUpperCase());
 const pct = v => `${(Number(v) * 100).toFixed(Number(v) >= 0.995 || Number(v) < 0.1 ? 1 : 0)}%`;
 const mediaUrl = path => `/media/${path.split("/").map(encodeURIComponent).join("/")}?t=${encodeURIComponent(TOKEN)}`;
@@ -1561,7 +1576,11 @@ function renderAnswer(a, name, ti, last) {
   const retry = last ? `<button type="button" class="btn ghost small" data-retry="${esc(name)}">Retry</button>` : "";
   if (a.pending) {
     const lastEv = a.events.at(-1);
-    const stage = !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking" : lastEv.type === "model" ? "Reading the results" : "Looking it up";
+    // A specialist that is known to be slow says so, so a long wait doesn't look like a hang.
+    const running = a.calls.at(-1)?.observed === undefined && a.calls.at(-1)?.name === "run_specialist" ? researchModel(parseArgs(a.calls.at(-1).arguments).model_id) : null;
+    const usual = { detection: "usually 8–10 minutes on this PC's CPU", segmentation: "usually 20–30 seconds" }[running?.output_kind];
+    const stage = running ? `Running the ${taskLabel(running)} model${usual ? `, ${usual}` : ""}`
+      : !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking" : lastEv.type === "model" ? "Reading the results" : "Looking it up";
     return `${resultCards(a.calls, key)}${renderSteps(a.calls, true, key)}<div class="thinking"><span class="shimmer">${stage}</span> <span class="elapsed" data-start="${a.started}">0 s</span></div>`;
   }
   if (a.stopped) return `${renderSteps(a.calls || [], false, key)}<div class="notice">Stopped before an answer was written.</div><div class="msg-actions">${retry}</div>`;
@@ -1594,6 +1613,7 @@ function renderThread(toBottom = false) {
       <p>Ask about models and datasets, or attach a scan or image and a local specialist will run on it. Every lookup and result is shown as it happens.</p>
       ${ready ? "" : `<p class="warn-line">No model is set up yet. Add one in the <button type="button" class="linkish" data-goto-models>Models</button> tab.</p>`}
       <div class="example-grid">${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x.q)}" ${ready ? "" : "disabled"}><span class="et">${esc(x.title)}</span><span class="eq">${esc(x.q)}</span></button>`).join("")}</div>
+      ${ready ? `<button type="button" class="demo-start" data-demo-start><span class="demo-dot"></span>Guided demo · ${DEMO_STEPS.length} steps</button>` : ""}
       ${samples.length ? `<div class="samples"><span class="samples-label">Try a sample</span>${samples.map(s => `<button type="button" class="sample" data-sample="${esc(s.input_id)}" data-sample-model="${esc(s.model_id)}">${esc(taskLabel(researchModel(s.model_id)))}</button>`).join("")}</div>` : ""}
     </div>`;
     return;
@@ -1604,8 +1624,31 @@ function renderThread(toBottom = false) {
     return `${renderUserTurn(t, key)}
       <div class="msg bot${multi ? " multi" : ""}${enter(key + "|b")}">${names.map(n => `<div class="answer">${multi || n !== chat.models[0] ? `<div class="answer-head">${esc(n)}</div>` : ""}${renderAnswer(t.answers[n], n, ti, last && !chat.running.size)}</div>`).join("")}</div>`;
   }).join("");
+  if (chat.demo && !chat.running.size) {
+    const next = DEMO_STEPS[chat.demo.i];
+    el.insertAdjacentHTML("beforeend", `<div class="demo-bar${enter(`${c.id}|demo${chat.demo.i}`)}">
+      <span class="demo-progress">${DEMO_STEPS.map((_, i) => `<span class="${i < chat.demo.i ? "done" : i === chat.demo.i ? "now" : ""}"></span>`).join("")}</span>
+      ${next ? `<button type="button" class="btn primary small" data-demo-next>Next: ${esc(next.title)}</button>` : `<span class="demo-done">Demo complete</span>`}
+      <button type="button" class="btn ghost small" data-demo-end>${next ? "End demo" : "Close"}</button>
+    </div>`);
+  }
   tickElapsed(); sizeBars(el);
   if (toBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
+}
+async function demoStep() {
+  const step = DEMO_STEPS[chat.demo?.i];
+  if (!step || chat.running.size) return;
+  chat.demo.i += 1;
+  if (step.sample) {
+    if (!chat.research) await loadResearchState();
+    const sample = chat.research.samples.find(x => x.model_id === step.sample);
+    if (!sample) { toast(`The ${step.title.toLowerCase()} sample isn't installed on this PC.`, true); renderThread(); return; }
+    chat.attached = [];
+    await attachExisting(sample.input_id, sample.model_id, `${taskLabel(researchModel(sample.model_id))} sample`);
+  }
+  const attached = chat.attached.filter(a => a.status === "ready");
+  chat.attached = []; renderTray();
+  await ask(step.q, [...chat.models], { attached });
 }
 // New cards grow their bars from zero; cards already on screen keep their width through re-renders.
 function sizeBars(root) {
@@ -1666,6 +1709,29 @@ async function streamAnswer(name, question, history, answer, attachments) {
   delete answer.events;  // progress only matters while running; keep saved chats small
   if (answer.result) { delete answer.result.messages; delete answer.calls; }
 }
+// The local model has a small context window (8,192 tokens on the current server). Older turns keep
+// only the question and the final answer; their raw tool calls and results are dropped. The last two
+// turns stay whole. If that is still too long, the oldest turns go entirely.
+const HISTORY_CHAR_BUDGET = 12000;  // whole history incl. the system prompt: ~3,500 tokens, leaving room for tool schemas and the answer
+function compactHistory(messages) {
+  if (!messages?.length) return messages;
+  const head = messages[0].role === "system" ? [messages[0]] : [];
+  const turns = [];
+  for (const m of messages.slice(head.length)) {
+    if (m.role === "user" || !turns.length) turns.push([]);
+    turns.at(-1).push(m);
+  }
+  const brief = t => {
+    const finalAnswer = [...t].reverse().find(m => m.role === "assistant" && !m.tool_calls?.length && m.content);
+    return [t[0], ...(finalAnswer && finalAnswer !== t[0] ? [finalAnswer] : [])];
+  };
+  let kept = turns.map((t, i) => (i < turns.length - 2 ? brief(t) : t));
+  const size = () => JSON.stringify([...head, ...kept.flat()]).length;
+  if (size() > HISTORY_CHAR_BUDGET) kept = kept.map((t, i) => (i < kept.length - 1 ? brief(t) : t));
+  if (size() > HISTORY_CHAR_BUDGET) kept = kept.map(brief);
+  while (kept.length > 1 && size() > HISTORY_CHAR_BUDGET) kept.shift();
+  return [...head, ...kept.flat()];
+}
 async function ask(question, names, { retryTurn = null, attached = [] } = {}) {
   const c = chat.convo;
   const turn = retryTurn || {
@@ -1680,7 +1746,7 @@ async function ask(question, names, { retryTurn = null, attached = [] } = {}) {
   }
   const jobs = names.map(n => {
     const prior = turn.answers[n]?.historyLen ?? (c.histories[n]?.length || 0);
-    const history = prior ? (c.histories[n] || []).slice(0, prior) : null;
+    const history = prior ? compactHistory((c.histories[n] || []).slice(0, prior)) : null;
     const answer = turn.answers[n] = { pending: true, started: Date.now(), events: [], calls: [], historyLen: prior };
     return streamAnswer(n, turn.q, history, answer, turn.payload?.length ? turn.payload : undefined);
   });
@@ -1712,6 +1778,17 @@ composer.addEventListener("input", growComposer);
 composer.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!chat.running.size) $("#ask-form").requestSubmit(); }
 });
+// Keyboard: Esc stops the answer, Ctrl/Cmd+K starts a new chat, Up in an empty box recalls the last question.
+document.addEventListener("keydown", e => {
+  if ($("#screen-assistant").hidden) return;
+  if (e.key === "Escape" && chat.running.size) { e.preventDefault(); for (const ctl of chat.running.values()) ctl.abort(); }
+  if (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("#chat-new").click(); }
+});
+composer.addEventListener("keydown", e => {
+  if (e.key === "ArrowUp" && !composer.value && chat.convo.turns.length && !chat.running.size) {
+    e.preventDefault(); composer.value = chat.convo.turns.at(-1).q; growComposer();
+  }
+});
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch {
     const ta = Object.assign(document.createElement("textarea"), { value: text });
@@ -1722,6 +1799,9 @@ async function copyText(text) {
 $("#chat-thread").addEventListener("click", async e => {
   const ex = e.target.closest("[data-example]"), cp = e.target.closest("[data-copy]"), rt = e.target.closest("[data-retry]"), sm = e.target.closest("[data-sample]");
   if (e.target.closest("[data-goto-models]")) { showSideTab("models"); return; }
+  if (e.target.closest("[data-demo-start]") && !chat.running.size) { chat.convo = newConvo(); chat.demo = { i: 0 }; renderChatList(); demoStep(); return; }
+  if (e.target.closest("[data-demo-next]")) { demoStep(); return; }
+  if (e.target.closest("[data-demo-end]")) { chat.demo = null; renderThread(); return; }
   if (ex && !chat.running.size) { ask(ex.dataset.example, [...chat.models]); return; }
   if (sm) {
     await attachExisting(sm.dataset.sample, sm.dataset.sampleModel, `${sm.textContent.trim()} sample`);
@@ -1932,25 +2012,50 @@ function researchModelDetail() {
   $("#research-run").disabled = !m || !$("#research-input").value;
   $("#research-ask").disabled = $("#research-run").disabled;
   $("#research-reference-label").innerHTML = (m?.classes || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
-  $("#research-model-detail").innerHTML = m ? `<h2>${esc(m.name)}</h2><p>${esc(m.modality)} · ${esc(m.anatomy)} · ${esc(m.task)}</p>
-    <p class="banner info">Exploratory research model. Class scores are not a diagnosis or clinically calibrated risk.</p>
-    <p>Accepted input formats: ${esc(m.formats.join(", "))}</p><ul>${m.limitations.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
-    <details><summary>Preprocessing and trained artifact</summary><pre>${esc(JSON.stringify({preprocessing:m.preprocessing,training:m.training,license:m.license},null,2))}</pre></details>` : "<p>No verified trained artifact is available.</p>";
+  $("#research-model-detail").innerHTML = m ? `<div class="spec-detail">
+    <div class="spec-detail-head"><h2>${esc(taskLabel(m))}</h2><span class="rc-tag">Research model · not a diagnosis</span></div>
+    <p class="spec-sub">${esc(m.name.split(":").slice(1).join(":").trim() || m.name)}</p>
+    <div class="spec-chips">${[m.modality, m.anatomy, plainWords(m.task)].filter(Boolean).map(x => `<span class="pill">${esc(x)}</span>`).join("")}${(m.formats || []).map(f => `<span class="pill fmt">${esc(f)}</span>`).join("")}</div>
+    <details class="rc-more"><summary>Limits, preprocessing and trained artifact</summary><ul>${(m.limitations || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul><pre>${esc(JSON.stringify({preprocessing: m.preprocessing, training: m.training, license: m.license}, null, 2))}</pre></details>
+  </div>` : "";
+  renderResearchGallery();
 }
+// Pick a specialist visually; reserved samples can run in one click.
+function renderResearchGallery() {
+  const current = $("#research-model").value;
+  $("#research-gallery").innerHTML = researchUI.models.map(m => {
+    const sample = (researchUI.samples || []).find(x => x.model_id === m.id);
+    return `<div class="spec-card${m.id === current ? " on" : ""}">
+      <button type="button" class="spec-pick" data-pick-model="${esc(m.id)}"><span class="spec-task">${esc(taskLabel(m))}</span><span class="spec-meta">${esc((m.formats || []).join(" · "))}</span></button>
+      ${sample ? `<button type="button" class="btn small ghost" data-run-sample="${esc(m.id)}">Run on sample</button>` : ""}
+    </div>`;
+  }).join("");
+}
+$("#research-gallery").addEventListener("click", e => {
+  const pick = e.target.closest("[data-pick-model]"), run = e.target.closest("[data-run-sample]");
+  if (pick) { $("#research-model").value = pick.dataset.pickModel; researchModelDetail(); }
+  if (run) {
+    const sample = researchUI.samples.find(x => x.model_id === run.dataset.runSample);
+    if (!sample) return;
+    $("#research-model").value = sample.model_id; $("#research-input").value = sample.input_id; researchModelDetail();
+    if (!$("#research-input").value) { toast("That sample is not in the uploaded inputs yet. Refresh and try again.", true); return; }
+    $("#research-form").requestSubmit();
+  }
+});
 function renderResearchResult(result) {
-  const prediction = result.prediction;
-  $("#research-result").innerHTML = `<h2>${result.status === "ok" ? "Observed prediction" : "Run failed"}</h2>
-    ${result.error ? `<p class="banner err">${esc(result.error)}</p>` : ""}
-    ${prediction ? `<h3>${esc(prediction.class)}</h3><p>${esc(prediction.meaning)}</p>
-    ${Object.entries(prediction.scores).map(([label,score]) => `<p>${esc(label)}: ${(score*100).toFixed(2)}% <progress max="1" value="${Number(score)}"></progress></p>`).join("")}` : ""}
-    ${result.comparison ? `<p class="banner info">Separate reference: <strong>${esc(result.comparison.reference.label)}</strong>. ${result.comparison.matches ? "Matches" : "Does not match"} this reference.<br>${esc(result.comparison.reference.source)}<br>${esc(result.comparison.meaning)}</p>` : "<p class=\"hint\">No separate reference comparison is attached to this observation.</p>"}
-    <p>${esc(result.note)} Observed execution time: ${Number(result.seconds).toFixed(3)} s.</p>
-    <p>Observation ID: <code>${esc(result.id)}</code> · input: <code>${esc(result.input_id)}</code></p>
-    <details><summary>Complete saved observation and identities</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;
+  const el = $("#research-result");
+  const card = result.status === "ok" ? resultCard(result, `research|${result.id}`) : "";
+  el.innerHTML = `${card || `<div class="error-card result-card"><strong>Run failed</strong><p>${esc(result.error || "The model did not return a result.")}</p></div>`}
+    ${result.status === "ok" && !result.comparison ? `<p class="hint">No separate reference is attached to this input, so there is nothing to compare against.</p>` : ""}
+    <p class="hint">${esc(result.note || "")} Saved as <code>${esc(String(result.id).slice(0, 12))}</code> · input <code>${esc(String(result.input_id).slice(0, 12))}</code></p>
+    <details class="rc-more"><summary>Complete saved observation and identities</summary><pre>${esc(JSON.stringify(result, null, 2))}</pre></details>`;
+  sizeBars(el);
+  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 async function loadResearch() {
   const [state,history] = await Promise.all([api("/api/research"),api("/api/research/results")]);
-  researchUI.models = state.models.filter(m => m.available); researchUI.inputs = state.inputs; researchUI.results = history.results;
+  researchUI.models = state.models.filter(m => m.available); researchUI.inputs = state.inputs; researchUI.results = history.results; researchUI.samples = state.samples || [];
+  if (!chat.research) chat.research = { models: researchUI.models, samples: researchUI.samples };
   for (const [selector,rows] of [["#research-input",state.inputs.map(i => [i.id,`${i.original_name} · ${i.format} · ${i.id.slice(0,12)}`])],
     ["#research-model",researchUI.models.map(m => [m.id,m.name])]]) {
     const el = $(selector), prior = el.value;
@@ -1959,8 +2064,13 @@ async function loadResearch() {
     else if (rows.length === 1) el.value = rows[0][0];
   }
   $("#research-blockers").innerHTML = [...state.unavailable,...state.models.filter(m => !m.available).map(m => ({task:m.name,blocker:m.blocker}))]
-    .map(m => `<p><strong>${esc(m.task)}</strong><br>${esc(m.blocker)}</p>`).join("");
-  $("#research-history").innerHTML = history.results.length ? history.results.map((r,i) => `<p><button type="button" class="btn small" data-observation="${i}">${esc(r.model_id)} · ${esc(r.status)} · ${esc(r.id.slice(0,10))}</button></p>`).join("") : "<p>No observations yet.</p>";
+    .map(m => `<div class="blocker"><strong>${esc(plainWords(m.task))}</strong><p>${esc(m.blocker)}</p></div>`).join("");
+  const label = id => taskLabel(researchUI.models.find(m => m.id === id)) || plainWords(id);
+  $("#research-history").innerHTML = history.results.length ? `<ul class="run-list">${history.results.map((r, i) => `<li><button type="button" class="run-row" data-observation="${i}">
+      <span class="run-task">${esc(label(r.model_id))}</span>
+      <span class="run-out">${esc(r.prediction ? plainWords(r.prediction.class) : r.segmentation ? "Segmentation" : r.detection ? count(r.detection.count ?? 0, "candidate") : "")}</span>
+      <span class="pill ${r.status === "ok" ? "ok" : "bad"}">${esc(r.status === "ok" ? "saved" : r.status)}</span>
+      <span class="run-when">${esc(r.started_utc ? ago(Date.parse(r.started_utc)) : "")}</span></button></li>`).join("")}</ul>` : `<p class="hint">No runs yet. Pick a specialist above and run it on a sample.</p>`;
   $$("[data-observation]",$("#research-history")).forEach(b => b.addEventListener("click",() => renderResearchResult(researchUI.results[Number(b.dataset.observation)])));
   researchModelDetail();
 }
