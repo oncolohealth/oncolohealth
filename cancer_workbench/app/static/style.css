@@ -842,3 +842,4 @@ details.steps[open] > summary { margin-bottom: 7px; }
 .ds-card details summary { cursor: pointer; color: var(--text-3); }
 .ds-card details ul { margin: 4px 0 0; padding-left: 16px; }
 @media (prefers-reduced-motion: reduce) { .ds-card { transition: none; } }
+.rc-agree { margin: 4px 0 2px; padding-left: 18px; font-size: 12px; color: var(--text-2); }

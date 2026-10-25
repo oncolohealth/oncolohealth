@@ -1536,6 +1536,23 @@ function resultCard(o, key) {
       ${s.mask_media ? `<p class="rc-links"><a href="${esc(mediaUrl(s.mask_media))}" download>Download mask (NIfTI)</a></p>` : ""}
       ${foot}</div>`;
   }
+  if (o.detection) {
+    const det = o.detection, scores = det.scores || [], boxes = det.boxes_world_LPS_cccwhd || [];
+    const rows = scores.map((v, i) => ({ v, size: (boxes[i] || []).slice(3, 6) })).sort((a, b) => b.v - a.v).slice(0, 5);
+    const agree = (o.comparison?.agreement || []).map(a => `<li>Score ≥ ${a.score_threshold}: matched <strong>${a.matched} of ${a.reference_boxes}</strong> reference ${a.reference_boxes === 1 ? "box" : "boxes"}, ${count(a.unmatched_detections, "unmatched detection")}${a.matches?.[0] ? ` · best IoU ${Number(Math.max(...a.matches.map(m => m.IoU))).toFixed(2)}` : ""}</li>`).join("");
+    return `<div class="result-card${enter(key)}">${head}
+      <div class="rc-seg">
+        ${det.overlay_media ? `<a href="${esc(mediaUrl(det.overlay_media))}" target="_blank" rel="noopener" class="rc-overlay"><img src="${esc(mediaUrl(det.overlay_media))}" alt="Detected nodule boxes on one CT slice"></a>` : ""}
+        <div>
+          <div class="rc-main"><span class="rc-label">Model output</span><span class="rc-class">${count(det.count ?? scores.length, "nodule candidate")}</span></div>
+          ${rows.length ? `<table class="rc-regions"><thead><tr><th>Candidate</th><th>Score</th><th>Size (mm)</th></tr></thead>
+            <tbody>${rows.map((r, i) => `<tr><td>#${i + 1}</td><td>${Number(r.v).toFixed(2)}</td><td>${r.size.length === 3 ? r.size.map(x => Number(x).toFixed(0)).join(" × ") : ""}</td></tr>`).join("")}</tbody></table>` : ""}
+        </div>
+      </div>
+      <p class="rc-meaning">${esc(det.score_meaning || "Detection scores are not cancer probabilities.")}</p>
+      ${agree ? `<div class="rc-ref differ"><div><strong>Box agreement with the reference</strong> (IoU ≥ 0.1)</div><ul class="rc-agree">${agree}</ul>${o.comparison.meaning ? `<span>${esc(o.comparison.meaning)}</span>` : ""}</div>` : ""}
+      ${foot}</div>`;
+  }
   return "";
 }
 
