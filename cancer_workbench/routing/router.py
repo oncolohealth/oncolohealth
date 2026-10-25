@@ -16,15 +16,41 @@ def _as_list(v) -> list:
     return v if isinstance(v, list) else [v]
 
 
+# Spelling variants people (and language models) use for the catalog's own terms. Only exact
+# equivalents belong here: never map a narrower term to a broader one or vice versa.
+_MODALITY_SYNONYMS = {
+    "radiograph": "xray", "radiography": "xray", "plainfilm": "xray", "cxr": "xray",
+    "computedtomography": "ct",
+    "mr": "mri", "magneticresonance": "mri", "magneticresonanceimaging": "mri",
+    "histopathology": "pathology", "histology": "pathology", "wsi": "pathology", "wholeslideimage": "pathology",
+    "sonography": "ultrasound", "ultrasonography": "ultrasound",
+    "dermatoscopy": "dermoscopy", "mammogram": "mammography",
+}
+_ANATOMY_SYNONYMS = {"bones": "bone", "skeleton": "bone", "skeletal": "bone"}
+
+
+def _term(value, synonyms: dict | None = None) -> str:
+    """Compare terms by letters and digits only, case-insensitively: "X-ray" == "xray" == "x ray"."""
+    key = "".join(ch for ch in str(value).lower() if ch.isalnum())
+    return (synonyms or {}).get(key, key)
+
+
+def _matches(wanted, offered, synonyms: dict | None = None) -> bool:
+    return _term(wanted, synonyms) in {_term(o, synonyms) for o in _as_list(offered)}
+
+
 def compatibility_reasons(model: dict, request: dict) -> list[str]:
-    """Return why `model` cannot serve `request` (empty list means compatible)."""
+    """Return why `model` cannot serve `request` (empty list means compatible).
+
+    Terms match after normalizing case, spacing, punctuation and listed synonyms, so a request
+    for "X-ray" reaches models declared for "xray". Reasons quote the original wording."""
     reasons = []
-    if request["task"] not in model.get("tasks", []):
+    if not _matches(request["task"], model.get("tasks", [])):
         reasons.append(f"task {request['task']!r} not in {model.get('tasks')}")
-    if request["modality"] not in _as_list(model.get("modality", [])):
+    if not _matches(request["modality"], model.get("modality", []), _MODALITY_SYNONYMS):
         reasons.append(f"modality {request['modality']!r} not in {model.get('modality')}")
     anatomy = _as_list(model.get("anatomy", []))
-    if "any" not in anatomy and request["anatomy"] not in anatomy:
+    if "any" not in anatomy and not _matches(request["anatomy"], anatomy, _ANATOMY_SYNONYMS):
         reasons.append(f"anatomy {request['anatomy']!r} not in {anatomy}")
     want_in, have_in = request.get("input", {}), model.get("input", {})
     for key in ("channels", "spatial_dims"):
