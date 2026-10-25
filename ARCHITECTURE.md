@@ -30,8 +30,9 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `common/paths.py` | `PROJECT_ROOT`, `CATALOG_DIR`, `CONFIG_DIR`, `DATA_DIR`, `MODELS_DIR` (env-overridable) | done |
 | `registry/store.py` | `load_catalog()` → `Catalog` (models + datasets tagged with `_kind`, duplicate-id check, lookup, search) | done |
 | `registry/schema.py` | `validate_model` / `validate_dataset`: required fields, enums, adapter/evidence consistency | done |
-| `routing/router.py` | `route_models`, `compatibility_reasons`, `runnable_blockers` | done (basic checks only, see docstring) |
+| `routing/router.py` | `route_models`, `compatibility_reasons`, `runnable_blockers`; both take an optional `installed` set of adapter ids and then block a named adapter this process cannot load | done (basic checks only, see docstring) |
 | `adapters/base.py` | `Adapter` protocol + `execute_specialist`, the only way a model runs | done |
+| `adapters/installed.py` | `installed_adapters(models)` / `adapter_status(models)`: real adapters this process can run (catalog names the adapter, the `ml` extra imports, weights are on disk); `EncoderSpecialist` wraps `FrozenEncoderAdapter` for `run_specialist` with `btxrd:<id>` / `uploads:<id>` inputs | done (branch `sebastian/encoder-specialist`) |
 | `adapters/synthetic.py` | `SyntheticThresholdAdapter` + `SYNTHETIC_MODEL_RECORD`, test-only fakes | done |
 | `adapters/encoder.py` | `FrozenEncoderAdapter` (RAD-DINO, ResNet-50): shared pad-to-square preprocessing by default, plus `VARIANTS` `pad_pstretch` (per-image 1st–99th percentile stretch) and `native_crop` (shortest-edge resize + center crop) for the source-shift check; safetensors-only loading; `ml` extra, import explicitly | done |
 | `acquisition/sources.py` | Per-publisher resolvers (Hugging Face, Zenodo, figshare, TCIA, plain URL) → `FilePlan`s; subset listers (TCIA, Zenodo, figshare, ISIC, GDC, S3) → `Unit`s | done |
@@ -47,7 +48,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `datasets/xlsx.py` | Read-only stdlib `.xlsx` reader for metadata sheets | done |
 | `coordinator/providers.py` | `OpenAICompatibleProvider` (any `/chat/completions` server), `ScriptedProvider` for tests | done |
 | `coordinator/config.py` | Named profiles from `configs/coordinator.json` or `configs/coordinator.example.json` | done |
-| `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist` | done |
+| `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist`, `get_workflow` | done |
 | `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
 | `coordinator/evaluation.py`, `scripts/evaluate_coordinator.py` | Versioned public development workflows, observed trace checks, partial failure capture; offline scripted mode and explicitly selected live profile | done (live evaluation pending) |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
@@ -107,7 +108,7 @@ Datasets add `modality`, `anatomy`, `counts`, `labels`, and optionally `unresolv
 
 `cataloged → access_obtained → runnable → locally_reproduced → externally_evaluated`
 
-Promotion happens only through a reviewed change to `catalog/*.json`. `routing.runnable_blockers` requires `locally_reproduced`, `inference_permission: allowed`, and an `adapter` before a model may run.
+Promotion happens only through a reviewed change to `catalog/*.json`. `routing.runnable_blockers` requires `locally_reproduced`, `inference_permission: allowed`, and an `adapter` before a model may run; given `installed`, the adapter must also be loadable in this process.
 
 ### Manifest row (`datasets/manifest.py`)
 
@@ -130,7 +131,7 @@ Every specialist call returns one: `model_id`, `task`, `status` (`ok | rejected 
 With a subset (`fetch plan|get <id> --sample N --seed S` or `--pick ID…`, or the Downloads screen's subset panel), `subsets.resolve_subset` replaces `sources.resolve`: the record's lister returns every `Unit` with its group (patient, case, slide), the selection picks whole groups, and `write_provenance` merges the new files into the existing `PROVENANCE.json` and appends the selection (mode, seed or IDs, chosen groups, a hash of the listing).
 
 **Route and run a specialist:**
-`route_models(request, models)` → `{compatible: [{id, runnable, blockers}], rejected: [{id, reasons}]}`.
+`route_models(request, models, installed=None)` → `{compatible: [{id, runnable, blockers}], rejected: [{id, reasons}]}`. Without `installed`, `runnable` reflects the catalog declaration only, so every caller that reports runnability (the `route` CLI, the app, the coordinator tool box) passes `set(installed_adapters(models))`.
 `execute_specialist(model, request, adapters)` checks compatibility, runnable blockers and adapter presence, then `adapter.validate`, then `adapter.run`, and wraps the result in a `ResultEnvelope`. Exceptions become `status: failed`.
 
 **Coordinator turn** (`coordinator ask` CLI or the Assistant screen):
@@ -159,7 +160,7 @@ Replay: `POST /api/runs/review` → `explore.review` joins `runs/<id>/splits/<pr
 Live UI: `POST /api/score/start` validates inputs and starts a `ScoringJobs` worker → `explore.score` reports preparation stages and each processed image → browser polls `GET /api/score/jobs/<id>` for counts, partial results and final output. `GET /api/score/current` restores the latest batch, selected image keys and run context after a page reload, including completed results. Jobs live only in the app process; restart clears them, and history is capped at eight batches. `POST /api/score` keeps the synchronous API for existing clients. `head_for` requires a measured input binding and fitted-head fingerprint; a missing head must reproduce both fitted identity and stored validation probabilities. Scoring verifies model context and selected image bytes, refuses recorded training IDs, then embeds and scores. Legacy unbound runs retain replay only. See `docs/reports/E-feature-provenance.md`. Uploads go to `data/uploads/<sha256[:16]>.<ext>` with a JSON sidecar via `POST /api/uploads/add`.
 
 **Experiment draft** (library only):
-`plan_experiment(path, model, audit, budget)` checks declared immutable identity, reuse rights, audit findings and explicit storage amounts. It returns `blocked` or `ready_for_review`, always `execution_authorized: false`. It changes no catalog state and launches nothing. See `docs/reports/B-plan-contract.md`.
+`plan_experiment(path, model, audit, budget, installed=None)` checks declared immutable identity, reuse rights, audit findings and explicit storage amounts. It returns `blocked` or `ready_for_review`, always `execution_authorized: false`. For `specialist_tools`, a given `installed` set also blocks an adapter this process cannot load (the app's preview passes it). It changes no catalog state and launches nothing. See `docs/reports/B-plan-contract.md`.
 
 **Evaluation utilities** (library only):
 `leakage.check(train, eval, pretraining_refs)` reports declared identity/provenance intersections and unresolved coverage. `aggregate.patient_level` explicitly aggregates binary predictions with genuine declared patient IDs. `comparison.paired_binary` requires matched samples, labels and patients; it resamples patient clusters jointly across arms and reports B-minus-A ranking differences, invalid draws and withheld intervals. The existing exploratory runner still uses the older metrics. See `docs/reports/F-evaluation-protocol.md`.

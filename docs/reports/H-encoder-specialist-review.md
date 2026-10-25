@@ -3,13 +3,27 @@
 Inam Qasimi · October 24, 2026 · reviewed branch tip `b144a9a` against `origin/main` `15d79e2`.
 Software review only; nothing here is a medical result.
 
+## For teammates' assistants
+
+- Branch `inam/encoder-specialist-route-fix` sits on top of `sebastian/encoder-specialist`
+  `b144a9a`. Merge it into Sebastian's branch, not into `main` on its own; `main` reaches
+  both through the encoder-specialist PR.
+- It changes `runnable_blockers`, `route_models` and `plan_experiment` to take an
+  optional `installed` set. Any new caller that reports whether a model is runnable
+  should pass `set(installed_adapters(models))`.
+- Verified here: plain-Python suite, catalog validation, `route` and `specialist`
+  CLI behaviour without torch or weights. Not verified here: every real-weight result
+  in Sebastian's handoff. Do not cite them as reproduced.
+- Still open before merge: item 2 (a person confirms the same-image pair) and the
+  real-weight rerun.
+
 ## Summary
 
 The branch merges cleanly (fast-forward: its base is the current `origin/main` tip and
 main has no commits the branch lacks). In plain Python the full suite passes and the
 catalog validates. The real-encoder path could not be exercised here, so the
 embedding-parity and ML-environment results stay **reported by Sebastian, not
-independently reproduced**. Three items should be settled before merging (item 1 is now
+independently reproduced**. Three items should be settled before merging (items 1 and 3 are now
 fixed on `inam/encoder-specialist-route-fix`); the rest can follow.
 
 ## Checks run here
@@ -54,10 +68,10 @@ transformers, safetensors or scikit-learn, and no `models/` or `data/` folders, 
    groups and therefore splits. The presentation's historical baseline figures (0.846 →
    0.616) must keep citing their original run, not a rebuilt manifest.
 
-3. **The README is stale.** `README.md:17` still says "no catalog model is cleared to
-   run, and the assistant can't call them". After this branch, two models are cleared
+3. **The README was stale** (fixed on `inam/encoder-specialist-route-fix`, which also brings ARCHITECTURE.md up to date with `adapters/installed.py`, `get_workflow` and the `installed` parameter). `README.md:17` said "no catalog model is cleared to
+   run, and the assistant can't call them". After Sebastian's branch, two models are cleared
    for research-use feature extraction and the assistant can call them through
-   `run_specialist`. Update that sentence and mention the `specialist` CLI.
+   `run_specialist`. The sentence now says so and names the `specialist` CLI.
 
 ## Merge gate (not a code change)
 
@@ -92,7 +106,7 @@ transformers, safetensors or scikit-learn, and no `models/` or `data/` folders, 
 ## Merge procedure
 
 1. `git pull` on local `main` (it is one commit behind `origin/main`, `15d79e2`).
-2. Merge `inam/encoder-specialist-route-fix` (item 1) into the branch, apply items 2–3, and rerun the suite.
+2. Merge `inam/encoder-specialist-route-fix` (items 1 and 3) into the branch, settle item 2, and rerun the suite.
 3. Open the PR on GitHub (`gh` is not installed on Sebastian's machine). Choose squash
    or merge commit per item 7.
 4. After merging, update PROGRESS.md and the Hub's Local build checklist with the
