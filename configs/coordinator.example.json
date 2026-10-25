@@ -17,61 +17,6 @@
       },
       "_notes": "Claude compatibility profile, not live-verified. API key stays in the server environment. Non-workspace-scoped keys may also need ANTHROPIC_WORKSPACE_ID. Current Claude 5 models reject some older temperature/top_p/tool_choice settings, so this example omits them. Local tool argument validation remains required. Publisher docs: https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk"
     },
-    "qwen-bf16-vllm": {
-      "type": "openai_compatible",
-      "base_url": "http://localhost:8000/v1",
-      "base_url_env": "CW_QWEN_BASE_URL",
-      "model": "Qwen/Qwen3.8-27B",
-      "api_key_env": "CW_QWEN_API_KEY",
-      "timeout_s": 300,
-      "default_params": {
-        "temperature": 0.6,
-        "top_p": 0.95,
-        "max_tokens": 4096
-      },
-      "extra_body": {},
-      "_notes": "~55.6 GB BF16 weights: ~80 GB GPU or tensor parallel. Recipe: https://recipes.vllm.ai/Qwen/Qwen3.8-27B"
-    },
-    "qwen-fp8-vllm": {
-      "type": "openai_compatible",
-      "base_url": "http://localhost:8000/v1",
-      "base_url_env": "CW_QWEN_BASE_URL",
-      "model": "Qwen/Qwen3.8-27B-FP8",
-      "api_key_env": "CW_QWEN_API_KEY",
-      "timeout_s": 300,
-      "default_params": {
-        "temperature": 0.6,
-        "top_p": 0.95,
-        "max_tokens": 4096
-      },
-      "extra_body": {},
-      "_notes": "Official FP8 build, ~30.9 GB weights."
-    },
-    "qwen-fp8-no-thinking": {
-      "type": "openai_compatible",
-      "base_url": "http://localhost:8000/v1",
-      "base_url_env": "CW_QWEN_BASE_URL",
-      "model": "Qwen/Qwen3.8-27B-FP8",
-      "api_key_env": "CW_QWEN_API_KEY",
-      "default_params": {
-        "temperature": 0.7,
-        "max_tokens": 2048
-      },
-      "extra_body": {
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        }
-      },
-      "_notes": "Same weights with thinking disabled per request (vLLM/SGLang chat_template_kwargs). Compare latency vs tool-selection accuracy."
-    },
-    "qwen-sglang": {
-      "type": "openai_compatible",
-      "base_url": "http://localhost:30000/v1",
-      "base_url_env": "CW_SGLANG_BASE_URL",
-      "model": "Qwen/Qwen3.8-27B-FP8",
-      "api_key_env": "CW_SGLANG_API_KEY",
-      "_notes": "Cookbook: https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-27B"
-    },
     "ollama-local": {
       "type": "openai_compatible",
       "base_url": "http://localhost:11434/v1",

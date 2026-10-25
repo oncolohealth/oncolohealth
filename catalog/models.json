@@ -264,42 +264,6 @@
       "adapter": null,
       "citation": "https://huggingface.co/bioptimus/H-optimus-1",
       "acquisition": {"tier": "gated", "fetcher": "huggingface", "gated": true, "repo": "bioptimus/H-optimus-1", "revision": "50170265f1240b9b21ad65c6781f5432e438fa68", "include": ["model.safetensors", "config.json", "README.md"], "approx_bytes": 4540000000}
-    },
-    {
-      "id": "qwen3.8-27b",
-      "name": "Qwen3.8-27B (BF16)",
-      "kind": "coordinator",
-      "summary": "Proposed coordinator. ~55.6 GB of BF16 weights: needs roughly an 80 GB GPU (or tensor-parallel smaller GPUs) for vLLM/SGLang serving. Big-machine only.",
-      "tasks": ["coordination", "tool_calling", "image_text_generation"],
-      "modality": ["text", "photo"],
-      "anatomy": ["any"],
-      "input": {"context_tokens": 262144},
-      "outputs": {"type": "text"},
-      "license": {"id": "apache-2.0", "commercial": true},
-      "access": "open",
-      "evidence_state": "cataloged",
-      "inference_permission": "unreviewed",
-      "adapter": null,
-      "citation": "https://huggingface.co/Qwen/Qwen3.8-27B",
-      "acquisition": {"tier": "big_machine", "fetcher": "huggingface", "repo": "Qwen/Qwen3.8-27B", "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0", "approx_bytes": 55620000000}
-    },
-    {
-      "id": "qwen3.8-27b-fp8",
-      "name": "Qwen3.8-27B-FP8 (official)",
-      "kind": "coordinator",
-      "summary": "Official FP8 build, ~30.9 GB; fits a single 40-48 GB GPU with modest context. Compare against BF16 on project workflows before relying on it.",
-      "tasks": ["coordination", "tool_calling", "image_text_generation"],
-      "modality": ["text", "photo"],
-      "anatomy": ["any"],
-      "input": {"context_tokens": 262144},
-      "outputs": {"type": "text"},
-      "license": {"id": "apache-2.0", "commercial": true},
-      "access": "open",
-      "evidence_state": "cataloged",
-      "inference_permission": "unreviewed",
-      "adapter": null,
-      "citation": "https://huggingface.co/Qwen/Qwen3.8-27B-FP8",
-      "acquisition": {"tier": "big_machine", "fetcher": "huggingface", "repo": "Qwen/Qwen3.8-27B-FP8", "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a", "approx_bytes": 30900000000}
     }
   ]
 }

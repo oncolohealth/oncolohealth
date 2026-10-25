@@ -17,7 +17,7 @@ requiring workspace selection, set `ANTHROPIC_WORKSPACE_ID`. The profile's
 `extra_headers_env` maps header names to environment-variable names and never
 stores their values. A workspace-scoped key can omit this optional header.
 
-The profile sets a bounded `max_tokens` and omits Qwen-specific body options,
+The profile sets a bounded `max_tokens` and omits model-specific body options,
 temperature and top-p. Compatibility does not guarantee strict tool-schema
 conformance. Local toolbox validation remains active. Cross-origin redirects
 are refused before credentials can be forwarded. This provider supports the

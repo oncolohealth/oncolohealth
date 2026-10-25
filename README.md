@@ -1,12 +1,24 @@
-# Overnight integration handoff
+# OncoloHealth: a cancer research workbench
 
-Read [the complete handoff](docs/research-handoff/README.md) and [the integration plan](docs/research-handoff/Team-integration-plan.md). The team merged the original handoff through PR #1; subsequent work stays on the research branch for review. The active root preserves the integrated desktop/Experiments and broader provenance implementation, adds offline release/evidence review, and rejects ambiguous surrounding whitespace in declared identities. The reference source archive preserves earlier standalone implementations as historical material.
+Every new cancer model today starts from zero: its own hunt for data, its own cleaning and splitting, its own evaluation. OncoloHealth is one place where that work is shared, so the next researcher starts where the last one stopped.
 
-# Cancer AI research workbench
+- **Catalog:** cancer datasets and models, each with license, access and an evidence level from *cataloged* to *externally evaluated*.
+- **Audit:** catch duplicates, label conflicts and patient leakage before training.
+- **Specialists:** seven real imaging models that run locally on your own files. They cover bone X-ray, breast ultrasound, pathology patches, skin and lung-CT patches, plus a brain-MRI tumour segmenter and a full-scan lung-CT nodule detector.
+- **Assistant:** a local fine-tune of Google's Gemma 4 26B. Ask in plain English or attach a scan; every lookup and specialist run streams in with its real result.
+- **Evaluation:** reference labels are kept apart and compared only after the prediction, so results stay honest, including the ones that disagree.
 
-A researcher-focused workspace: **question → evidence → eligible data → compatible model → reproducible experiment → measured result**. Background and scientific ground rules: [Cancer-AI-Research-Context.md](Cancer-AI-Research-Context.md). Status and task checklist: [PROGRESS.md](PROGRESS.md).
+Everything runs on one PC (the demo machine uses a 16 GB RTX 5070 Ti); no question, scan or result leaves it.
 
-> Research prototype. The team has reported exploratory frozen-encoder/head experiments on BTXRD. No clinical validation or patient-independent performance is established. Synthetic fixtures test software only.
+**Start here:** [run it on your machine](docs/SETUP-local.md) · [two-minute demo script](docs/DEMO-script.md) · [architecture](ARCHITECTURE.md) · [progress](PROGRESS.md) · [scientific ground rules](Cancer-AI-Research-Context.md)
+
+> Research software, not a diagnostic device. Results are exploratory: no clinical validation or patient-independent performance is established. Synthetic fixtures test software only.
+
+<details><summary>History: the overnight integration handoff</summary>
+
+Read [the complete handoff](docs/research-handoff/README.md) and [the integration plan](docs/research-handoff/Team-integration-plan.md). The team merged the original handoff through PR #1; the reference source archive preserves earlier standalone implementations as historical material.
+
+</details>
 
 ## Quick start (no installs needed for the core)
 
@@ -14,7 +26,7 @@ A researcher-focused workspace: **question → evidence → eligible data → co
 python3 -m cancer_workbench app                  # opens the researcher app at http://127.0.0.1:8765
 ```
 
-The app has seven screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Images** browses BTXRD and uploaded images with their annotations and metadata, replays a baseline run's stored predictions image by image (filter by errors, sort by confidence), and scores selected images live with that run's frozen encoder and head. **Experiments** previews and saves non-authorizing drafts and inspects recorded run lineage, scope and blockers. **Assistant** chats with or compares any OpenAI-compatible model. **Progress** shows the team checklist. It runs on localhost only. Everything except live scoring needs nothing installed; live scoring needs the `ml` extra, so start the app with `.venv/bin/python -m cancer_workbench app`. Live scores are exploratory: they do not go through `execute_specialist`, no catalog model is cleared to run, and the assistant can't call them.
+The app has eight screens. **Catalog** finds compatible models. **Downloads** fetches data and weights within the budget. **Datasets** inspects files and audits or splits manifests. **Images** browses BTXRD and uploaded images with their annotations and metadata, replays a baseline run's stored predictions image by image (filter by errors, sort by confidence), and scores selected images live with that run's frozen encoder and head. **Experiments** previews and saves non-authorizing drafts and inspects recorded run lineage, scope and blockers. **Research** runs the installed specialists on uploaded files or reserved samples and keeps every result. **Assistant** is a chat with the local model: saved chats, live tool steps, scan attachments, result cards, compare mode and a guided demo. **Progress** shows the team checklist. It runs on localhost only. Everything except live scoring needs nothing installed; live scoring needs the `ml` extra, so start the app with `.venv/bin/python -m cancer_workbench app`. Live scores are exploratory: they do not go through `execute_specialist`, no catalog model is cleared to run, and the assistant can't call them.
 
 The [experiment workspace](docs/reports/B-experiment-workspace.md) includes a
 synthetic planning example. Saving a draft does not start training or grant
@@ -94,7 +106,7 @@ data/  models/        downloaded artifacts (gitignored), each with PROVENANCE.js
 | `default` | BTXRD, BreastMNIST, PathMNIST, NoduleMNIST3D, 3 LIDC series; ResNet-50, DINOv2-B, RAD-DINO, BiomedCLIP, MedCPT ×2, MONAI lung + BraTS bundles | ~5.3 GB |
 | `optional` | DermaMNIST (CC BY-NC), Phikon (non-commercial), MSD BrainTumour (7.6 GB) | ~9.1 GB |
 | `gated` | MedSigLIP, MedGemma-4B, UNI2-h, Virchow2, H-optimus-1. Accept terms on HF yourself, then `set -x HF_TOKEN ...` | ~22 GB |
-| `big_machine` | Qwen3.8-27B BF16 / FP8 (needs `--allow-big`) | 55.6 / 30.9 GB |
+| `big_machine` | None at present; the tier stays for weights too large for a laptop (needs `--allow-big`) | — |
 | `manual` | MURA, full LIDC, BraTS 2021, PANDA, CAMELYON16, ISIC, TCGA: registration or too large | instructions in record |
 
 Storage is unlimited by default. Set `CW_STORAGE_BUDGET_GB` to cap it; fetches and uploads then refuse to exceed the cap. Move storage with `CW_DATA_DIR` / `CW_MODELS_DIR`.
