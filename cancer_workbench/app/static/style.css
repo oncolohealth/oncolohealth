@@ -13,10 +13,10 @@
   --line-strong: #3e4046;
   --text: #e4e5e9;
   --text-2: #a3a6ae;
-  --text-3: #73767f;
+  --text-3: #969aa3;
   --accent: #4c8dff;
   --accent-hover: #66a0ff;
-  --accent-ink: #ffffff;
+  --accent-ink: #0d1a33;
   --accent-soft: rgba(76, 141, 255, 0.16);
   --ok: #45c08a;
   --warn: #e5a63b;
@@ -818,6 +818,8 @@ details.steps[open] > summary { margin-bottom: 7px; }
   .tier-rows .subset-list li > :nth-child(4) { grid-column: auto; text-align: right; }
   .subset-list .why { display: none; }
   .scoring-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Saved chats sit above the conversation here, so keep them to about three rows. */
+  #screen-assistant .chat-list { max-height: 172px; overflow-y: auto; overscroll-behavior: contain; }
   .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
