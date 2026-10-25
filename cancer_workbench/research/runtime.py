@@ -230,7 +230,37 @@ def profile(model_id: str) -> tuple[Path, dict]:
             raise ValueError("Specialist inference implementation differs from its verified manifest.")
         if data["backend"] == "ct" and sha_file(Path(__file__).with_name("ct_worker.py")) != data.get("worker_implementation_sha256"):
             raise ValueError("CT worker implementation differs from its verified manifest.")
+    if data.get("backend") == "neural":
+        from . import neural
+        if neural.identity(data["preprocessing"]["mode"]) != data.get("encoder_identity"):
+            raise ValueError("Neural specialist encoder/preprocessing implementation differs from its verified identity.")
     return folder, data
+
+
+def specialist_evidence(model_id: str) -> dict:
+    """Verified saved method/evaluation evidence; never an inference or reference lookup."""
+    from .evidence import evidence_for
+    folder, model = profile(model_id)
+    return evidence_for(model, sha_file(folder / "manifest.json"))
+
+
+def accuracy_scoreboard() -> dict:
+    """Saved held-out evaluation and actual app attempt outcomes remain separate."""
+    from .evidence import scoreboard
+    profiles = []
+    for item in list_models():
+        if not item["available"]:
+            profiles.append({"id": item["id"], "error": item.get("blocker", "Unavailable")})
+            continue
+        folder, model = profile(item["id"])
+        profiles.append({"model": model, "manifest_sha256": sha_file(folder / "manifest.json")})
+    observations = []
+    for path in RESULTS.glob("*.json") if RESULTS.exists() else []:
+        try:
+            observations.append(_json(path))
+        except (OSError, ValueError):
+            observations.append({"status":"unreadable", "receipt_file":path.name})
+    return scoreboard(profiles, observations)
 
 
 def list_models() -> list[dict]:
@@ -287,8 +317,13 @@ def evaluation_eligibility(path: Path, model: dict, folder: Path) -> dict:
         rows = read_manifest(directory/"splits"/(protocol+".csv"))
         partitions = {r["partition"] for r in rows if r.get("sha256")==source_sha}
         basis = "Exact measured source-file SHA-256 against the run's bound split"
-    elif backend == "pixels":
-        source_sha = hashlib.sha256(_source_pixels(path,model["preprocessing"]).tobytes()).hexdigest()
+    elif backend in {"pixels", "neural"}:
+        if backend == "neural":
+            from . import neural
+            source_pixels = neural.source_array(path, model["preprocessing"]["mode"])
+        else:
+            source_pixels = _source_pixels(path,model["preprocessing"])
+        source_sha = hashlib.sha256(source_pixels.tobytes()).hexdigest()
         receipt_path = folder/"training-receipt.json"
         if receipt_path.is_file():
             receipt = _json(receipt_path)
@@ -388,6 +423,15 @@ def predict(model_id: str, input_id: str) -> dict:
                 probs, pred = item["probs"], item["pred"]
                 receipt["native_result"] = observed
                 receipt["artifact_identity"] = {"model_fingerprint":observed["model_fingerprint"], "feature_binding_sha256":observed["feature_binding_sha256"], "run":model["run"],"result":model["result"]}
+            elif model["backend"] == "neural":
+                from . import neural
+                observed = neural.run(path, folder)
+                probs = [observed["prediction"]["scores"][c] for c in model["classes"]]
+                pred = observed["prediction"]["class"]
+                receipt["native_result"] = observed
+                receipt["artifact_identity"] = {"head_sha256":model["files"]["head.npz"],
+                    "head_fingerprint":observed["head_fingerprint"],"weights_sha256":observed["weights_sha256"],
+                    "encoder_identity_sha256":observed["encoder_identity_sha256"]}
             elif model["backend"] == "ct":
                 import os,subprocess,sys
                 from . import ct
@@ -443,6 +487,8 @@ def predict(model_id: str, input_id: str) -> dict:
         if sha_file(path) != meta["sha256"]:
             raise ValueError("Input changed while inference was running.")
         receipt.update(status="ok",limitations=model["limitations"])
+        from .evidence import evidence_for
+        receipt["evaluation_evidence"] = evidence_for(model,receipt["model_manifest_sha256"])
         if model["backend"] not in {"mri","ct"}:
             receipt.update(kind="classification", prediction={"class":pred,"scores":dict(zip(model["classes"],probs)),
                             "meaning":model["output_meaning"]})
@@ -499,7 +545,7 @@ class ResearchAdapter:
         # Keep native receipts on disk; give the model the actual material output
         # without flooding its finite context with training tables or duplicate scores.
         output = {k:result[k] for k in ("id","model_id","input_id","input","kind","prediction","segmentation","detection","comparison",
-                                     "artifact_identity","evaluation_eligibility","seconds","note","limitations") if k in result}
+                                     "artifact_identity","evaluation_eligibility","evaluation_evidence","seconds","note","limitations") if k in result}
         if "detection" in output:
             output["detection"]=dict(output["detection"])
             for key in ("scores","boxes_voxel_xyzxyz","boxes_world_LPS_cccwhd"):

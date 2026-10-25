@@ -27,9 +27,9 @@ class AssistantGuidanceTests(unittest.TestCase):
         with mock.patch.object(api, "make_provider", return_value=provider), mock.patch.object(api.research, "tool_registration", return_value=([], {})):
             result = api.ask({"question": "What should I upload?", "profiles": ["test"]})
         prompt = provider.calls[0]["messages"][0]["content"]
-        self.assertIn("no image, MRI or blood-report attachment path", prompt)
-        self.assertIn("registers no medical specialist adapters", prompt)
-        self.assertIn("DICOM/NIfTI", prompt)
+        self.assertIn("composer accepts file attachments", prompt)
+        self.assertIn("No verified local specialist is currently registered", prompt)
+        self.assertIn("missing model is a concrete execution limit", prompt)
         self.assertEqual(result["results"][0]["final"], "Use Images for JPEG/PNG.")
 
     def test_synthetic_demo_is_identified_without_promoting_medical_tools(self):
@@ -39,7 +39,7 @@ class AssistantGuidanceTests(unittest.TestCase):
             api.ask({"question": "What can run?", "profiles": ["test"], "synthetic_demo": True})
         prompt = provider.calls[0]["messages"][0]["content"]
         self.assertIn("fake test outputs only", prompt)
-        self.assertIn("registers no medical specialist adapters", prompt)
+        self.assertIn("No verified local specialist is currently registered", prompt)
 
 
 if __name__ == "__main__":
