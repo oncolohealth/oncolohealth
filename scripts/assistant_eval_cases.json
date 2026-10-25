@@ -25,7 +25,7 @@
      "question": "Do you have anything that segments brain tumours on MRI, and what input does it need?",
      "expect_tools_any": ["route_models", "search_catalog", "get_record"],
      "must_include_all": ["brats"],
-     "must_include_any": ["four", "4-channel", "4 channel", "t1ce", "flair"]},
+     "must_include_any": ["four", "4-channel", "4 channel", "4 co-registered", "t1ce", "flair"]},
     {"id": "compat-ct-nodules", "group": "compatibility",
      "question": "Can you find lung nodules on a whole chest CT scan? What would I need to give you?",
      "expect_tools_any": ["route_models", "search_catalog", "get_record"],
