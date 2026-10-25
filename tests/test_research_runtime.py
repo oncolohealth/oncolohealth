@@ -4,12 +4,14 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import importlib.util
 import unittest
 from unittest import mock
 
 from cancer_workbench.research import runtime as rt
 
 
+@unittest.skipUnless(all(importlib.util.find_spec(p) is not None for p in ['numpy', 'PIL', 'sklearn', 'nibabel']), "optional ML/imaging dependencies not installed")
 class ResearchRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

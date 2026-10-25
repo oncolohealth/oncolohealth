@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import importlib.util
 import unittest
 from unittest import mock
 
@@ -39,6 +40,7 @@ class LocalEndpointTests(unittest.TestCase):
         self.assertEqual(self.ask(provider)["final"],"offline fixture")
 
 
+@unittest.skipUnless(all(importlib.util.find_spec(p) is not None for p in ['numpy', 'PIL']), "optional ML/imaging dependencies not installed")
 class SourceEligibilityTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)

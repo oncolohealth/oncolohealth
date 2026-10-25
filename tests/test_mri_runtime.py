@@ -6,12 +6,16 @@ import tempfile
 import unittest
 from unittest import mock
 
-import nibabel as nib
-import numpy as np
+try:
+    import nibabel as nib
+    import numpy as np
+except ImportError:
+    nib = np = None
 
 from cancer_workbench.research import runtime as rt, mri
 
 
+@unittest.skipUnless(nib is not None and np is not None, "optional NumPy/NiBabel imaging runtime not installed")
 class MRIRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
