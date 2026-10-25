@@ -24,7 +24,7 @@ SAMPLE = """# PROGRESS
 class ProgressFileTests(unittest.TestCase):
     def setUp(self):
         self.path = Path(tempfile.mkdtemp()) / "PROGRESS.md"
-        self.path.write_text(SAMPLE)
+        self.path.write_text(SAMPLE, encoding="utf-8")
 
     def test_parse_and_toggle(self):
         p = progress_md.parse(self.path)
@@ -32,7 +32,7 @@ class ProgressFileTests(unittest.TestCase):
         self.assertEqual([i["mark"] for i in items], ["x", " ", " "])
         self.assertTrue(items[2]["blocked"])
         progress_md.set_mark(items[1]["line"], items[1]["text"], "~", self.path)
-        self.assertIn("- [~] open thing", self.path.read_text())
+        self.assertIn("- [~] open thing", self.path.read_text(encoding="utf-8"))
 
     def test_stale_edit_refused(self):
         items = progress_md.parse(self.path)["sections"][0]["items"]

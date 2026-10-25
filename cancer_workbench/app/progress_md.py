@@ -17,7 +17,7 @@ def parse(path: Path = PROGRESS_PATH) -> dict:
     sections: list[dict] = []
     owners: list[dict] = []
     current = None
-    for n, line in enumerate(path.read_text().splitlines()):
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
         if m := _HEADING.match(line):
             current = {"level": len(m.group(1)), "title": m.group(2), "items": []}
             sections.append(current)
@@ -33,11 +33,13 @@ def parse(path: Path = PROGRESS_PATH) -> dict:
 
 
 def _rewrite_line(path: Path, line_no: int, expect_text: str, transform) -> None:
-    lines = path.read_text().splitlines(keepends=True)
+    # newline="" on both sides keeps the file's own line endings (no LF/CRLF rewrite on Windows).
+    with open(path, encoding="utf-8", newline="") as f:
+        lines = f.read().splitlines(keepends=True)
     if line_no >= len(lines) or expect_text not in lines[line_no]:
         raise ValueError("PROGRESS.md changed on disk since it was loaded. Reload and try again.")
     lines[line_no] = transform(lines[line_no])
-    path.write_text("".join(lines))
+    path.write_text("".join(lines), encoding="utf-8", newline="")
 
 
 def set_mark(line_no: int, text: str, mark: str, path: Path = PROGRESS_PATH) -> None:
@@ -50,8 +52,9 @@ def set_owner(line_no: int, ws: str, name: str, path: Path = PROGRESS_PATH) -> N
     name = name.replace("|", "/").strip()
 
     def tr(line: str) -> str:
-        cells = line.rstrip("\n").strip().strip("|").split("|")
+        ending = line[len(line.rstrip("\r\n")):] or "\n"
+        cells = line.strip().strip("|").split("|")
         cells[-1] = f" {name} "
-        return "|" + "|".join(cells) + "|\n"
+        return "|" + "|".join(cells) + "|" + ending
 
     _rewrite_line(path, line_no, f"| {ws} |", tr)

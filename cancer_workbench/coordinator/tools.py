@@ -141,6 +141,12 @@ def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None
         pool = [r for r in list(by_id.values()) if record_type in (None, r["_kind"])]
         q = query.lower()
         hits = [r for r in pool if q in json.dumps(_public(r)).lower()]
+        if not hits and q.strip():
+            # Natural-language fallback: every word must appear, ignoring '-', '_' and spacing,
+            # so "rad dino" finds rad-dino and "prostate pathology" finds PANDA.
+            norm = lambda t: "".join(ch for ch in t.lower() if ch.isalnum())
+            terms = [norm(w) for w in q.split() if norm(w)]
+            hits = [r for r in pool if all(t in norm(json.dumps(_public(r))) for t in terms)] if terms else []
         return [{"id": r["id"], "name": r.get("name"), "record_type": r["_kind"], "evidence_state": r.get("evidence_state")} for r in hits[:20]]
 
     def get_record(id: str) -> dict:

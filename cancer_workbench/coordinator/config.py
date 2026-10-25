@@ -25,7 +25,7 @@ def config_path(path: Path | None = None) -> Path:
 
 
 def load_profiles(path: Path | None = None) -> tuple[dict[str, dict], str | None]:
-    cfg = json.loads(config_path(path).read_text())
+    cfg = json.loads(config_path(path).read_text(encoding="utf-8"))
     profiles = {name: p for name, p in cfg["profiles"].items() if not name.startswith("_")}
     return profiles, cfg.get("default_profile")
 

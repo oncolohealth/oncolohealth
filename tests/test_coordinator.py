@@ -39,6 +39,13 @@ class ToolLoopTests(unittest.TestCase):
         self.assertIn("unknown tool", obs[0]["error"])
         self.assertIn("not valid JSON", obs[1]["error"])
 
+    def test_search_falls_back_to_word_matching(self):
+        search = lambda **a: [h["id"] for h in self.box.call("search_catalog", json.dumps(a))["result"]]
+        self.assertEqual(search(query="rad-dino", record_type="model"), ["rad-dino"])  # exact substring unchanged
+        self.assertIn("rad-dino", search(query="rad dino"))
+        self.assertIn("panda", search(query="prostate pathology", record_type="dataset"))
+        self.assertEqual(search(query="no such thing anywhere"), [])
+
     def test_catalog_only_model_is_rejected_via_tool(self):
         out = self.box.call("run_specialist", json.dumps({"model_id": "monai-brats-mri-segmentation", "task": "brain_tumor_segmentation",
                                                            "modality": "mri", "anatomy": "brain", "inputs": {}}))

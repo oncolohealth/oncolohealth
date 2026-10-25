@@ -1,5 +1,7 @@
-/* Desktop-tool shell: neutral graphite chrome, one blue accent, and green/amber/red
-   kept for status only. Dark is the default; [data-theme="light"] switches. */
+/* Desktop-tool shell. Two themes: "light" is warm peach (the default) with one soft
+   vertical gradient behind translucent panes; "dark" is neutral graphite. One accent per
+   theme; green/amber/red are kept for status only. --solid is for anything that floats or
+   sticks over scrolling content (table headers, tooltips, toasts), so text never bleeds through. */
 :root {
   --chrome: #18191b;
   --panel: #202124;
@@ -21,6 +23,8 @@
   --err: #f26b63;
   --off: #3a3c42;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --solid: #202124;
+  --backdrop: #1a1b1e;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --side-w: 280px;
@@ -28,33 +32,37 @@
   color-scheme: dark;
 }
 :root[data-theme="light"] {
-  --chrome: #e8e9ec;
-  --panel: #f5f6f8;
-  --canvas: #ffffff;
-  --raised: #ffffff;
-  --input: #ffffff;
-  --hover: #e9ebef;
-  --line: #dfe1e6;
-  --line-strong: #c7cbd2;
-  --text: #1c1e22;
-  --text-2: #5a5f69;
-  --text-3: #8b909a;
-  --accent: #2563eb;
-  --accent-hover: #1d4fd0;
+  /* Peach: bright cream at the top easing into a slightly deeper apricot at the bottom.
+     Surfaces are translucent whites so the one gradient reads as a continuous wash. */
+  --backdrop: linear-gradient(180deg, #fff7f1 0%, #ffeee3 38%, #fbdccb 74%, #f5cbb3 100%);
+  --chrome: rgba(255, 251, 247, 0.62);
+  --panel: rgba(255, 252, 249, 0.5);
+  --canvas: rgba(255, 255, 255, 0.28);
+  --raised: rgba(255, 255, 255, 0.78);
+  --input: rgba(255, 255, 255, 0.86);
+  --hover: rgba(226, 122, 84, 0.1);
+  --line: rgba(160, 92, 62, 0.15);
+  --line-strong: rgba(160, 92, 62, 0.3);
+  --text: #3a241d;
+  --text-2: #77503f;
+  --text-3: #956858;
+  --accent: #c4532f;
+  --accent-hover: #ad4425;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(37, 99, 235, 0.11);
-  --ok: #17824f;
-  --warn: #a5620a;
-  --err: #cc3a31;
-  --off: #d8dbe0;
-  --shadow: 0 8px 24px rgba(20, 24, 32, 0.14);
+  --accent-soft: rgba(214, 98, 62, 0.14);
+  --ok: #2c7a4c;
+  --warn: #a35d0c;
+  --err: #bf3a2c;
+  --off: rgba(160, 92, 62, 0.18);
+  --shadow: 0 10px 28px rgba(150, 78, 46, 0.16);
+  --solid: #fff6f0;
   color-scheme: light;
 }
 
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 html, body { margin: 0; height: 100%; }
 body {
-  background: var(--canvas);
+  background: var(--backdrop) fixed;
   color: var(--text);
   font: 13px/1.45 var(--sans);
   font-variant-numeric: tabular-nums;
@@ -111,7 +119,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav-btn[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: var(--accent); }
 .nav-btn::after {
   content: attr(data-tip); position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%);
-  white-space: pre; padding: 4px 8px; border-radius: 4px; background: var(--raised); border: 1px solid var(--line-strong);
+  white-space: pre; padding: 4px 8px; border-radius: 4px; background: var(--solid); border: 1px solid var(--line-strong);
   color: var(--text); font-size: 12px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity 0.12s 0.25s; z-index: 20;
 }
 .nav-btn:hover::after, .nav-btn:focus-visible::after { opacity: 1; }
@@ -264,7 +272,7 @@ label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--
 .records { width: 100%; border-collapse: separate; border-spacing: 0; }
 .records th {
   position: sticky; top: 0; z-index: 1; text-align: left; font-weight: 600; font-size: 11.5px; color: var(--text-2);
-  padding: 6px 12px; background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap;
+  padding: 6px 12px; background: var(--solid); border-bottom: 1px solid var(--line); white-space: nowrap;
 }
 .records td { padding: 6px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .records tbody tr { cursor: pointer; }
@@ -402,9 +410,32 @@ label.check { display: inline-flex; align-items: center; gap: 6px; color: var(--
 .column-head .model { font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; font-family: var(--mono); }
 .turn { margin-bottom: 16px; }
 .turn .q { font-weight: 600; margin-bottom: 6px; padding: 6px 10px; background: var(--raised); border-radius: 5px; }
-.turn .a { white-space: pre-wrap; }
+.turn .a { line-height: 1.5; overflow-wrap: anywhere; }
+.turn .a > :first-child { margin-top: 0; }
+.turn .a > :last-child { margin-bottom: 0; }
+.turn .a p { margin: 0 0 8px; }
+.turn .a h4 { margin: 12px 0 4px; font-size: 13px; font-weight: 600; }
+.turn .a ul, .turn .a ol { margin: 0 0 8px; padding-left: 20px; }
+.turn .a li { margin: 2px 0; }
+.turn .a li.sub { margin-left: 16px; }
+.turn .a code { font-family: var(--mono); font-size: 0.92em; background: var(--raised); padding: 0 3px; border-radius: 3px; }
 .turn .err { color: var(--err); }
-.turn .meta { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+.turn .meta { font-size: 11px; color: var(--text-3); margin-top: 6px; display: flex; align-items: center; gap: 10px; }
+.turn .meta .copy { font-size: 11px; height: 20px; }
+details.calls { margin: 6px 0 8px; font-size: 12px; border-left: 2px solid var(--accent); padding-left: 8px; }
+details.calls.bad { border-left-color: var(--err); }
+details.calls > summary { cursor: pointer; color: var(--text-2); }
+.call-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.call-list li { display: grid; gap: 1px; }
+.call-list .what { color: var(--text); }
+.call-list .got { color: var(--text-2); }
+.call-list li.bad .got { color: var(--err); }
+.call-list details.raw > summary { cursor: pointer; color: var(--text-3); font-size: 11px; }
+.call-list details.raw pre { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--canvas); border: 1px solid var(--line); padding: 8px; border-radius: 4px; max-height: 16rem; overflow: auto; }
+.examples { display: grid; gap: 6px; padding: 6px 0; }
+.examples p { margin: 0 0 2px; font-size: 11.5px; color: var(--text-3); }
+.example { text-align: left; font: inherit; font-size: 12.5px; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 7px 10px; cursor: pointer; }
+.example:hover { background: var(--hover); border-color: var(--line-strong); }
 details.call { border-left: 2px solid var(--accent); padding-left: 8px; margin: 6px 0; font-size: 12px; }
 details.call.bad { border-left-color: var(--err); }
 details.call summary { cursor: pointer; color: var(--text-2); }
@@ -567,7 +598,7 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
 /* ---------------- Toast: notification card above the status bar ---------------- */
 .toast {
   position: fixed; right: 16px; bottom: 36px; max-width: min(90vw, 420px); z-index: 30;
-  padding: 10px 14px; border-radius: 6px; background: var(--raised); color: var(--text);
+  padding: 10px 14px; border-radius: 6px; background: var(--solid); color: var(--text);
   border: 1px solid var(--line-strong); box-shadow: var(--shadow), inset 3px 0 0 var(--accent);
   opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 0.18s, transform 0.18s;
 }
@@ -582,6 +613,7 @@ details.call pre { font-family: var(--mono); font-size: 11px; white-space: pre-w
   body { overflow: auto; }
   .app { display: block; height: auto; }
   .titlebar { position: sticky; top: 0; z-index: 5; height: 40px; padding: 0 8px 0 16px; }
+  .titlebar, .activitybar { -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
   .brand-name, .crumb-sep { display: none; }
   .activitybar { position: sticky; top: 40px; z-index: 5; flex-direction: row; justify-content: space-around; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .nav-btn { flex: 1; height: 42px; }
