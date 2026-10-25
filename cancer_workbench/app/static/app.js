@@ -86,7 +86,7 @@ function setTheme(theme) {
   $("#theme-toggle").setAttribute("aria-label", `Switch to ${next} theme`);
   $("#theme-toggle").title = `Switch to ${next} theme`;
 }
-try { setTheme(localStorage.getItem("cw-theme") === "light" ? "light" : "dark"); } catch { setTheme("dark"); }
+try { setTheme(localStorage.getItem("cw-theme") === "dark" ? "dark" : "light"); } catch { setTheme("light"); }
 $("#theme-toggle").addEventListener("click", () => {
   const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   setTheme(theme);
