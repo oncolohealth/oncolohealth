@@ -34,6 +34,26 @@ class RoutingTests(unittest.TestCase):
                             "input": {"channels": 4, "spatial_dims": 3}}, self.models)
         self.assertEqual([c["id"] for c in res["compatible"]], ["monai-brats-mri-segmentation"])
 
+    def test_spelling_variants_reach_the_same_models(self):
+        exact = route_models({"task": "feature_extraction", "modality": "xray", "anatomy": "bone"}, self.models)
+        ids = sorted(c["id"] for c in exact["compatible"])
+        self.assertIn("rad-dino", ids)
+        for task, modality, anatomy in [("feature extraction", "X-ray", "bone"), ("Feature-Extraction", "x ray", "Bones"),
+                                        ("feature_extraction", "radiograph", "BONE")]:
+            res = route_models({"task": task, "modality": modality, "anatomy": anatomy}, self.models)
+            self.assertEqual(sorted(c["id"] for c in res["compatible"]), ids, (task, modality, anatomy))
+        mri = route_models({"task": "brain tumor segmentation", "modality": "MRI", "anatomy": "Brain",
+                            "input": {"channels": 4, "spatial_dims": 3}}, self.models)
+        self.assertEqual([c["id"] for c in mri["compatible"]], ["monai-brats-mri-segmentation"])
+
+    def test_normalizing_does_not_widen_matches(self):
+        # A different modality must still be rejected, and reasons keep the caller's wording.
+        res = route_models({"task": "feature_extraction", "modality": "X-ray", "anatomy": "bone"}, self.models)
+        rejected = {r["id"]: r["reasons"] for r in res["rejected"]}
+        self.assertIn("monai-brats-mri-segmentation", rejected)
+        self.assertTrue(any("'X-ray'" in reason for reason in rejected["monai-brats-mri-segmentation"]))
+        self.assertNotIn("medcpt-query-encoder", [c["id"] for c in res["compatible"]])
+
     def test_wrong_channels_rejected(self):
         res = route_models({"task": "brain_tumor_segmentation", "modality": "mri", "anatomy": "brain",
                             "input": {"channels": 1}}, self.models)
