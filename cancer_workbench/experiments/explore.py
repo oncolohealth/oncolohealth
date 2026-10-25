@@ -20,11 +20,10 @@ import threading
 import time
 from pathlib import Path
 
-from ..common.paths import PROJECT_ROOT
+from ..common.paths import PROJECT_ROOT, RUNS_DIR
 from ..datasets import read_manifest
 from .btxrd_baseline import CLASSES, LABEL, endpoint_rows, head_inputs
 
-RUNS_DIR = PROJECT_ROOT / "runs"
 MAX_SCORE = 24
 NOTE = ("Exploratory software output from an image-level baseline. Not a diagnosis and not a validated model. "
         "Hand-picked images are not a random sample: use the run's test-set report for performance.")

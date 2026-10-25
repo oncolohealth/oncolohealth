@@ -16,11 +16,11 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from ..common.paths import DATA_DIR, MODELS_DIR, PROJECT_ROOT
+from ..common.paths import DATA_DIR, MODELS_DIR, PROJECT_ROOT, RUNS_DIR
 
 INPUTS = DATA_DIR / "research-inputs"
 REFERENCES = DATA_DIR / "research-references"
-RESULTS = PROJECT_ROOT / "runs" / "observations"
+RESULTS = RUNS_DIR / "observations"
 ARTIFACTS = MODELS_DIR / "research-specialists"
 MAX_BYTES = 128_000_000
 LOCK = threading.Lock()
