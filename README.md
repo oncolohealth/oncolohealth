@@ -97,6 +97,6 @@ data/  models/        downloaded artifacts (gitignored), each with PROVENANCE.js
 | `big_machine` | Qwen3.8-27B BF16 / FP8 (needs `--allow-big`) | 55.6 / 30.9 GB |
 | `manual` | MURA, full LIDC, BraTS 2021, PANDA, CAMELYON16, ISIC, TCGA: registration or too large | instructions in record |
 
-The default budget is 40 GB (`CW_STORAGE_BUDGET_GB`). Fetches refuse to exceed it. Move storage with `CW_DATA_DIR` / `CW_MODELS_DIR`.
+The default budget is 200 GB (`CW_STORAGE_BUDGET_GB`). Fetches refuse to exceed it. Move storage with `CW_DATA_DIR` / `CW_MODELS_DIR`.
 
 **Safety:** Downloaded files are untrusted. Several weights are pickles (`.bin`/`.pt`). Load them with `torch.load(..., weights_only=True)` or prefer the `.safetensors` file. Read downloaded data with `python -I` from outside the data directory.

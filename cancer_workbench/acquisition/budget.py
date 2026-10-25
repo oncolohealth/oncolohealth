@@ -1,4 +1,4 @@
-"""Local storage budget for datasets + model weights (default 40 GB, CW_STORAGE_BUDGET_GB overrides)."""
+"""Local storage budget for datasets + model weights (default 200 GB, CW_STORAGE_BUDGET_GB overrides)."""
 from __future__ import annotations
 
 import os
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ..common.paths import DATA_DIR, MODELS_DIR
 
-DEFAULT_BUDGET_GB = 40.0
+DEFAULT_BUDGET_GB = 200.0
 
 
 def budget_bytes() -> int:

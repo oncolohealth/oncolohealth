@@ -45,6 +45,6 @@ class Catalog:
 
 
 def load_catalog(root: Path = CATALOG_DIR) -> Catalog:
-    models = json.loads((root / "models.json").read_text())["records"]
-    datasets = json.loads((root / "datasets.json").read_text())["records"]
+    models = json.loads((root / "models.json").read_text(encoding="utf-8"))["records"]
+    datasets = json.loads((root / "datasets.json").read_text(encoding="utf-8"))["records"]
     return Catalog(models, datasets)

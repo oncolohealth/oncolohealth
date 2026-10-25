@@ -28,6 +28,35 @@ function esc(v) {
 function md(s) {
   return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
+// Block markdown for model answers: headings, bullet/numbered lists, paragraphs, plus md()'s inline
+// formatting and *italics*. Escapes first, so model text can never inject HTML.
+function mdBlock(s) {
+  const inline = t => md(t).replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>");
+  const out = [];
+  let list = null, para = [];
+  const flushPara = () => { if (para.length) out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; };
+  const closeList = () => { if (list) out.push(`</${list}>`); list = null; };
+  for (const raw of String(s ?? "").split(/\r?\n/)) {
+    const line = raw.trimEnd();
+    const h = line.match(/^\s*#{1,6}\s+(.*)$/);
+    const ul = line.match(/^(\s*)[-*+]\s+(.*)$/);
+    const ol = line.match(/^(\s*)\d+[.)]\s+(.*)$/);
+    if (!line.trim()) { flushPara(); closeList(); continue; }
+    if (h) { flushPara(); closeList(); out.push(`<h4>${inline(h[1])}</h4>`); continue; }
+    const item = ul || ol;
+    if (item) {
+      flushPara();
+      const kind = ul ? "ul" : "ol";
+      if (list !== kind) { closeList(); out.push(`<${kind}>`); list = kind; }
+      out.push(`<li${item[1].length >= 2 ? ' class="sub"' : ""}>${inline(item[2])}</li>`);
+      continue;
+    }
+    closeList();
+    para.push(line.trim());
+  }
+  flushPara(); closeList();
+  return out.join("");
+}
 function fmtBytes(n) {
   if (n == null) return "";
   if (n >= 1e9) return `${(n / 1e9).toFixed(n >= 1e10 ? 0 : 1)} GB`;
@@ -1138,29 +1167,96 @@ $("#profile-delete").addEventListener("click", () => {
     .catch(err => ($("#profile-error").textContent = err.message));
 });
 
-function renderTurn(t) {
-  if (t.pending) return `<div class="turn"><div class="q">${esc(t.q)}</div><div class="thinking">Waiting for the model…</div></div>`;
+// Starter questions that the catalog tools can actually answer.
+const CHAT_EXAMPLES = [
+  "Which models in the catalog can extract features from bone X-rays?",
+  "Is RAD-DINO ready to run here? What is still missing?",
+  "What do we know about the PANDA prostate dataset, and can we use it commercially?",
+  "Find a pathology encoder and tell me its license.",
+];
+const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const cleanError = e => String(e).replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
+function parseArgs(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
+
+// One plain-language line per tool call: what was asked and what actually came back.
+function describeCall(c) {
+  const a = parseArgs(c.arguments), o = c.observed || {}, r = o.result;
+  if (o.error) return { bad: true, what: `${c.name.replace(/_/g, " ")}`, got: `Failed: ${cleanError(o.error)}` };
+  switch (c.name) {
+    case "search_catalog": {
+      const hits = Array.isArray(r) ? r : [];
+      const scope = a.record_type ? `${a.record_type}s` : "catalog";
+      return { what: `Searched ${scope} for “${a.query || ""}”`,
+        got: hits.length ? `Found ${count(hits.length, "match", "matches")}: ${hits.slice(0, 3).map(h => h.name || h.id).join(", ")}${hits.length > 3 ? "…" : ""}` : "No matches" };
+    }
+    case "get_record":
+      return { what: `Opened the record for ${r?.name || a.id}`,
+        got: [r?.evidence_state && `evidence ${r.evidence_state}`, r?.access && `access ${r.access}`].filter(Boolean).join(" · ") || "Record returned" };
+    case "route_models": {
+      const ok = r?.compatible || [], no = r?.rejected || [];
+      return { what: `Checked which models fit ${[a.task, a.modality, a.anatomy].filter(Boolean).join(" / ")}`,
+        got: `${count(ok.length, "compatible model")}, ${no.length} ruled out` };
+    }
+    case "run_specialist": {
+      const status = r?.status || "returned";
+      return { bad: ["rejected", "failed"].includes(status), what: `Asked ${a.model_id} to run`,
+        got: status === "ok" ? "Ran and returned outputs" : `${status[0].toUpperCase()}${status.slice(1)}${r?.errors?.length ? `: ${r.errors[0]}` : ""}` };
+    }
+    default:
+      return { bad: ["rejected", "failed"].includes(r?.status), what: c.name.replace(/_/g, " "), got: r?.status || "Returned a result" };
+  }
+}
+
+function renderTurn(t, key) {
+  const q = `<div class="q">${esc(t.q)}</div>`;
+  if (t.pending) return `<div class="turn">${q}<div class="thinking">Working: looking things up and writing the answer · <span class="elapsed" data-start="${t.started}">0 s</span></div></div>`;
   const r = t.result;
-  if (r.error) return `<div class="turn"><div class="q">${esc(t.q)}</div><div class="err">${esc(r.error)}</div></div>`;
+  if (r.error) return `<div class="turn">${q}<div class="err">${esc(r.error)}</div></div>`;
   const calls = r.steps.flatMap(s => s.tool_calls);
   const latency = r.steps.reduce((a, s) => a + (s.latency_s || 0), 0);
   const tokens = r.steps.reduce((a, s) => a + (s.usage?.total_tokens || 0), 0);
-  return `<div class="turn"><div class="q">${esc(t.q)}</div>
-    ${calls.map(c => {
-      const bad = !!c.observed.error || ["rejected", "failed"].includes(c.observed.result?.status);
-      const status = c.observed.error ? "error" : c.observed.result?.status || "returned a result";
-      return `<details class="call${bad ? " bad" : ""}"><summary>Called <code>${esc(c.name)}</code>: ${esc(status)}</summary>
-        <pre>arguments ${esc(c.arguments)}\n\nobserved ${esc(JSON.stringify(c.observed, null, 2))}</pre></details>`;
-    }).join("")}
-    <div class="a">${r.final ? esc(r.final) : '<span class="err">Stopped after the step limit without a final answer.</span>'}</div>
-    <div class="meta">${calls.length} tool call${calls.length === 1 ? "" : "s"}, ${latency.toFixed(1)} s${tokens ? `, ${tokens} tokens` : ""}</div></div>`;
+  const described = calls.map(c => ({ c, ...describeCall(c) }));
+  const anyBad = described.some(d => d.bad);
+  const steps = calls.length ? `<details class="calls${anyBad ? " bad" : ""}"><summary>${calls.length === 1 ? esc(described[0].what) : `Checked ${count(calls.length, "source")}`}${anyBad ? " · something was refused or failed" : ""}</summary>
+      <ol class="call-list">${described.map(d => `<li class="${d.bad ? "bad" : ""}"><span class="what">${esc(d.what)}</span><span class="got">${esc(d.got)}</span>
+        <details class="raw"><summary>Raw call</summary><pre>arguments ${esc(d.c.arguments)}\n\nobserved ${esc(JSON.stringify(d.c.observed, null, 2))}</pre></details></li>`).join("")}</ol></details>` : "";
+  return `<div class="turn">${q}${steps}
+    <div class="a">${r.final ? mdBlock(r.final) : '<span class="err">Stopped after the step limit without a final answer.</span>'}</div>
+    <div class="meta">${r.final ? `<button type="button" class="btn small copy" data-copy="${esc(key)}">Copy</button>` : ""}<span>${count(calls.length, "tool call")} · ${latency.toFixed(1)} s${tokens ? ` · ${tokens} tokens` : ""}</span></div></div>`;
 }
 function renderColumns() {
   const names = [...chat.picked];
+  const examples = `<div class="examples"><p>Try asking</p>${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x)}">${esc(x)}</button>`).join("")}</div>`;
   if (!names.length) { $("#chat-columns").innerHTML = `<p class="empty">Tick one model to chat, or several to compare their answers side by side.</p>`; return; }
   $("#chat-columns").innerHTML = names.map(n => `<div class="column"><div class="column-head"><strong>${esc(n)}</strong><span class="model">${esc(chat.profiles[n]?.model)}</span></div>
-    ${(chat.turns[n] || []).map(renderTurn).join("") || '<p class="empty">No messages yet.</p>'}</div>`).join("");
+    ${(chat.turns[n] || []).map((t, i) => renderTurn(t, `${i}|${n}`)).join("") || examples}</div>`).join("");
+  tickElapsed();
+  const last = [...document.querySelectorAll("#chat-columns .turn")].pop();
+  if (last) last.scrollIntoView({ block: "nearest" });
 }
+// Live elapsed time on pending turns; the request is one round trip, so this is the honest progress signal.
+function tickElapsed() {
+  document.querySelectorAll("#chat-columns .elapsed").forEach(el => { el.textContent = `${Math.round((Date.now() - Number(el.dataset.start)) / 1000)} s`; });
+}
+setInterval(tickElapsed, 1000);
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.append(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
+  }
+}
+$("#chat-columns").addEventListener("click", async e => {
+  const ex = e.target.closest("[data-example]");
+  if (ex) { const f = $("#ask-form"); f.question.value = ex.dataset.example; f.requestSubmit(); return; }
+  const cp = e.target.closest("[data-copy]");
+  if (cp) {
+    const cut = cp.dataset.copy.indexOf("|"), i = cp.dataset.copy.slice(0, cut), n = cp.dataset.copy.slice(cut + 1);
+    const final = chat.turns[n]?.[Number(i)]?.result?.final;
+    if (final && await copyText(final)) { cp.textContent = "Copied"; setTimeout(() => (cp.textContent = "Copy"), 1500); }
+    else toast("Could not copy the answer.", true);
+  }
+});
 $("#ask-form").addEventListener("submit", e => {
   e.preventDefault();
   const f = e.target, q = f.question.value.trim(), names = [...chat.picked];
@@ -1168,7 +1264,7 @@ $("#ask-form").addEventListener("submit", e => {
   if (!names.length) { toast("Tick at least one model first.", true); return; }
   const btn = f.querySelector("button[type=submit]");
   btn.disabled = true;
-  for (const n of names) (chat.turns[n] ||= []).push({ q, pending: true });
+  for (const n of names) (chat.turns[n] ||= []).push({ q, pending: true, started: Date.now() });
   renderColumns();
   f.question.value = "";
   api("/api/coordinator/ask", { question: q, profiles: names, histories: chat.histories, synthetic_demo: f.synthetic_demo.checked })
