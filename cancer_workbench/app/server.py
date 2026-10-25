@@ -21,7 +21,7 @@ from pathlib import Path
 from . import api
 
 STATIC = Path(__file__).with_name("static")
-MAX_BODY = 32_000_000  # a base64 upload of api.MAX_UPLOAD plus JSON
+MAX_BODY = 180_000_000  # research inputs up to 128 MB, base64 + JSON
 STATIC_FILES = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                 "/style.css": ("style.css", "text/css; charset=utf-8")}
 

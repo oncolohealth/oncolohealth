@@ -209,7 +209,7 @@ class ServerGuardTests(unittest.TestCase):
         self.assertEqual(events[2]["observed"]["result"][0]["id"], "rad-dino")
         self.assertEqual(events[-1]["result"]["final"], "Found it.")
         status, _, events = self._post_stream("/api/coordinator/ask/stream", {"question": "  "})
-        self.assertEqual((status, events), (200, [{"type": "error", "error": "Type a question first."}]))
+        self.assertEqual((status, events), (200, [{"type": "error", "error": "Type a question or attach a supported input first."}]))
 
     def test_foreign_host_rejected(self):
         self.assertEqual(self._get("/", {"Host": "attacker.example:80"})[0], 421)

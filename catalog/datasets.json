@@ -252,6 +252,50 @@
       "evidence_state": "cataloged",
       "citation": "Lee et al. 2017; doi:10.7937/K9/TCIA.2016.7O02S9CY",
       "acquisition": {"tier": "optional", "fetcher": "tcia", "collection": "CBIS-DDSM", "extract": true, "subset": {"unit": "patient", "required": true, "group_regex": "P_\\d{5}"}, "supporting": [{"url": "https://www.cancerimagingarchive.net/wp-content/uploads/calc_case_description_train_set.csv", "relpath": "labels/calc_case_description_train_set.csv", "size": 925310}, {"url": "https://www.cancerimagingarchive.net/wp-content/uploads/calc_case_description_test_set.csv", "relpath": "labels/calc_case_description_test_set.csv", "size": 190388}, {"url": "https://www.cancerimagingarchive.net/wp-content/uploads/mass_case_description_train_set.csv", "relpath": "labels/mass_case_description_train_set.csv", "size": 772727}, {"url": "https://www.cancerimagingarchive.net/wp-content/uploads/mass_case_description_test_set.csv", "relpath": "labels/mass_case_description_test_set.csv", "size": 217038}], "approx_bytes": 163512966728}
+    },
+    {
+      "id": "bloodmnist",
+      "name": "BloodMNIST: normal peripheral-blood cell images",
+      "summary": "Eight-way blood-cell morphology image dataset. This is not a structured CBC table, a leukemia classifier, or an established cancer-detection endpoint.",
+      "modality": [
+        "microscopy"
+      ],
+      "anatomy": [
+        "blood"
+      ],
+      "counts": {
+        "images": 17092,
+        "source": "Official MedMNIST information; actual downloaded split sizes are exposed separately."
+      },
+      "labels": {
+        "image_level": "Eight normal blood-cell morphology classes; use source label mapping before fitting.",
+        "reference_standard": "Source image/cell-type labels, not a patient cancer diagnosis."
+      },
+      "unresolved": [
+        "No structured CBC feature table or cancer outcome target is supplied by this image archive.",
+        "Patient/slide identities and independence require source review before medical evaluation."
+      ],
+      "license": {
+        "id": "cc-by-4.0"
+      },
+      "access": "open",
+      "evidence_state": "cataloged",
+      "citation": "Yang et al., MedMNIST v2, Scientific Data 2023; Acevedo et al., peripheral blood-cell dataset; https://medmnist.com/",
+      "acquisition": {
+        "tier": "optional",
+        "fetcher": "zenodo",
+        "record": 10519652,
+        "subset": {
+          "unit": "file",
+          "candidates": [
+            "bloodmnist*.npz"
+          ]
+        },
+        "include": [
+          "bloodmnist.npz"
+        ],
+        "approx_bytes": 36000000
+      }
     }
   ]
 }

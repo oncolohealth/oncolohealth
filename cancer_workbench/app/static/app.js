@@ -114,7 +114,7 @@ $("#theme-toggle").addEventListener("click", () => {
 });
 
 /* ---------------- navigation ---------------- */
-const SCREENS = ["catalog", "downloads", "datasets", "images", "experiments", "assistant", "progress"];
+const SCREENS = ["catalog", "downloads", "datasets", "images", "experiments", "assistant", "progress", "research"];
 const loaders = {};
 function show(name) {
   if (!SCREENS.includes(name)) name = "catalog";
@@ -1140,7 +1140,9 @@ const CHAT_EXAMPLES = [
 ];
 const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const cleanError = e => String(e).replace(/^\[[^\]]+\]\s*/, "").replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
-const usable = p => p && !/REPLACE_WITH/.test(p.model || "");
+// The server only talks to model endpoints on this PC, so remote profiles are listed but not offered for chat.
+const isLocal = p => { try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(p.base_url).hostname); } catch { return false; } };
+const usable = p => p && !/REPLACE_WITH/.test(p.model || "") && isLocal(p);
 function parseArgs(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
 function newConvo() { return { id: `c${Date.now().toString(36)}`, title: "", updated: Date.now(), turns: [], histories: {} }; }
 
@@ -1218,7 +1220,7 @@ function renderProfiles() {
     const s = chat.status[name], ok = usable(p);
     return `<li class="${chat.models.includes(name) ? "picked" : ""}">
       <span class="dot ${s === "up" ? "up" : s === "down" ? "down" : ""}" title="${esc(STATUS_TEXT[s] || "Not checked")}"></span>
-      <span class="pname">${esc(name)}${name === chat.defaultName ? ' <span class="pill">default</span>' : ""}${ok ? "" : ' <span class="pill">not set up</span>'}</span>
+      <span class="pname">${esc(name)}${name === chat.defaultName ? ' <span class="pill">default</span>' : ""}${ok ? "" : !isLocal(p) ? ' <span class="pill">not on this PC</span>' : ' <span class="pill">not set up</span>'}</span>
       <span class="pmeta">${esc(p.model)}<br>${esc(p.base_url)}${p.base_url_env ? ` (or $${esc(p.base_url_env)})` : ""}</span>
       <span class="pactions">${ok ? `<button type="button" class="linkish" data-use="${esc(name)}">Use in chat</button><button type="button" class="linkish" data-ping="${esc(name)}">Test connection</button>` : ""}<button type="button" class="linkish" data-edit="${esc(name)}">Edit</button></span>
     </li>`;
@@ -1337,6 +1339,8 @@ function friendlyError(name, err) {
   const msg = cleanError(err), p = chat.profiles[name] || {};
   if (/cannot reach|refused|timed out|10061|unreachable/i.test(msg))
     return { title: `Couldn't reach ${name}`, body: `Nothing answered at ${p.base_url || "its server URL"}. Start that model server, then retry.`, detail: msg };
+  if (/requires a model endpoint on this PC/.test(msg))
+    return { title: "Only models on this PC can answer", body: `${name} points to a remote server. Research questions, inputs and results stay on this PC, so pick a local model.`, detail: msg };
   const key = msg.match(/missing required credential environment variable '([^']+)'/);
   if (key) return { title: `${name} needs an API key`, body: `Set ${key[1]} in the environment the workbench app runs in, then restart the app and retry.`, detail: msg };
   if (/HTTP 4\d\d/.test(msg)) return { title: `${name} refused the request`, body: "The server answered with an error. Check the model name and settings in the Models tab.", detail: msg };
@@ -1369,7 +1373,8 @@ function renderAnswer(a, name, ti, last) {
   const r = a.result;
   const calls = r.steps.flatMap(s => s.tool_calls);
   const secs = r.steps.reduce((x, s) => x + (s.latency_s || 0), 0);
-  const body = r.final ? `<div class="md">${mdBlock(r.final)}</div>` : `<div class="notice">The model used all its steps without writing an answer. Try asking more specifically.</div>`;
+  const body = r.final ? `<div class="md">${mdBlock(r.final)}</div>${r.stopped === "response_limit" ? `<div class="notice">The answer reached the response length limit and may be cut off.</div>` : ""}`
+    : `<div class="notice">The model used all its steps without writing an answer. Try asking more specifically.</div>`;
   return `${renderSteps(calls, false)}${body}
     <div class="msg-actions">${r.final ? `<button type="button" class="btn small" data-copy="${ti}|${esc(name)}">Copy</button>` : ""}${retry}<span class="meta">${secs.toFixed(1)} s</span></div>`;
 }
@@ -1381,7 +1386,7 @@ function renderThread(toBottom = false) {
     const ready = !chat.loaded || chat.models.length > 0;  // no "set up a model" warning before profiles load
     el.innerHTML = `<div class="chat-hero">
       <h2>What do you want to find out?</h2>
-      <p>Answers come from the workspace catalog and the specialists installed here. Every lookup the model makes is shown with its real result.</p>
+      <p>Answers come from the workspace catalog and the specialists installed here. Every lookup the model makes is shown with its real result. To run a model on your own file, upload it on the <a href="#research">Research</a> screen first.</p>
       ${ready ? "" : `<p class="warn-line">No model is set up yet. Add one in the <button type="button" class="linkish" data-goto-models>Models</button> tab.</p>`}
       <div class="example-grid">${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x.q)}" ${ready ? "" : "disabled"}><span class="et">${esc(x.title)}</span><span class="eq">${esc(x.q)}</span></button>`).join("")}</div>
     </div>`;
@@ -1683,6 +1688,78 @@ loaders.experiments = () => guard(async () => {
   experimentMode();
   await refreshExperimentHistory();
 });
+
+/* ---------------- local input-to-result research ---------------- */
+const researchUI = {models: [], inputs: [], results: []};
+function selectedResearchModel() { return researchUI.models.find(m => m.id === $("#research-model").value); }
+function researchModelDetail() {
+  const m = selectedResearchModel();
+  $("#research-run").disabled = !m || !$("#research-input").value;
+  $("#research-ask").disabled = $("#research-run").disabled;
+  $("#research-reference-label").innerHTML = (m?.classes || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  $("#research-model-detail").innerHTML = m ? `<h2>${esc(m.name)}</h2><p>${esc(m.modality)} · ${esc(m.anatomy)} · ${esc(m.task)}</p>
+    <p class="banner info">Exploratory research model. Class scores are not a diagnosis or clinically calibrated risk.</p>
+    <p>Accepted input formats: ${esc(m.formats.join(", "))}</p><ul>${m.limitations.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
+    <details><summary>Preprocessing and trained artifact</summary><pre>${esc(JSON.stringify({preprocessing:m.preprocessing,training:m.training,license:m.license},null,2))}</pre></details>` : "<p>No verified trained artifact is available.</p>";
+}
+function renderResearchResult(result) {
+  const prediction = result.prediction;
+  $("#research-result").innerHTML = `<h2>${result.status === "ok" ? "Observed prediction" : "Run failed"}</h2>
+    ${result.error ? `<p class="banner err">${esc(result.error)}</p>` : ""}
+    ${prediction ? `<h3>${esc(prediction.class)}</h3><p>${esc(prediction.meaning)}</p>
+    ${Object.entries(prediction.scores).map(([label,score]) => `<p>${esc(label)}: ${(score*100).toFixed(2)}% <progress max="1" value="${Number(score)}"></progress></p>`).join("")}` : ""}
+    ${result.comparison ? `<p class="banner info">Separate reference: <strong>${esc(result.comparison.reference.label)}</strong>. ${result.comparison.matches ? "Matches" : "Does not match"} this reference.<br>${esc(result.comparison.reference.source)}<br>${esc(result.comparison.meaning)}</p>` : "<p class=\"hint\">No separate reference comparison is attached to this observation.</p>"}
+    <p>${esc(result.note)} Observed execution time: ${Number(result.seconds).toFixed(3)} s.</p>
+    <p>Observation ID: <code>${esc(result.id)}</code> · input: <code>${esc(result.input_id)}</code></p>
+    <details><summary>Complete saved observation and identities</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;
+}
+async function loadResearch() {
+  const [state,history] = await Promise.all([api("/api/research"),api("/api/research/results")]);
+  researchUI.models = state.models.filter(m => m.available); researchUI.inputs = state.inputs; researchUI.results = history.results;
+  for (const [selector,rows] of [["#research-input",state.inputs.map(i => [i.id,`${i.original_name} · ${i.format} · ${i.id.slice(0,12)}`])],
+    ["#research-model",researchUI.models.map(m => [m.id,m.name])]]) {
+    const el = $(selector), prior = el.value;
+    el.innerHTML = `<option value="">Select…</option>` + rows.map(([id,name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join("");
+    if (rows.some(([id]) => id === prior)) el.value = prior;
+    else if (rows.length === 1) el.value = rows[0][0];
+  }
+  $("#research-blockers").innerHTML = [...state.unavailable,...state.models.filter(m => !m.available).map(m => ({task:m.name,blocker:m.blocker}))]
+    .map(m => `<p><strong>${esc(m.task)}</strong><br>${esc(m.blocker)}</p>`).join("");
+  $("#research-history").innerHTML = history.results.length ? history.results.map((r,i) => `<p><button type="button" class="btn small" data-observation="${i}">${esc(r.model_id)} · ${esc(r.status)} · ${esc(r.id.slice(0,10))}</button></p>`).join("") : "<p>No observations yet.</p>";
+  $$("[data-observation]",$("#research-history")).forEach(b => b.addEventListener("click",() => renderResearchResult(researchUI.results[Number(b.dataset.observation)])));
+  researchModelDetail();
+}
+$("#research-model").addEventListener("change",researchModelDetail);
+$("#research-input").addEventListener("change",researchModelDetail);
+$("#research-refresh").addEventListener("click",() => guard(loadResearch));
+$("#research-file").addEventListener("change",() => guard(async () => {
+  const file = $("#research-file").files[0]; if (!file) return;
+  if (file.size > 128000000) throw new Error("Research inputs are limited to 128 MB.");
+  $("#research-upload-status").textContent = `Validating and storing ${file.name}…`;
+  try {
+    const data = await new Promise((resolve,reject) => {const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=reject;reader.readAsDataURL(file);});
+    const item = await api("/api/research/upload",{name:file.name,data});
+    await loadResearch(); $("#research-input").value=item.id; researchModelDetail();
+    $("#research-upload-status").textContent=`Stored ${item.format}. Stable input ID: ${item.id}. Choose its task and run the model.`;
+  } catch (e) {$("#research-upload-status").textContent=e.message; throw e;}
+}));
+$("#research-form").addEventListener("submit",event => {event.preventDefault();guard(async () => {
+  $("#research-run").disabled=true; $("#research-status").textContent="Running the actual local model. The result and any failure will be saved…";
+  try { const result=await api("/api/research/run",{model_id:$("#research-model").value,input_id:$("#research-input").value});
+    renderResearchResult(result); $("#research-status").textContent=`Saved ${result.status} observation.`; await loadResearch();
+  } catch (e) {$("#research-status").textContent=e.message;throw e;} finally {researchModelDetail();}
+});});
+$("#research-reference-save").addEventListener("click",() => guard(async () => {
+  const ref=await api("/api/research/reference",{input_id:$("#research-input").value,model_id:$("#research-model").value,
+    label:$("#research-reference-label").value,source:$("#research-reference-source").value});
+  $("#research-reference-status").textContent=`Saved separate reference: ${ref.label}. Run again to obtain a new observed comparison.`;
+}));
+$("#research-ask").addEventListener("click",() => {
+  const model=selectedResearchModel(); if (!model) return;
+  $("#ask-form textarea").value=`Run the installed specialist ${model.id} for ${model.task}, modality ${model.modality}, anatomy ${model.anatomy}, on uploaded input ${$("#research-input").value}. Use run_specialist with inputs containing only input_id. Explain the actual result and limits.`;
+  show("assistant"); growComposer(); $("#ask-form textarea").focus();
+});
+loaders.research = () => guard(loadResearch);
 
 /* ---------------- boot ---------------- */
 guard(async () => {

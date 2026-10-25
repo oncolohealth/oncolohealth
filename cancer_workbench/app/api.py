@@ -21,9 +21,8 @@ from ..acquisition.sources import AccessError
 from ..acquisition.subsets import summarize_units
 from ..adapters import SYNTHETIC_MODEL_RECORD, SyntheticThresholdAdapter
 from ..common.paths import CONFIG_DIR, DATA_DIR, MODELS_DIR, PROJECT_ROOT
-from ..coordinator import ProviderError, default_toolbox, load_profiles, make_provider, run_turn
+from ..coordinator import ProviderError, Tool, default_toolbox, load_profiles, make_provider, run_turn
 from ..coordinator.config import config_path
-from ..coordinator.loop import SYSTEM_PROMPT
 from ..datasets import audit_dataset, grouped_split, read_manifest, write_manifest
 from ..datasets import readiness
 from ..datasets.btxrd import MANIFEST_PATH as BTXRD_MANIFEST, RAW_DIR as BTXRD_RAW
@@ -33,6 +32,10 @@ from ..experiments.records import REUSE_PATHS
 from ..registry import load_catalog
 from ..routing import route_models
 from . import progress_md
+from .assistant import guided_history
+from ..research import runtime as research
+from ..research.attachments import context as attachment_context
+from ..research.datasets import installed as installed_datasets
 from .jobs import JobManager
 from .scoring import ScoringJobs
 
@@ -398,7 +401,17 @@ def _ml_missing() -> list[str]:
 def media_file(rel: str) -> tuple[Path, str]:
     """Resolve `<set>/<path>` from a /media/ URL to an image file inside that set's root (or the uploads folder)."""
     name, _, sub = rel.partition("/")
-    root = UPLOADS_DIR if name == "uploads" else IMAGE_SETS.get(name, {}).get("root")
+    if name == "research-output":
+        observation, slash, filename = sub.partition("/")
+        if len(observation) != 32 or any(c not in "0123456789abcdef" for c in observation) or not slash or "/" in filename or "\\" in filename:
+            raise ApiError("No such observed output.", 404)
+        root = (research.RESULTS / observation).resolve()
+        output = (root / filename).resolve()
+        kind = "image/png" if filename.endswith(".png") else "application/gzip" if filename.endswith(".nii.gz") else None
+        if kind is None or not output.is_relative_to(root) or not output.is_file():
+            raise ApiError("No such observed output.", 404)
+        return output, kind
+    root = {"uploads":UPLOADS_DIR,"research":research.INPUTS,"research-preview":DATA_DIR/"research-previews"}.get(name) or IMAGE_SETS.get(name, {}).get("root")
     p = (root / sub).resolve() if root and sub else None
     if p is None or not p.is_relative_to(root.resolve()) or p.suffix.lower() not in IMAGE_TYPES or not p.is_file():
         raise ApiError("No such image.", 404)
@@ -555,7 +568,7 @@ def profiles() -> dict:
     profs, default = load_profiles()
     path = config_path()
     return {"profiles": profs, "default": default, "config_file": str(path.relative_to(CONFIG_DIR.parent)),
-            "is_local": path.name == "coordinator.json", "system_prompt": SYSTEM_PROMPT}
+            "is_local": path.name == "coordinator.json", "system_prompt": guided_history(specialists=research.tool_registration()[0])[0]["content"]}
 
 
 def _local_config() -> tuple[Path, dict]:
@@ -604,12 +617,42 @@ def ping(body: dict) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def _ask_one(name: str | None, question: str, history: list | None, synthetic: bool, cat, on_event=None) -> dict:
-    box = default_toolbox(cat, {"synthetic-threshold": SyntheticThresholdAdapter()} if synthetic else {},
-                          extra_models=[SYNTHETIC_MODEL_RECORD] if synthetic else None)
+def _question(body: dict) -> str:
+    """The user's text plus server-validated attachment context; raises if both are empty."""
+    question = (body.get("question") or "").strip()
+    attachments = body.get("attachments") or []
+    if attachments:
+        try:
+            question = (question or "Analyze the attached research input using its selected task.") + attachment_context(attachments)
+        except (ValueError, OSError, KeyError) as exc:
+            raise ApiError(str(exc)) from exc
+    if not question:
+        raise ApiError("Type a question or attach a supported input first.")
+    return question
+
+
+def _ask_one(name: str | None, question: str, history: list | dict | None, synthetic: bool, cat, on_event=None) -> dict:
+    """One profile, one turn. `history` is that profile's prior messages, or a {profile: messages} map.
+    `on_event` (optional) hears each model call, tool call and observed result as it happens."""
+    local_models, local_adapters = research.tool_registration()
+    if synthetic:
+        local_adapters["synthetic-threshold"] = SyntheticThresholdAdapter()
+    box = default_toolbox(cat, local_adapters,
+                          extra_models=local_models + ([SYNTHETIC_MODEL_RECORD] if synthetic else []))
+    if local_models:
+        box.tools["list_uploaded_inputs"] = Tool("list_uploaded_inputs", "List actual locally uploaded input IDs and formats. Never includes reference labels.",
+                                               {"type":"object", "properties":{}}, lambda: research.list_inputs())
     try:
         prov = make_provider(name)
-        rec = run_turn(prov, box, question, history=history or None, on_event=on_event)
+        # Local specialist tools are registered even for text-only questions.
+        # Enforce the PC-only endpoint policy before any provider network call.
+        if hasattr(prov, "base_url"):
+            from urllib.parse import urlsplit
+            if urlsplit(str(prov.base_url)).hostname not in {"127.0.0.1", "localhost", "::1"}:
+                raise ProviderError("This workbench requires a model endpoint on this PC; external providers cannot receive research questions, inputs or specialist results.")
+        prior = history.get(prov.profile) if isinstance(history, dict) else history
+        history = guided_history(prior, synthetic=synthetic, specialists=local_models)
+        rec = run_turn(prov, box, question, history=history, on_event=on_event)
         return {"profile": prov.profile, "model": prov.model, "final": rec.final, "stopped": rec.stopped,
                 "steps": rec.steps, "messages": rec.messages}
     except (ProviderError, KeyError, ValueError) as e:
@@ -617,16 +660,14 @@ def _ask_one(name: str | None, question: str, history: list | None, synthetic: b
 
 
 def ask(body: dict) -> dict:
-    question = (body.get("question") or "").strip()
+    question = _question(body)
     names = body.get("profiles") or [None]
-    if not question:
-        raise ApiError("Type a question first.")
     histories = body.get("histories") or {}
     synthetic = bool(body.get("synthetic_demo"))
     cat = load_catalog()
 
     def one(name):
-        return _ask_one(name, question, histories.get(name), synthetic, cat)
+        return _ask_one(name, question, histories, synthetic, cat)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(names))) as ex:
         return {"results": list(ex.map(one, names))}
@@ -635,15 +676,45 @@ def ask(body: dict) -> dict:
 def ask_stream(body: dict, emit) -> None:
     """One profile, streamed: progress events as the turn runs, then {"type": "done", "result": ...}.
     `emit` raises when the browser has gone away, which stops the turn at the next step."""
-    question = (body.get("question") or "").strip()
-    if not question:
-        raise ApiError("Type a question first.")
-    result = _ask_one(body.get("profile"), question, body.get("history"), bool(body.get("synthetic_demo")),
+    result = _ask_one(body.get("profile"), _question(body), body.get("history"), bool(body.get("synthetic_demo")),
                       load_catalog(), on_event=emit)
     emit({"type": "done", "result": result})
 
 
 # ---------- progress ----------
+
+def research_state() -> dict:
+    return {"models": research.list_models(), "inputs": research.list_inputs(), "samples": research.samples(), "note": research.NOTE,
+            "unavailable": [
+                {"task":"mammography / CBIS-DDSM", "blocker":"No local trained mammography head/detector or reviewed input preprocessing is installed. The catalog/labels are not a classifier."},
+                {"task":"whole CT detection / LIDC-IDRI", "blocker":"A 28-voxel NoduleMNIST patch classifier is not a whole-scan detector. No verified local full-CT detection path is installed."},
+                {"task":"arbitrary MRI / DICOM-to-MRI preparation", "blocker":"The installed MONAI path accepts only declared, aligned 1 mm BraTS-style four-channel NIfTI in T1ce,T1,T2,FLAIR order. Single sequences, screenshots and arbitrary DICOM are not eligible; preparation/resampling is not inferred."},
+                {"task":"whole-slide pathology / PANDA / CAMELYON16 / TCGA", "blocker":"Patch tissue classification is not slide-level grading. No verified local tiling/aggregation head is installed."},
+                {"task":"structured blood / clinical profiles", "blocker":"The handoff contains clinical workflow/resource catalogs, not a trained CBC/profile classifier, fitted feature schema, units or labeled patient table. No prediction target/model can be inferred from that map."}
+            ]}
+
+
+def research_upload(body: dict) -> dict:
+    try:
+        return research.upload(body)
+    except (ValueError, OSError, KeyError) as exc:
+        raise ApiError(str(exc)) from exc
+
+
+def research_reference(body: dict) -> dict:
+    try:
+        return research.set_reference(body)
+    except (ValueError, OSError, KeyError) as exc:
+        raise ApiError(str(exc)) from exc
+
+
+def research_run(body: dict) -> dict:
+    return research.predict(body.get("model_id"), body.get("input_id"))
+
+
+def research_results() -> dict:
+    paths = sorted(research.RESULTS.glob("*.json"),key=lambda p:p.stat().st_mtime,reverse=True) if research.RESULTS.exists() else []
+    return {"results":[research._json(p) for p in paths[:20]]}
 
 def progress() -> dict:
     return progress_md.parse()
@@ -666,6 +737,8 @@ def progress_owner(body: dict) -> dict:
 
 
 GET_ROUTES = {
+    "/api/research": research_state, "/api/research/results": research_results,
+    "/api/datasets/installed": installed_datasets,
     "/api/catalog": catalog, "/api/route/options": route_options, "/api/storage": storage,
     "/api/jobs": lambda: {"jobs": JOBS.list()}, "/api/manifests": manifests,
     "/api/datasets/btxrd/evidence": dataset_evidence,
@@ -676,8 +749,10 @@ GET_ROUTES = {
     "/api/experiments/options": experiment_options, "/api/experiments/history": experiment_history,
 }
 GET_PARAM_ROUTES = {"/api/provenance/": provenance, "/api/inventory/": inventory, "/api/images/": image_set,
-                    "/api/annotation/": annotation, "/api/score/jobs/": score_job}
+                    "/api/annotation/": annotation, "/api/score/jobs/": score_job,
+                    "/api/research/preview/":research.preview}
 POST_ROUTES = {
+    "/api/research/upload": research_upload, "/api/research/reference": research_reference, "/api/research/run": research_run,
     "/api/route": route, "/api/fetch/plan": fetch_plan, "/api/fetch/start": fetch_start, "/api/fetch/cancel": fetch_cancel,
     "/api/fetch/units": fetch_units,
     "/api/audit": audit, "/api/split": split,
