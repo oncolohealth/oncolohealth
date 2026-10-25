@@ -224,9 +224,12 @@ def profile(model_id: str) -> tuple[Path, dict]:
         path = (MODELS_DIR / name).resolve()
         if not path.is_relative_to(MODELS_DIR.resolve()) or sha_file(path) != expected:
             raise ValueError("Pinned external specialist artifact is missing or changed: " + name)
-    if data.get("backend") == "mri":
-        if sha_file(Path(__file__).with_name("mri.py")) != data.get("implementation_sha256"):
-            raise ValueError("MRI inference implementation differs from its verified manifest.")
+    if data.get("backend") in {"mri", "ct"}:
+        implementation = Path(__file__).with_name(data["backend"] + ".py")
+        if sha_file(implementation) != data.get("implementation_sha256"):
+            raise ValueError("Specialist inference implementation differs from its verified manifest.")
+        if data["backend"] == "ct" and sha_file(Path(__file__).with_name("ct_worker.py")) != data.get("worker_implementation_sha256"):
+            raise ValueError("CT worker implementation differs from its verified manifest.")
     return folder, data
 
 
@@ -292,6 +295,10 @@ def evaluation_eligibility(path: Path, model: dict, folder: Path) -> dict:
             selected = receipt.get("selected_pixel_sha256",{})
             partitions = {part for part in ("train","val","test") if source_sha in selected.get(part,[])}
         basis = "Decoded source uint8 pixel/voxel SHA-256 before normalization/pooling; no filename lookup"
+    elif backend == "ct":
+        return {"known_partition":"unknown", "may_be_used_for_held_out_sample_comparison":False,
+                "independent_patient_evaluation":False, "basis":"Restored LUNA16 detector; sample is publisher validation and other source membership is not established",
+                "note":"Demonstration only. Do not treat a nodule score or box agreement as independent cancer-detection performance."}
     elif backend == "mri":
         return {"known_partition":"unknown", "may_be_used_for_held_out_sample_comparison":False,
                 "independent_patient_evaluation":False, "basis":"Restored BraTS model; source-case overlap cannot be excluded",
@@ -309,6 +316,21 @@ def set_reference(body: dict) -> dict:
     input_path, meta = resolve_input(body.get("input_id"))
     _, model = profile(body.get("model_id"))
     source = str(body.get("source") or "user-provided reference; not independently verified")[:1000]
+    if model["backend"] == "ct":
+        from . import ct
+        if body.get("reference_convention") != "LPS_cccwhd":
+            raise ValueError("CT references require explicit reference_convention='LPS_cccwhd'.")
+        reference_path,reference_meta = resolve_input(body.get("reference_input_id"))
+        if reference_meta["format"] != "structured":
+            raise ValueError("CT reference boxes must be a separate JSON input.")
+        ct.validate(input_path)
+        ct.compare_reference({"boxes_world_LPS_cccwhd":[],"scores":[]},reference_path,meta["sha256"])
+        ref={"input_sha256":meta["sha256"],"model_id":model["id"],"type":"detection-boxes",
+             "reference_input_id":reference_meta["id"],"reference_sha256":reference_meta["sha256"],
+             "reference_convention":"LPS_cccwhd","source":source,
+             "created_utc":datetime.now(timezone.utc).isoformat(),"separate_from_inference_inputs":True}
+        _save(REFERENCES/meta["sha256"]/(model["id"]+".json"),ref)
+        return ref
     if model["backend"] == "mri":
         from . import mri
         import nibabel as nib
@@ -366,6 +388,37 @@ def predict(model_id: str, input_id: str) -> dict:
                 probs, pred = item["probs"], item["pred"]
                 receipt["native_result"] = observed
                 receipt["artifact_identity"] = {"model_fingerprint":observed["model_fingerprint"], "feature_binding_sha256":observed["feature_binding_sha256"], "run":model["run"],"result":model["result"]}
+            elif model["backend"] == "ct":
+                import os,subprocess,sys
+                from . import ct
+                ct.validate(path)
+                directory=RESULTS/receipt["id"];directory.mkdir(parents=True,exist_ok=True)
+                with (directory/"worker.log").open("w",encoding="utf-8") as log:
+                    worker=subprocess.Popen([sys.executable,"-B","-m","cancer_workbench.research.ct_worker","--input",str(path),"--out",str(directory),"--parent-pid",str(os.getpid())],
+                        stdout=log,stderr=subprocess.STDOUT,creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+                    try:
+                        worker.wait(timeout=600)
+                    except subprocess.TimeoutExpired:
+                        import os
+                        if os.name == "nt":
+                            # Windows venv redirectors may have an interpreter child.
+                            # Terminate only this freshly created worker's process tree.
+                            subprocess.run(["taskkill","/PID",str(worker.pid),"/T","/F"],stdout=log,stderr=subprocess.STDOUT,check=False,
+                                           creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+                        else:
+                            worker.kill()
+                        worker.wait(timeout=15)
+                        raise RuntimeError("CT inference reached its ten-minute CPU limit; its worker was stopped. Saved observation " + receipt["id"])
+                if worker.returncode:
+                    raise RuntimeError("CT inference worker failed; see saved worker.log in observation " + receipt["id"])
+                observed=_json(directory/"detector-result.json")
+                detection=dict(observed["detection"])
+                overlay=Path(detection["overlay_path"]).resolve()
+                if not overlay.is_relative_to(directory.resolve()) or sha_file(overlay)!=detection["overlay_sha256"]:
+                    raise ValueError("CT output identity/path mismatch.")
+                detection["overlay_media"]="research-output/"+receipt["id"]+"/"+overlay.name
+                receipt.update(kind="detection",detection=detection,native_result=observed,
+                    artifact_identity={"weights_sha256":observed["weights_sha256"],"model_revision":observed["model_revision"],"implementation_sha256":model["implementation_sha256"]})
             elif model["backend"] == "mri":
                 from . import mri
                 observed = mri.run(path,RESULTS/receipt["id"])
@@ -390,7 +443,7 @@ def predict(model_id: str, input_id: str) -> dict:
         if sha_file(path) != meta["sha256"]:
             raise ValueError("Input changed while inference was running.")
         receipt.update(status="ok",limitations=model["limitations"])
-        if model["backend"] != "mri":
+        if model["backend"] not in {"mri","ct"}:
             receipt.update(kind="classification", prediction={"class":pred,"scores":dict(zip(model["classes"],probs)),
                             "meaning":model["output_meaning"]})
         # Only now, after model execution, consult the independent answer key.
@@ -399,7 +452,13 @@ def predict(model_id: str, input_id: str) -> dict:
             ref = _json(ref_path)
             if ref["input_sha256"] != meta["sha256"] or ref["model_id"] != model_id:
                 raise ValueError("Reference identity mismatch.")
-            if model["backend"] == "mri":
+            if model["backend"] == "ct":
+                from . import ct
+                reference_path,reference_meta=resolve_input(ref["reference_input_id"])
+                if reference_meta["sha256"]!=ref["reference_sha256"] or ref.get("reference_convention")!="LPS_cccwhd":
+                    raise ValueError("Stored CT reference identity/convention changed.")
+                receipt["comparison"]={"reference":ref,**ct.compare_reference(receipt["detection"],reference_path,meta["sha256"])}
+            elif model["backend"] == "mri":
                 from . import mri
                 reference_path, reference_meta = resolve_input(ref["reference_input_id"])
                 if reference_meta["sha256"] != ref["reference_sha256"] or ref.get("reference_convention") != "MSD_Task01":
@@ -439,8 +498,14 @@ class ResearchAdapter:
             raise RuntimeError(result["error"] + "; saved observation " + result["id"])
         # Keep native receipts on disk; give the model the actual material output
         # without flooding its finite context with training tables or duplicate scores.
-        return {k:result[k] for k in ("id","model_id","input_id","input","kind","prediction","segmentation","comparison",
+        output = {k:result[k] for k in ("id","model_id","input_id","input","kind","prediction","segmentation","detection","comparison",
                                      "artifact_identity","evaluation_eligibility","seconds","note","limitations") if k in result}
+        if "detection" in output:
+            output["detection"]=dict(output["detection"])
+            for key in ("scores","boxes_voxel_xyzxyz","boxes_world_LPS_cccwhd"):
+                output["detection"][key]=output["detection"][key][:5]
+            output["detection"]["returned_top_detections"]=min(5,output["detection"]["count"])
+        return output
 
 
 def tool_registration():
@@ -453,7 +518,7 @@ def tool_registration():
         records.append({"id":model["id"],"name":model["name"],"kind":"local-research-specialist",
                         "summary":"Verified local exploratory "+model["task"]+" specialist. Supply inputs {input_id: stable uploaded ID}; output is not a diagnosis. " + " ".join(model["limitations"]),
                         "tasks":[model["task"]],"modality":[model["modality"]],"anatomy":[model["anatomy"]],
-                        "input":{"formats":model["formats"],"stable_id_required":True},"outputs":({"regions":model["classes"],"kind":"segmentation"} if model.get("output_kind")=="segmentation" else {"classes":model["classes"]}),
+                        "input":{"formats":model["formats"],"stable_id_required":True},"outputs":({"regions":model["classes"],"kind":"segmentation"} if model.get("output_kind")=="segmentation" else {"kind":"detection","boxes":"LPS centre xyz + width/height/depth mm","score_meaning":"nodule, not cancer probability"} if model.get("output_kind")=="detection" else {"classes":model["classes"]}),
                         "evidence_state":"locally_reproduced","inference_permission":"allowed","adapter":adapter.id,
                         "license":model["license"],"access":"local","citation":"Local training/provenance manifest: models/research-specialists/"+model["id"]+"/manifest.json"})
     return records, adapters
