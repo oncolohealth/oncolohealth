@@ -83,3 +83,14 @@ Each saved observation ID counts an attempt; repeated requests are not new test 
 The actual local main3 now leads with model findings, measured basis and appropriate uncertainty rather than blanket refusal. It can report malignant/benign task labels, explain the test denominator and sensitivity, and discuss evidence. It does not invent lesion morphology or convert a class score into calibrated disease probability. This is changed guidance/tool evidence, not a newly trained Gemma adapter.
 
 Evidence: C:\Users\Jordi nieves\Documents\OncoloHealth-professional-assistance-live-verification.json and C:\Users\Jordi nieves\Documents\OncoloHealth-neural-app-live-verification.json.
+
+
+## Current integration and visible verification
+
+PR #18 is merged as main `f9a5448`, with all eight Ubuntu Python 3.11–3.14 checks passing before merge. The local app was restarted on that source. Codex browser control is restored: a real ultrasound sample was attached through chat, sent and visibly returned a classifier/reference card plus a useful interpretation, measured accuracy and malignant sensitivity. Screenshot: `C:\Users\Jordi nieves\Documents\OncoloHealth-professional-assistant-visible.jpg`.
+
+The persistent local launcher now selects 16,384 context tokens with q8_0 K/V cache and Flash Attention using the installed official llama.cpp runtime. A real uncached 9,021-token request completed in 15.516 seconds, using 14,361/16,303 MiB VRAM after the request, with about 4.4 GiB physical RAM free. The first F16 16k trial accepted the prompt but caused RAM pressure; its measured record and all prior launcher/state files are retained. These are serving changes, not new trained weights. The subsequent fixed 22-case app evaluation includes real MRI/CT; final results are pending and failures remain unchanged.
+
+Four completed, reviewed handler trajectories target actual license/tool-grounding and modality mistakes on training-eligible record groups. They remain separate from the original 437 training rows and await pinned tokenizer/mask/remote admission. Sixteen professional-assistance acceptance cases remain evaluation material, with no reserved medical outcomes or hidden reasoning admitted to training. Main5 is still untrained while NPS visibly returns 502.
+
+The Team Hub Local build checklist now contains our revision-guarded check-in, read back after publication. Shared Claude coordination is in `C:\Users\Jordi nieves\Documents\OncoloHealth-Claude-hourly.md`. Claude's pending UI PRs remain for Jordi's review. A proposed hourly-monitor update was rejected by automatic approval review because of the earlier stop instruction; the existing automation configuration was not changed, and a scheduling preference question is pending.

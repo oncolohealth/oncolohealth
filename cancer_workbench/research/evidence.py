@@ -129,7 +129,7 @@ def _rationale(model: dict) -> dict:
                 "decision_basis": "The reported class has the highest observed uncalibrated class score; stored coefficients are not a measured morphology explanation."}
     if backend in ("btxrd", "neural"):
         return {**common, "type": "encoder_head_class_score",
-                "method": "Frozen ResNet-50 image features followed by the fitted three-class head.",
+                "method": "Frozen ResNet-50 image features followed by the fitted class-balanced logistic-regression task head.",
                 "decision_basis": "Highest observed class score; no lesion-localization or morphology-attribution result is computed."}
     if backend == "mri":
         return {**common, "type": "segmentation_output",

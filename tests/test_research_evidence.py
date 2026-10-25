@@ -115,6 +115,15 @@ class EvidenceExtractionTests(unittest.TestCase):
         self.assertEqual(evaluation["recorded_ci95"], {"balanced_accuracy": [.6, .8]})
         self.assertIn("not patient", evaluation["ci_method"])
 
+    def test_neural_task_head_keeps_actual_classes_without_assuming_three(self):
+        model = classification_fixture()
+        model['backend'] = 'neural'
+        result = evidence_for(model, SHA)
+        self.assertEqual(result['evaluation']['class_order'], ['malignant', 'normal-benign'])
+        self.assertEqual(result['rationale']['type'], 'encoder_head_class_score')
+        self.assertNotIn('three-class', result['rationale']['method'])
+        self.assertFalse(result['rationale']['morphology_explanation_available'])
+
     def test_source_objects_are_unchanged_and_morphology_is_not_invented(self):
         model = classification_fixture(); before = copy.deepcopy(model)
         result = evidence_for(model, SHA)
