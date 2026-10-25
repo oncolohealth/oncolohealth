@@ -500,3 +500,11 @@ Unmerged review branch. Handoff and to-do list: [C-sebastian-handoff.md](docs/re
 - [x] Tests: 320 discovered; ML environment pass with 5 opt-in skips; plain Python 49 skips.
 - [~] Curriculum: capture code kept; the 37 Claude-written conversations were removed pending a decision on training with model-written answers.
 - [ ] Merge review; training-data authorship decision; encoder rights beyond inference; IMG000155/IMG000157; remaining near-duplicate ranks; subset label reviews; source-shift variant re-extraction; profile-editing and download QA.
+
+## Inam Qasimi: encoder-specialist review (2026-10-24, branch `inam/encoder-specialist-route-fix`)
+
+Unmerged branch on top of `sebastian/encoder-specialist` `b144a9a`. Review: [H-encoder-specialist-review.md](docs/reports/H-encoder-specialist-review.md).
+
+- [x] Review: the branch fast-forwards onto `origin/main` `15d79e2`. Plain Python (Linux, no torch or weights): 320 discovered, all pass, 49 skips; catalog valid. Real-weight results remain Sebastian's report, not reproduced here.
+- [x] Fixed review item 1: the `route` CLI and the experiment planner's `specialist_tools` path now block an adapter this process cannot load (`runnable_blockers(model, installed)`; the app's experiment preview passes the installed set). Two regressions; 322 discovered, all pass, 49 skips in plain Python.
+- [ ] Review items 2–3 (human confirmation of the same-image pair before `build_manifest` applies it; stale README sentence), then the real-weight rerun in a full ML environment before merge.
