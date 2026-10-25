@@ -1328,7 +1328,7 @@ function ago(ts) {
 function renderChatList() {
   const items = chat.list.map(c => `<li class="${c.id === chat.convo?.id ? "active" : ""}">
     <button type="button" class="chat-open" data-open="${esc(c.id)}"><span class="ct">${esc(c.title || "Untitled chat")}</span><span class="cw">${esc(ago(c.updated))}</span></button>
-    <button type="button" class="icon-x" data-forget="${esc(c.id)}" aria-label="Delete this chat">×</button></li>`).join("");
+    <button type="button" class="icon-x" data-forget="${esc(c.id)}" aria-label="${esc(`Delete chat: ${c.title || "Untitled chat"}`)}">×</button></li>`).join("");
   $("#chat-list").innerHTML = items || `<li class="empty-note">No saved chats yet.</li>`;
 }
 $("#chat-list").addEventListener("click", e => {
@@ -1584,7 +1584,7 @@ function renderAnswer(a, name, ti, last) {
     const usual = { detection: "usually 8–10 minutes on this PC's CPU", segmentation: "usually 20–30 seconds" }[running?.output_kind];
     const stage = running ? `Running the ${taskLabel(running)} model${usual ? `, ${usual}` : ""}`
       : !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking" : lastEv.type === "model" ? "Reading the results" : "Looking it up";
-    return `${resultCards(a.calls, key)}${renderSteps(a.calls, true, key)}<div class="thinking"><span class="shimmer">${stage}</span> <span class="elapsed" data-start="${a.started}">0 s</span></div>`;
+    return `${resultCards(a.calls, key)}${renderSteps(a.calls, true, key)}<div class="thinking"><span class="shimmer">${stage}</span> <span class="elapsed" data-start="${a.started}" aria-hidden="true">0 s</span></div>`;
   }
   if (a.stopped) return `${renderSteps(a.calls || [], false, key)}<div class="notice">Stopped before an answer was written.</div><div class="msg-actions">${retry}</div>`;
   if (a.error) {
@@ -1604,9 +1604,29 @@ function renderUserTurn(t, key) {
   const files = (t.attachments || []).map(x => `<div class="att">${x.media ? `<img src="${esc(mediaUrl(x.media))}" alt="">` : `<span class="att-kind">${esc(x.kind || "File")}</span>`}<span class="att-text"><span class="att-name">${esc(x.name)}</span>${x.task ? `<span class="att-task">${esc(x.task)}</span>` : ""}</span></div>`).join("");
   return `<div class="msg user${enter(key + "|u")}">${files ? `<div class="atts">${files}</div>` : ""}${t.q ? `<div class="bubble">${esc(t.q)}</div>` : ""}</div>`;
 }
+// The thread is rebuilt on every streamed token, so it is not a live region: screen readers would
+// re-read the whole conversation. #chat-status announces start and finish instead, and the focused
+// button is found again by its data-* attribute after each rebuild.
+function announce(text) {
+  const s = $("#chat-status");
+  s.textContent = "";
+  setTimeout(() => { s.textContent = text; }, 60);  // clear first so a repeated message is announced again
+}
+function focusSelector(node) {
+  const a = [...(node?.attributes || [])].find(x => x.name.startsWith("data-") && x.name !== "data-start" && x.name !== "data-w");
+  return a ? `${node.tagName.toLowerCase()}[${a.name}="${CSS.escape(a.value)}"]` : null;
+}
 function renderThread(toBottom = false) {
   const el = $("#chat-thread"), sc = $("#chat-scroll");
   const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+  const refocus = el.contains(document.activeElement) ? focusSelector(document.activeElement) : null;
+  el.setAttribute("aria-busy", String(chat.running.size > 0));
+  try { renderThreadBody(el); } finally {
+    if (refocus) el.querySelector(refocus)?.focus({ preventScroll: true });
+  }
+  if (toBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
+}
+function renderThreadBody(el) {
   const c = chat.convo;
   if (!c.turns.length) {
     const ready = !chat.loaded || chat.models.length > 0;  // no "set up a model" warning before profiles load
@@ -1641,7 +1661,6 @@ function renderThread(toBottom = false) {
     </div>`);
   }
   tickElapsed(); sizeBars(el);
-  if (toBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
 }
 async function demoStep() {
   const step = DEMO_STEPS[chat.demo?.i];
@@ -1759,8 +1778,11 @@ async function ask(question, names, { retryTurn = null, attached = [] } = {}) {
     return streamAnswer(n, turn.q, history, answer, turn.payload?.length ? turn.payload : undefined);
   });
   setBusy(true); renderThread(true); renderChatList();
+  announce(names.length > 1 ? `Asking ${names.length} models…` : "Answering…");
   await Promise.all(jobs);
   setBusy(false); saveChats(); renderChatList(); renderPickers(); renderProfiles(); renderThread();
+  const done = names.map(n => turn.answers[n]);
+  announce(done.some(a => a.stopped) ? "Answer stopped." : done.every(a => a.error) ? "The answer failed. A Retry button is below it." : "Answer ready.");
 }
 function setBusy(busy) {
   const b = $("#chat-send");
