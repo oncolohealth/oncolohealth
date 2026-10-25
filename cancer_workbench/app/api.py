@@ -684,10 +684,13 @@ def ask_stream(body: dict, emit) -> None:
 # ---------- progress ----------
 
 def research_state() -> dict:
-    return {"models": research.list_models(), "inputs": research.list_inputs(), "samples": research.samples(), "note": research.NOTE,
+    models = research.list_models()
+    ct_available = any(m.get("backend") == "ct" and m.get("available") for m in models)
+    return {"models": models, "inputs": research.list_inputs(), "samples": research.samples(), "note": research.NOTE,
             "unavailable": [
                 {"task":"mammography / CBIS-DDSM", "blocker":"No local trained mammography head/detector or reviewed input preprocessing is installed. The catalog/labels are not a classifier."},
-                {"task":"whole CT detection / LIDC-IDRI", "blocker":"A 28-voxel NoduleMNIST patch classifier is not a whole-scan detector. No verified local full-CT detection path is installed."},
+                *([{ "task":"whole CT detection / LIDC-IDRI", "blocker":"No verified full-scan detector is installed. A 28-voxel patch classifier is not a whole-scan detector."}] if not ct_available else []),
+                {"task":"arbitrary CT / DICOM preparation", "blocker":"Full-scan detection requires prepared HU NIfTI from a single regular CT series, explicit calibration and source thickness/spacing at most 2.5 mm. Arbitrary/mixed DICOM is not silently converted."},
                 {"task":"arbitrary MRI / DICOM-to-MRI preparation", "blocker":"The installed MONAI path accepts only declared, aligned 1 mm BraTS-style four-channel NIfTI in T1ce,T1,T2,FLAIR order. Single sequences, screenshots and arbitrary DICOM are not eligible; preparation/resampling is not inferred."},
                 {"task":"whole-slide pathology / PANDA / CAMELYON16 / TCGA", "blocker":"Patch tissue classification is not slide-level grading. No verified local tiling/aggregation head is installed."},
                 {"task":"structured blood / clinical profiles", "blocker":"The handoff contains clinical workflow/resource catalogs, not a trained CBC/profile classifier, fitted feature schema, units or labeled patient table. No prediction target/model can be inferred from that map."}
