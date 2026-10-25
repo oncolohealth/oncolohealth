@@ -27,6 +27,7 @@ def _catalog(argv: list[str]) -> int:
 
 
 def _route(argv: list[str]) -> int:
+    from .adapters.installed import installed_adapters
     from .registry import load_catalog
     from .routing import route_models
 
@@ -38,7 +39,9 @@ def _route(argv: list[str]) -> int:
     ap.add_argument("--spatial-dims", type=int)
     a = ap.parse_args(argv)
     inp = {k: v for k, v in (("channels", a.channels), ("spatial_dims", a.spatial_dims)) if v is not None}
-    print(json.dumps(route_models({"task": a.task, "modality": a.modality, "anatomy": a.anatomy, "input": inp}, load_catalog().models), indent=2))
+    models = load_catalog().models
+    print(json.dumps(route_models({"task": a.task, "modality": a.modality, "anatomy": a.anatomy, "input": inp}, models,
+                                  installed=set(installed_adapters(models))), indent=2))
     return 0
 
 

@@ -36,6 +36,16 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(result["state"], "blocked")
         self.assertTrue(any("adapter" in b for b in result["blockers"]))
 
+    def test_specialist_plan_blocks_an_adapter_this_process_cannot_load(self):
+        blocked = plan_experiment("specialist_tools", self.model, self.audit, self.budget, installed=set())
+        self.assertEqual(blocked["state"], "blocked")
+        self.assertIn("adapter 'synthetic' is not installed in this process", blocked["blockers"])
+        ready = plan_experiment("specialist_tools", self.model, self.audit, self.budget, installed={"synthetic"})
+        self.assertEqual(ready["state"], "ready_for_review")
+        # reuse-rights paths do not depend on what this process has installed
+        self.assertEqual(plan_experiment("transfer_learning", self.model, self.audit, self.budget, installed=set())["state"],
+                         "ready_for_review")
+
     def test_inference_rights_do_not_imply_adaptation_or_distillation_rights(self):
         model = dict(self.model, reuse_permissions={})
         for path in ("transfer_learning", "distillation"):

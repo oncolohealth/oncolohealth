@@ -377,7 +377,8 @@ def experiment_preview(body: dict) -> dict:
         audit["findings"].append({"severity": "error", "code": "missing_label", "detail": "Assigned rows lack reference labels. Review eligibility or mark exclusions explicitly."})
         audit["ready_for_training"] = False
     measured = {"used_bytes": budget.usage_bytes(), "planned_bytes": planned, "limit_bytes": budget.budget_bytes()}
-    plan = plan_experiment(body["reuse_path"], model, audit, measured)
+    installed = {SYNTHETIC_MODEL_RECORD["adapter"]} if synthetic else set(installed_adapters(load_catalog().models))
+    plan = plan_experiment(body["reuse_path"], model, audit, measured, installed)
     preview = {"question": question.strip(), "synthetic": synthetic, "manifest": identity, "audit": audit, "plan": plan,
                "note": "Draft only. The question is unreviewed. No weights, data, training or specialist execution is dispatched."}
     preview["execution_review"] = workspace.execution_review(preview)

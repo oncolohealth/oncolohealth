@@ -33,7 +33,9 @@ def compatibility_reasons(model: dict, request: dict) -> list[str]:
     return reasons
 
 
-def runnable_blockers(model: dict) -> list[str]:
+def runnable_blockers(model: dict, installed: set[str] | None = None) -> list[str]:
+    """Why `model` cannot run. `installed` is the set of adapter ids this process can
+    run; when given, a named but uninstalled adapter is a blocker too."""
     blockers = []
     if model.get("evidence_state") != EvidenceState.LOCALLY_REPRODUCED.value:
         blockers.append(f"evidence_state is {model.get('evidence_state')!r}, needs 'locally_reproduced'")
@@ -41,6 +43,8 @@ def runnable_blockers(model: dict) -> list[str]:
         blockers.append(f"inference_permission is {model.get('inference_permission')!r}, needs reviewed 'allowed'")
     if not model.get("adapter"):
         blockers.append("no adapter installed")
+    elif installed is not None and model["adapter"] not in installed:
+        blockers.append(f"adapter {model['adapter']!r} is not installed in this process")
     return blockers
 
 
@@ -60,8 +64,6 @@ def route_models(request: dict, models: list[dict], installed: set[str] | None =
         if reasons:
             rejected.append({"id": m["id"], "reasons": reasons})
         else:
-            blockers = runnable_blockers(m)
-            if installed is not None and m.get("adapter") and m["adapter"] not in installed:
-                blockers.append(f"adapter {m['adapter']!r} is not installed in this process")
+            blockers = runnable_blockers(m, installed)
             compatible.append({"id": m["id"], "runnable": not blockers, "blockers": blockers})
     return {"compatible": compatible, "rejected": rejected}

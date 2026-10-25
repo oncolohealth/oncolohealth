@@ -1,5 +1,10 @@
+import contextlib
+import io
+import json
 import unittest
+from unittest import mock
 
+from cancer_workbench.__main__ import main
 from cancer_workbench.adapters import SYNTHETIC_MODEL_RECORD, SyntheticThresholdAdapter, execute_specialist
 from cancer_workbench.common import ResultStatus
 from cancer_workbench.registry import load_catalog, validate_model
@@ -36,6 +41,20 @@ class RoutingTests(unittest.TestCase):
         res = route_models({"task": "brain_tumor_segmentation", "modality": "mri", "anatomy": "brain",
                             "input": {"channels": 4, "spatial_dims": 3}}, self.models)
         self.assertEqual([c["id"] for c in res["compatible"]], ["monai-brats-mri-segmentation"])
+
+    def test_route_cli_blocks_encoders_this_process_cannot_load(self):
+        # the CLI must not report the reviewed encoders runnable without torch or weights
+        argv = ["route", "--task", "feature_extraction", "--modality", "xray", "--anatomy", "bone"]
+        for installed, runnable in (({}, set()), ({"frozen-encoder:rad-dino": object()}, {"rad-dino"})):
+            with self.subTest(installed=sorted(installed)):
+                out = io.StringIO()
+                with mock.patch("cancer_workbench.adapters.installed.installed_adapters", return_value=installed), \
+                        contextlib.redirect_stdout(out):
+                    self.assertEqual(main(argv), 0)
+                res = json.loads(out.getvalue())
+                self.assertEqual({c["id"] for c in res["compatible"] if c["runnable"]}, runnable)
+                resnet = next(c for c in res["compatible"] if c["id"] == "resnet50-a1-in1k")
+                self.assertIn("adapter 'frozen-encoder:resnet50-a1-in1k' is not installed in this process", resnet["blockers"])
 
     def test_wrong_channels_rejected(self):
         res = route_models({"task": "brain_tumor_segmentation", "modality": "mri", "anatomy": "brain",

@@ -15,8 +15,12 @@ def _nonnegative_number(value) -> bool:
     return value >= 0 and (isinstance(value, int) or math.isfinite(value))
 
 
-def plan_experiment(path: str, model: dict, dataset_audit: dict | None = None, budget: dict | None = None) -> dict:
+def plan_experiment(path: str, model: dict, dataset_audit: dict | None = None, budget: dict | None = None,
+                    installed: set[str] | None = None) -> dict:
     """Return blocked or ready_for_review; neither state authorizes execution.
+
+    `installed` (adapter ids this process can run) makes an uninstalled
+    adapter a specialist_tools blocker, as in the router.
 
     Transfer/distillation rights are supplied as a reviewed overlay in
     model['reuse_permissions'][path] = {'status': 'allowed', 'evidence': '...'}.
@@ -35,7 +39,7 @@ def plan_experiment(path: str, model: dict, dataset_audit: dict | None = None, b
     if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", revision):
         blockers.append("model revision must be an immutable 40/64-character commit or digest")
     if path == "specialist_tools":
-        blockers.extend(runnable_blockers(model))
+        blockers.extend(runnable_blockers(model, installed))
     else:
         permissions = model.get("reuse_permissions", {})
         permission = permissions.get(path) if isinstance(permissions, dict) else None

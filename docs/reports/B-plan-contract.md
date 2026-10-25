@@ -16,7 +16,7 @@ scope are still needed.
 |---|---|
 | Path | `specialist_tools`, `transfer_learning` or `distillation`; unknown paths raise `ValueError` |
 | Identity | Nonempty model `id` and `acquisition.revision` containing a 40/64-character hexadecimal commit/digest; moving tags are blocked |
-| Specialist | Existing router's exact runnable checks: locally reproduced, reviewed allowed inference, installed adapter declaration |
+| Specialist | Existing router's exact runnable checks: locally reproduced, reviewed allowed inference, installed adapter declaration; given `installed` (the app passes it), the adapter must also be installed in this process |
 | Transfer/distillation | Recorded model access plus `reuse_permissions[path] = {"status": "allowed", "evidence": "review reference"}` |
 | Dataset | Positive row count, `ready_for_training: true`, well-formed findings, no errors, no unresolved-evidence or missing-patient warnings |
 | Storage | Explicit finite nonnegative `used_bytes`, `planned_bytes`, `limit_bytes`; their sum must fit |
