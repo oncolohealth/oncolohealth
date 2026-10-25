@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribute a model or dataset · OncoloHealth</title>
+<meta name="description" content="Share a cancer imaging model or dataset with the OncoloHealth catalog. Link your files; every contribution goes through the same license and audit checks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Fraunces:opsz,wght@9..144,300..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./">OncoloHealth</a>
+    <nav>
+      <a href="./#how">How it works</a>
+      <a href="./#honest">Evidence</a>
+      <a class="btn ghost" href="./">Back to home</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Contribute</p>
+      <h1 style="font-size:clamp(38px,5vw,64px)">Share a model or dataset <i>with every lab.</i></h1>
+      <p class="lede">Link your files: a zip, a Hugging Face page, a Zenodo or figshare record. Your contribution enters the catalog as <em>cataloged</em> and is held for review. It climbs the evidence ladder only when we reproduce it.</p>
+    </header>
+
+    <form class="card" id="contrib" data-type="model" novalidate>
+      <fieldset>
+        <legend>What are you sharing?</legend>
+        <div class="seg" role="radiogroup" aria-label="Contribution type">
+          <label><input type="radio" name="type" value="model" checked><span>A model</span></label>
+          <label><input type="radio" name="type" value="dataset"><span>A dataset</span></label>
+        </div>
+        <label>Name <input name="name" required placeholder="e.g. Lung nodule detector v2"></label>
+        <label>One-line summary <textarea name="summary" required placeholder="What it does or contains, and what it was trained or collected on."></textarea></label>
+        <label>Link to the files <small>https only: a zip, a model or dataset page, or a release</small>
+          <input name="link" type="url" required placeholder="https://zenodo.org/records/…/files/model.zip"></label>
+        <label>Paper or citation <small>optional, https (a DOI link works)</small>
+          <input name="citation" type="url" placeholder="https://doi.org/…"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Scan and body part</legend>
+        <div class="grid2">
+          <label>Scan type <small>comma-separated</small>
+            <input name="modality" required list="modalities" placeholder="ct, mri"></label>
+          <label>Body part <small>comma-separated</small>
+            <input name="anatomy" required list="anatomies" placeholder="lung"></label>
+        </div>
+        <datalist id="modalities"><option value="ct"><option value="mri"><option value="xray"><option value="mammography"><option value="ultrasound"><option value="pathology"><option value="dermoscopy"><option value="pet"><option value="endoscopy"></datalist>
+        <datalist id="anatomies"><option value="lung"><option value="brain"><option value="bone"><option value="breast"><option value="skin"><option value="prostate"><option value="liver"><option value="colon"><option value="any"></datalist>
+      </fieldset>
+
+      <fieldset class="only-model">
+        <legend>About the model</legend>
+        <div class="grid2">
+          <label>Kind
+            <select name="model_kind">
+              <option value="specialist">Specialist (classifies, detects or segments)</option>
+              <option value="encoder">Encoder (feature extractor)</option>
+              <option value="vlm">Vision-language model</option>
+              <option value="retrieval">Retrieval model</option>
+              <option value="coordinator">Coordinator (language model)</option>
+            </select></label>
+          <label>Tasks <small>comma-separated</small>
+            <input name="tasks" placeholder="detection, classification"></label>
+        </div>
+        <div class="grid2">
+          <label>Input <small>optional</small><input name="input" placeholder="3D CT volume, 1 channel"></label>
+          <label>Output <small>optional</small><input name="outputs" placeholder="boxes with scores"></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="only-dataset">
+        <legend>About the dataset</legend>
+        <div class="grid2">
+          <label>Images <small>optional</small><input name="images" inputmode="numeric" placeholder="1200"></label>
+          <label>Patients <small>optional</small><input name="patients" inputmode="numeric" placeholder="300"></label>
+        </div>
+        <label>Does every image carry a patient ID?
+          <select name="patient_ids">
+            <option value="yes">Yes, every image</option>
+            <option value="partial">Some images</option>
+            <option value="no">No</option>
+            <option value="unknown" selected>Not sure</option>
+          </select></label>
+        <label>Labels <small>optional</small><input name="labels" placeholder="benign / malignant, tumor boxes"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>License and access</legend>
+        <div class="grid2">
+          <label>License <small>SPDX id or name</small><input name="license_id" required placeholder="cc-by-4.0"></label>
+          <label>Access
+            <select name="access">
+              <option value="open">Open download</option>
+              <option value="registration">Free registration</option>
+              <option value="gated_auto">Gated, approved automatically</option>
+              <option value="gated_manual">Gated, approved by hand</option>
+              <option value="hosted_only">Hosted only (no download)</option>
+              <option value="unknown">Not sure</option>
+            </select></label>
+        </div>
+        <label>Commercial use
+          <select name="commercial">
+            <option value="">Not sure</option>
+            <option value="true">Allowed</option>
+            <option value="false">Not allowed</option>
+          </select></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>About you</legend>
+        <div class="grid2">
+          <label>Your name <input name="contributor_name" required autocomplete="name"></label>
+          <label>Lab or affiliation <small>optional</small><input name="affiliation" autocomplete="organization"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="rights_confirmed"> I may share this link, and the files are available under the license above.</label>
+        <label class="check"><input type="checkbox" name="no_identifiable"> The files contain no identifiable patient information.</label>
+      </fieldset>
+
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+        <button class="btn primary" type="submit" id="submit">Submit contribution</button>
+        <span class="status" id="status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <aside class="side" aria-label="Checklist">
+      <h3>Before it can go in</h3>
+      <ul class="todo" id="todo"></ul>
+      <p class="note">This is exactly the file the catalog checks. Maintainers run <code>python -m cancer_workbench catalog contribute</code> on it, which applies the same license, access and patient-ID rules as every record.</p>
+      <pre class="preview" id="preview"></pre>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div><b>OncoloHealth</b><br>Jordi Nieves · Sebastian Rueda-Villamil · Moshe Helman · Inam Qasimi</div>
+    <div>Research software, not a diagnostic device. We never host patient data.</div>
+  </div>
+</footer>
+<script src="config.js"></script>
+<script src="contribute.js"></script>
+</body>
+</html>
