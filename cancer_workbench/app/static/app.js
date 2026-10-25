@@ -28,16 +28,36 @@ function esc(v) {
 function md(s) {
   return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
-// Block markdown for model answers: headings, bullet/numbered lists, paragraphs, plus md()'s inline
-// formatting and *italics*. Escapes first, so model text can never inject HTML.
+// Block markdown for model answers: headings, bullet/numbered lists, tables, fenced code, paragraphs,
+// plus md()'s inline formatting, *italics* and http(s) links. Escapes first, so model text can never
+// inject HTML; links open in a new tab.
 function mdBlock(s) {
-  const inline = t => md(t).replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>");
+  const inline = t => md(t).replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const cells = l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
   const out = [];
   let list = null, para = [];
   const flushPara = () => { if (para.length) out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; };
   const closeList = () => { if (list) out.push(`</${list}>`); list = null; };
-  for (const raw of String(s ?? "").split(/\r?\n/)) {
-    const line = raw.trimEnd();
+  const lines = String(s ?? "").split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trimEnd();
+    if (/^\s*```/.test(line)) {
+      flushPara(); closeList();
+      const code = [];
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i]);
+      out.push(`<pre class="code"><code>${esc(code.join("\n"))}</code></pre>`);
+      continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
+      flushPara(); closeList();
+      const head = cells(line);
+      const rows = [];
+      for (i += 2; i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i]); i++) rows.push(cells(lines[i]));
+      i--;
+      out.push(`<div class="table-wrap"><table><thead><tr>${head.map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+      continue;
+    }
     const h = line.match(/^\s*#{1,6}\s+(.*)$/);
     const ul = line.match(/^(\s*)[-*+]\s+(.*)$/);
     const ol = line.match(/^(\s*)\d+[.)]\s+(.*)$/);
@@ -1100,40 +1120,116 @@ zone.addEventListener("drop", e => { e.preventDefault(); zone.classList.remove("
 loaders.images = () => guard(loadImages);
 
 /* ---------------- assistant ---------------- */
-const chat = { profiles: {}, defaultName: null, picked: new Set(), up: {}, turns: {}, histories: {}, editing: null };
+// One conversation at a time, saved in this browser. Each turn asks every chosen model; answers
+// stream in step by step (tool calls and their real results), then the final text.
+const CHATS_KEY = "cw-chats-v1";
+const MAX_CHATS = 40;
+const chat = {
+  profiles: {}, defaultName: null, editing: null,
+  status: {},          // profile -> "checking" | "up" | "down"
+  models: [],          // profiles answering new questions (first is the main one)
+  list: [],            // saved conversations, newest first
+  convo: null,         // { id, title, updated, turns: [{ q, answers: { name: answer } }], histories: { name: messages } }
+  running: new Map(),  // profile -> AbortController for the turn in flight
+};
+const CHAT_EXAMPLES = [
+  { title: "Find models", q: "Which models in the catalog can extract features from bone X-rays?" },
+  { title: "Check readiness", q: "Is RAD-DINO ready to run here? What is still missing?" },
+  { title: "Dataset terms", q: "What do we know about the PANDA prostate dataset, and can we use it commercially?" },
+  { title: "Licenses", q: "Find a pathology encoder and tell me its license." },
+];
+const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const cleanError = e => String(e).replace(/^\[[^\]]+\]\s*/, "").replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
+// The server only talks to model endpoints on this PC, so remote profiles are listed but not offered for chat.
+const isLocal = p => { try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(p.base_url).hostname); } catch { return false; } };
+const usable = p => p && !/REPLACE_WITH/.test(p.model || "") && isLocal(p);
+function parseArgs(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
+function newConvo() { return { id: `c${Date.now().toString(36)}`, title: "", updated: Date.now(), turns: [], histories: {} }; }
+
+/* ---- persistence (per-browser convenience; failures are ignored) ---- */
+function loadChats() {
+  try { chat.list = JSON.parse(localStorage.getItem(CHATS_KEY) || "[]").filter(c => c && c.id && Array.isArray(c.turns)); } catch { chat.list = []; }
+  // A reload interrupts any answer that was still running.
+  for (const c of chat.list) for (const t of c.turns) for (const a of Object.values(t.answers || {})) if (a.pending) Object.assign(a, { pending: false, stopped: true });
+}
+function saveChats() {
+  const c = chat.convo;
+  if (c && c.turns.length) {
+    c.updated = Date.now();
+    chat.list = [c, ...chat.list.filter(x => x.id !== c.id)].slice(0, MAX_CHATS);
+  }
+  try { localStorage.setItem(CHATS_KEY, JSON.stringify(chat.list)); } catch { /* storage full or blocked: chat still works */ }
+}
+
+/* ---- models ---- */
 async function loadProfiles() {
   const p = await api("/api/coordinator/profiles");
-  chat.profiles = p.profiles; chat.defaultName = p.default;
+  chat.profiles = p.profiles; chat.defaultName = p.default; chat.loaded = true;
   $("#config-file").innerHTML = p.is_local ? `Saved in <code>${esc(p.config_file)}</code>.` : `Showing the example config. Saving a model creates <code>configs/coordinator.json</code>.`;
-  if (!chat.picked.size && p.default) chat.picked.add(p.default);
-  for (const n of [...chat.picked]) if (!p.profiles[n]) chat.picked.delete(n);
-  renderProfiles(); renderColumns();
+  chat.models = chat.models.filter(n => usable(chat.profiles[n]));
+  if (!chat.models.length) {
+    const first = usable(p.profiles[p.default]) ? p.default : Object.keys(p.profiles).find(n => usable(p.profiles[n]));
+    if (first) chat.models = [first];
+  }
+  renderProfiles(); renderPickers(); renderThread();
+  chat.models.forEach(checkModel);
 }
-function renderProfiles() {
-  $("#profile-list").innerHTML = Object.entries(chat.profiles).map(([name, p]) => `
-    <li class="${chat.picked.has(name) ? "picked" : ""}">
-      <input type="checkbox" data-pick="${esc(name)}" ${chat.picked.has(name) ? "checked" : ""} aria-label="Use ${esc(name)}">
-      <span class="pname">${esc(name)}${name === chat.defaultName ? ' <span class="pill">default</span>' : ""}</span>
-      <span class="dot ${chat.up[name] === true ? "up" : chat.up[name] === false ? "down" : ""}" title="${chat.up[name] === true ? "Reachable" : chat.up[name] === false ? "Not reachable" : "Not tested"}"></span>
-      <span class="pmeta">${esc(p.model)}<br>${esc(p.base_url)}${p.base_url_env ? ` (or $${esc(p.base_url_env)})` : ""}</span>
-      <span class="pactions"><button class="linkish" data-ping="${esc(name)}">Test connection</button><button class="linkish" data-edit="${esc(name)}">Edit</button></span>
-    </li>`).join("");
+async function checkModel(name) {
+  if (!name || chat.status[name] === "checking") return;
+  chat.status[name] = "checking"; renderPickers(); renderProfiles();
+  try { chat.status[name] = (await api("/api/coordinator/ping", { profile: name })).ok ? "up" : "down"; }
+  catch { chat.status[name] = "down"; }
+  renderPickers(); renderProfiles();
 }
-$("#profile-list").addEventListener("change", e => {
-  const cb = e.target.closest("[data-pick]");
-  if (!cb) return;
-  cb.checked ? chat.picked.add(cb.dataset.pick) : chat.picked.delete(cb.dataset.pick);
-  renderProfiles(); renderColumns();
+const STATUS_TEXT = { up: "Ready", down: "Not reachable", checking: "Checking…" };
+function renderPickers() {
+  const options = sel => Object.entries(chat.profiles).filter(([, p]) => usable(p))
+    .map(([n]) => `<option value="${esc(n)}" ${n === sel ? "selected" : ""}>${esc(n)}${n === chat.defaultName ? " (default)" : ""}</option>`).join("");
+  const busy = chat.running.size > 0;
+  $("#model-pickers").innerHTML = chat.models.map((n, i) => {
+    const s = chat.status[n];
+    return `<span class="picker">
+      <span class="dot ${s === "up" ? "up" : s === "down" ? "down" : ""}" aria-hidden="true"></span>
+      <select data-model-slot="${i}" aria-label="${i ? "Compare with" : "Model"}" ${busy ? "disabled" : ""}>${options(n)}</select>
+      <span class="picker-status ${s || ""}">${s === "down" ? `<button type="button" class="linkish" data-recheck="${esc(n)}">Not reachable · retry</button>` : esc(STATUS_TEXT[s] || "")}</span>
+      ${i ? `<button type="button" class="icon-x" data-unpick="${i}" aria-label="Stop comparing with ${esc(n)}">×</button>` : ""}
+    </span>`;
+  }).join("") + (Object.values(chat.profiles).filter(usable).length > chat.models.length && chat.models.length < 3
+    ? `<button type="button" class="btn small" id="compare-add" ${busy ? "disabled" : ""}>Compare</button>` : "");
+}
+$("#model-pickers").addEventListener("change", e => {
+  const s = e.target.closest("[data-model-slot]");
+  if (!s) return;
+  const i = Number(s.dataset.modelSlot);
+  if (chat.models.includes(s.value) && chat.models[i] !== s.value) { toast(`${s.value} is already answering.`); renderPickers(); return; }
+  chat.models[i] = s.value;
+  renderPickers(); renderThread(); checkModel(s.value);
 });
+$("#model-pickers").addEventListener("click", e => {
+  const re = e.target.closest("[data-recheck]"), un = e.target.closest("[data-unpick]");
+  if (re) { chat.status[re.dataset.recheck] = null; checkModel(re.dataset.recheck); }
+  if (un) { chat.models.splice(Number(un.dataset.unpick), 1); renderPickers(); renderThread(); }
+  if (e.target.closest("#compare-add")) {
+    const next = Object.keys(chat.profiles).find(n => usable(chat.profiles[n]) && !chat.models.includes(n));
+    if (next) { chat.models.push(next); renderPickers(); renderThread(); checkModel(next); }
+  }
+});
+
+function renderProfiles() {
+  $("#profile-list").innerHTML = Object.entries(chat.profiles).map(([name, p]) => {
+    const s = chat.status[name], ok = usable(p);
+    return `<li class="${chat.models.includes(name) ? "picked" : ""}">
+      <span class="dot ${s === "up" ? "up" : s === "down" ? "down" : ""}" title="${esc(STATUS_TEXT[s] || "Not checked")}"></span>
+      <span class="pname">${esc(name)}${name === chat.defaultName ? ' <span class="pill">default</span>' : ""}${ok ? "" : !isLocal(p) ? ' <span class="pill">not on this PC</span>' : ' <span class="pill">not set up</span>'}</span>
+      <span class="pmeta">${esc(p.model)}<br>${esc(p.base_url)}${p.base_url_env ? ` (or $${esc(p.base_url_env)})` : ""}</span>
+      <span class="pactions">${ok ? `<button type="button" class="linkish" data-use="${esc(name)}">Use in chat</button><button type="button" class="linkish" data-ping="${esc(name)}">Test connection</button>` : ""}<button type="button" class="linkish" data-edit="${esc(name)}">Edit</button></span>
+    </li>`;
+  }).join("");
+}
 $("#profile-list").addEventListener("click", e => {
-  const ping = e.target.closest("[data-ping]"), edit = e.target.closest("[data-edit]");
-  if (ping) guard(async () => {
-    ping.textContent = "Testing…";
-    const r = await api("/api/coordinator/ping", { profile: ping.dataset.ping });
-    chat.up[ping.dataset.ping] = r.ok;
-    renderProfiles();
-    toast(r.ok ? `${ping.dataset.ping} is reachable. Models served: ${r.models.join(", ") || "none listed"}.` : r.error, !r.ok);
-  });
+  const ping = e.target.closest("[data-ping]"), edit = e.target.closest("[data-edit]"), use = e.target.closest("[data-use]");
+  if (ping) { chat.status[ping.dataset.ping] = null; checkModel(ping.dataset.ping).then(() => toast(chat.status[ping.dataset.ping] === "up" ? `${ping.dataset.ping} is reachable.` : `${ping.dataset.ping} is not reachable.`, chat.status[ping.dataset.ping] !== "up")); }
+  if (use) { if (!chat.running.size) { chat.models = [use.dataset.use]; renderPickers(); renderProfiles(); renderThread(); checkModel(use.dataset.use); showSideTab("chats"); } }
   if (edit) openProfileForm(edit.dataset.edit);
 });
 function openProfileForm(name) {
@@ -1162,89 +1258,235 @@ $("#profile-form").addEventListener("submit", e => {
   }
   const old = chat.editing ? chat.profiles[chat.editing] : {};
   const profile = { ...old, base_url: f.base_url.value.trim(), model: f.model.value.trim(), api_key_env: f.api_key_env.value.trim(), extra_body: extra, timeout_s: Number(f.timeout_s.value) || 120 };
-  api("/api/coordinator/profiles/save", { name: f.name.value.trim(), profile, make_default: f.make_default.checked })
-    .then(() => { f.hidden = true; toast("Model saved."); return loadProfiles(); })
+  const name = f.name.value.trim();
+  api("/api/coordinator/profiles/save", { name, profile, make_default: f.make_default.checked })
+    .then(() => { f.hidden = true; chat.status[name] = null; toast("Model saved."); return loadProfiles(); })
     .catch(err => ($("#profile-error").textContent = err.message));
 });
 $("#profile-delete").addEventListener("click", () => {
   if (!chat.editing || !confirm(`Delete the profile ${chat.editing}? This only removes it from configs/coordinator.json.`)) return;
-  api("/api/coordinator/profiles/delete", { name: chat.editing })
-    .then(() => { chat.picked.delete(chat.editing); $("#profile-form").hidden = true; toast("Model deleted."); return loadProfiles(); })
+  const gone = chat.editing;
+  api("/api/coordinator/profiles/delete", { name: gone })
+    .then(() => { chat.models = chat.models.filter(n => n !== gone); $("#profile-form").hidden = true; toast("Model deleted."); return loadProfiles(); })
     .catch(err => ($("#profile-error").textContent = err.message));
 });
 
-// Starter questions that the catalog tools can actually answer.
-const CHAT_EXAMPLES = [
-  "Which models in the catalog can extract features from bone X-rays?",
-  "Is RAD-DINO ready to run here? What is still missing?",
-  "What do we know about the PANDA prostate dataset, and can we use it commercially?",
-  "Find a pathology encoder and tell me its license.",
-];
-const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const cleanError = e => String(e).replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
-function parseArgs(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
+/* ---- sidebar: chats list ---- */
+function showSideTab(which) {
+  for (const t of document.querySelectorAll("[data-side-tab]")) t.setAttribute("aria-selected", String(t.dataset.sideTab === which));
+  $("#side-chats").hidden = which !== "chats";
+  $("#side-models").hidden = which !== "models";
+}
+document.querySelectorAll("[data-side-tab]").forEach(t => t.addEventListener("click", () => showSideTab(t.dataset.sideTab)));
+function ago(ts) {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+function renderChatList() {
+  const items = chat.list.map(c => `<li class="${c.id === chat.convo?.id ? "active" : ""}">
+    <button type="button" class="chat-open" data-open="${esc(c.id)}"><span class="ct">${esc(c.title || "Untitled chat")}</span><span class="cw">${esc(ago(c.updated))}</span></button>
+    <button type="button" class="icon-x" data-forget="${esc(c.id)}" aria-label="Delete this chat">×</button></li>`).join("");
+  $("#chat-list").innerHTML = items || `<li class="empty-note">No saved chats yet.</li>`;
+}
+$("#chat-list").addEventListener("click", e => {
+  const open = e.target.closest("[data-open]"), forget = e.target.closest("[data-forget]");
+  if (chat.running.size && (open || forget)) { toast("Wait for the answer, or press Stop first."); return; }
+  if (open) { chat.convo = chat.list.find(c => c.id === open.dataset.open) || newConvo(); renderChatList(); renderThread(true); $("#ask-form").question.focus(); }
+  if (forget) {
+    chat.list = chat.list.filter(c => c.id !== forget.dataset.forget);
+    if (chat.convo?.id === forget.dataset.forget) chat.convo = newConvo();
+    saveChats(); renderChatList(); renderThread(); toast("Chat deleted.");
+  }
+});
+$("#chat-new").addEventListener("click", () => {
+  if (chat.running.size) { toast("Wait for the answer, or press Stop first."); return; }
+  chat.convo = newConvo(); renderChatList(); renderThread(); $("#ask-form").question.focus();
+});
 
-// One plain-language line per tool call: what was asked and what actually came back.
+/* ---- describing tool calls in plain language ---- */
 function describeCall(c) {
-  const a = parseArgs(c.arguments), o = c.observed || {}, r = o.result;
-  if (o.error) return { bad: true, what: `${c.name.replace(/_/g, " ")}`, got: `Failed: ${cleanError(o.error)}` };
+  const a = parseArgs(c.arguments), o = c.observed, r = o?.result;
+  const done = o !== undefined;
+  const fail = done && o.error ? `Failed: ${cleanError(o.error)}` : null;
   switch (c.name) {
     case "search_catalog": {
       const hits = Array.isArray(r) ? r : [];
-      const scope = a.record_type ? `${a.record_type}s` : "catalog";
-      return { what: `Searched ${scope} for “${a.query || ""}”`,
-        got: hits.length ? `Found ${count(hits.length, "match", "matches")}: ${hits.slice(0, 3).map(h => h.name || h.id).join(", ")}${hits.length > 3 ? "…" : ""}` : "No matches" };
+      return { what: `Searching ${a.record_type ? `${a.record_type}s` : "the catalog"} for “${a.query || ""}”`, bad: !!fail,
+        got: fail || (!done ? "" : hits.length ? `Found ${count(hits.length, "match", "matches")}: ${hits.slice(0, 3).map(h => h.name || h.id).join(", ")}${hits.length > 3 ? "…" : ""}` : "No matches") };
     }
     case "get_record":
-      return { what: `Opened the record for ${r?.name || a.id}`,
-        got: [r?.evidence_state && `evidence ${r.evidence_state}`, r?.access && `access ${r.access}`].filter(Boolean).join(" · ") || "Record returned" };
+      return { what: `Opening the record for ${r?.name || a.id}`, bad: !!fail,
+        got: fail || (!done ? "" : [r?.evidence_state && `evidence: ${r.evidence_state}`, r?.access && `access: ${r.access}`].filter(Boolean).join(" · ") || "Record returned") };
     case "route_models": {
       const ok = r?.compatible || [], no = r?.rejected || [];
-      return { what: `Checked which models fit ${[a.task, a.modality, a.anatomy].filter(Boolean).join(" / ")}`,
-        got: `${count(ok.length, "compatible model")}, ${no.length} ruled out` };
+      return { what: `Checking which models fit ${[a.task, a.modality, a.anatomy].filter(Boolean).join(" / ").replace(/_/g, " ")}`, bad: !!fail,
+        got: fail || (!done ? "" : `${count(ok.length, "compatible model")}, ${no.length} ruled out`) };
     }
     case "run_specialist": {
-      const status = r?.status || "returned";
-      return { bad: ["rejected", "failed"].includes(status), what: `Asked ${a.model_id} to run`,
-        got: status === "ok" ? "Ran and returned outputs" : `${status[0].toUpperCase()}${status.slice(1)}${r?.errors?.length ? `: ${r.errors[0]}` : ""}` };
+      const status = r?.status;
+      return { what: `Asking ${a.model_id} to run`, bad: !!fail || ["rejected", "failed"].includes(status),
+        got: fail || (!done ? "" : status === "ok" ? "Ran and returned outputs" : `${(status || "returned").replace(/^./, ch => ch.toUpperCase())}${r?.errors?.length ? `: ${r.errors[0]}` : ""}`) };
     }
     default:
-      return { bad: ["rejected", "failed"].includes(r?.status), what: c.name.replace(/_/g, " "), got: r?.status || "Returned a result" };
+      return { what: c.name.replace(/_/g, " ").replace(/^./, ch => ch.toUpperCase()), bad: !!fail || ["rejected", "failed"].includes(r?.status),
+        got: fail || (!done ? "" : r?.status || "Done") };
   }
 }
+function friendlyError(name, err) {
+  const msg = cleanError(err), p = chat.profiles[name] || {};
+  if (/cannot reach|refused|timed out|10061|unreachable/i.test(msg))
+    return { title: `Couldn't reach ${name}`, body: `Nothing answered at ${p.base_url || "its server URL"}. Start that model server, then retry.`, detail: msg };
+  if (/requires a model endpoint on this PC/.test(msg))
+    return { title: "Only models on this PC can answer", body: `${name} points to a remote server. Research questions, inputs and results stay on this PC, so pick a local model.`, detail: msg };
+  const key = msg.match(/missing required credential environment variable '([^']+)'/);
+  if (key) return { title: `${name} needs an API key`, body: `Set ${key[1]} in the environment the workbench app runs in, then restart the app and retry.`, detail: msg };
+  if (/HTTP 4\d\d/.test(msg)) return { title: `${name} refused the request`, body: "The server answered with an error. Check the model name and settings in the Models tab.", detail: msg };
+  return { title: `${name} hit a problem`, body: "The answer could not be completed.", detail: msg };
+}
 
-function renderTurn(t, key) {
-  const q = `<div class="q">${esc(t.q)}</div>`;
-  if (t.pending) return `<div class="turn">${q}<div class="thinking">Working: looking things up and writing the answer · <span class="elapsed" data-start="${t.started}">0 s</span></div></div>`;
-  const r = t.result;
-  if (r.error) return `<div class="turn">${q}<div class="err">${esc(r.error)}</div></div>`;
+/* ---- rendering the conversation ---- */
+function renderSteps(calls, live) {
+  if (!calls.length) return "";
+  const d = calls.map(c => ({ c, ...describeCall(c) }));
+  const items = d.map(x => `<li class="${x.bad ? "bad" : x.c.observed === undefined ? "run" : "ok"}"><span class="what">${esc(x.what)}</span>${x.got ? `<span class="got">${esc(x.got)}</span>` : ""}
+    ${x.c.observed !== undefined && !live ? `<details class="raw"><summary>Raw call</summary><pre>arguments ${esc(x.c.arguments)}\n\nobserved ${esc(JSON.stringify(x.c.observed, null, 2))}</pre></details>` : ""}</li>`).join("");
+  if (live) return `<ol class="step-list live">${items}</ol>`;
+  const anyBad = d.some(x => x.bad);
+  return `<details class="steps${anyBad ? " bad" : ""}"><summary>${calls.length === 1 ? esc(d[0].what.replace(/^(\w+)ing\b/, m => ({ Searching: "Searched", Opening: "Opened", Checking: "Checked", Asking: "Asked" }[m] || m))) : `Checked ${count(calls.length, "source")}`}${anyBad ? " · something was refused or failed" : ""}</summary><ol class="step-list">${items}</ol></details>`;
+}
+function renderAnswer(a, name, ti, last) {
+  const retry = last ? `<button type="button" class="btn small" data-retry="${esc(name)}">Retry</button>` : "";
+  if (a.pending) {
+    const lastEv = a.events.at(-1);
+    const stage = !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking…" : lastEv.type === "model" ? "Reading the results…" : "Looking it up…";
+    return `${renderSteps(a.calls, true)}<div class="thinking">${stage} <span class="elapsed" data-start="${a.started}">0 s</span></div>`;
+  }
+  if (a.stopped) return `${renderSteps(a.calls, false)}<div class="notice">Stopped before an answer was written.</div><div class="msg-actions">${retry}</div>`;
+  if (a.error) {
+    const f = friendlyError(name, a.error);
+    return `<div class="error-card"><strong>${esc(f.title)}</strong><p>${esc(f.body)}</p><details><summary>Details</summary><pre>${esc(f.detail)}</pre></details>
+      <div class="msg-actions">${retry}<button type="button" class="btn small" data-goto-models>Open Models</button></div></div>`;
+  }
+  const r = a.result;
   const calls = r.steps.flatMap(s => s.tool_calls);
-  const latency = r.steps.reduce((a, s) => a + (s.latency_s || 0), 0);
-  const tokens = r.steps.reduce((a, s) => a + (s.usage?.total_tokens || 0), 0);
-  const described = calls.map(c => ({ c, ...describeCall(c) }));
-  const anyBad = described.some(d => d.bad);
-  const steps = calls.length ? `<details class="calls${anyBad ? " bad" : ""}"><summary>${calls.length === 1 ? esc(described[0].what) : `Checked ${count(calls.length, "source")}`}${anyBad ? " · something was refused or failed" : ""}</summary>
-      <ol class="call-list">${described.map(d => `<li class="${d.bad ? "bad" : ""}"><span class="what">${esc(d.what)}</span><span class="got">${esc(d.got)}</span>
-        <details class="raw"><summary>Raw call</summary><pre>arguments ${esc(d.c.arguments)}\n\nobserved ${esc(JSON.stringify(d.c.observed, null, 2))}</pre></details></li>`).join("")}</ol></details>` : "";
-  return `<div class="turn">${q}${steps}
-    <div class="a">${r.final ? mdBlock(r.final) : '<span class="err">Stopped after the step limit without a final answer.</span>'}</div>
-    <div class="meta">${r.final ? `<button type="button" class="btn small copy" data-copy="${esc(key)}">Copy</button>` : ""}<span>${count(calls.length, "tool call")} · ${latency.toFixed(1)} s${tokens ? ` · ${tokens} tokens` : ""}</span></div></div>`;
+  const secs = r.steps.reduce((x, s) => x + (s.latency_s || 0), 0);
+  const body = r.final ? `<div class="md">${mdBlock(r.final)}</div>${r.stopped === "response_limit" ? `<div class="notice">The answer reached the response length limit and may be cut off.</div>` : ""}`
+    : `<div class="notice">The model used all its steps without writing an answer. Try asking more specifically.</div>`;
+  return `${renderSteps(calls, false)}${body}
+    <div class="msg-actions">${r.final ? `<button type="button" class="btn small" data-copy="${ti}|${esc(name)}">Copy</button>` : ""}${retry}<span class="meta">${secs.toFixed(1)} s</span></div>`;
 }
-function renderColumns() {
-  const names = [...chat.picked];
-  const examples = `<div class="examples"><p>Try asking</p>${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x)}">${esc(x)}</button>`).join("")}</div>`;
-  if (!names.length) { $("#chat-columns").innerHTML = `<p class="empty">Tick one model to chat, or several to compare their answers side by side.</p>`; return; }
-  $("#chat-columns").innerHTML = names.map(n => `<div class="column"><div class="column-head"><strong>${esc(n)}</strong><span class="model">${esc(chat.profiles[n]?.model)}</span></div>
-    ${(chat.turns[n] || []).map((t, i) => renderTurn(t, `${i}|${n}`)).join("") || examples}</div>`).join("");
+function renderThread(toBottom = false) {
+  const el = $("#chat-thread"), sc = $("#chat-scroll");
+  const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
+  const c = chat.convo;
+  if (!c.turns.length) {
+    const ready = !chat.loaded || chat.models.length > 0;  // no "set up a model" warning before profiles load
+    el.innerHTML = `<div class="chat-hero">
+      <h2>What do you want to find out?</h2>
+      <p>Answers come from the workspace catalog and the specialists installed here. Every lookup the model makes is shown with its real result. To run a model on your own file, upload it on the <a href="#research">Research</a> screen first.</p>
+      ${ready ? "" : `<p class="warn-line">No model is set up yet. Add one in the <button type="button" class="linkish" data-goto-models>Models</button> tab.</p>`}
+      <div class="example-grid">${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x.q)}" ${ready ? "" : "disabled"}><span class="et">${esc(x.title)}</span><span class="eq">${esc(x.q)}</span></button>`).join("")}</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = c.turns.map((t, ti) => {
+    const names = Object.keys(t.answers), last = ti === c.turns.length - 1, multi = names.length > 1;
+    return `<div class="msg user"><div class="bubble">${esc(t.q)}</div></div>
+      <div class="msg bot${multi ? " multi" : ""}">${names.map(n => `<div class="answer">${multi || n !== chat.models[0] ? `<div class="answer-head">${esc(n)}</div>` : ""}${renderAnswer(t.answers[n], n, ti, last && !chat.running.size)}</div>`).join("")}</div>`;
+  }).join("");
   tickElapsed();
-  const last = [...document.querySelectorAll("#chat-columns .turn")].pop();
-  if (last) last.scrollIntoView({ block: "nearest" });
+  if (toBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
 }
-// Live elapsed time on pending turns; the request is one round trip, so this is the honest progress signal.
 function tickElapsed() {
-  document.querySelectorAll("#chat-columns .elapsed").forEach(el => { el.textContent = `${Math.round((Date.now() - Number(el.dataset.start)) / 1000)} s`; });
+  document.querySelectorAll("#chat-thread .elapsed").forEach(el => { el.textContent = `${Math.round((Date.now() - Number(el.dataset.start)) / 1000)} s`; });
 }
 setInterval(tickElapsed, 1000);
+
+/* ---- asking ---- */
+async function streamAnswer(name, question, history, answer) {
+  const ctl = new AbortController();
+  chat.running.set(name, ctl);
+  try {
+    const res = await fetch("/api/coordinator/ask/stream", {
+      method: "POST", signal: ctl.signal,
+      headers: { "X-CW-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ question, profile: name, history, synthetic_demo: $("#synthetic-demo").checked }),
+    });
+    if (!res.ok || !res.body) throw new Error((await res.json().catch(() => ({}))).error || `Request failed (${res.status})`);
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line) continue;
+        const ev = JSON.parse(line);
+        if (ev.type === "done") { Object.assign(answer, { pending: false }); if (ev.result.error) answer.error = ev.result.error; else answer.result = ev.result; }
+        else if (ev.type === "error") Object.assign(answer, { pending: false, error: ev.error });
+        else {
+          answer.events.push({ type: ev.type, step: ev.step });
+          if (ev.type === "tool_call") answer.calls.push({ name: ev.name, arguments: ev.arguments });
+          if (ev.type === "tool_result") { const c = answer.calls.findLast(x => x.name === ev.name && x.observed === undefined); if (c) c.observed = ev.observed; }
+        }
+        renderThread();
+      }
+    }
+    if (answer.pending) Object.assign(answer, { pending: false, error: "The connection closed before an answer arrived." });
+  } catch (err) {
+    if (ctl.signal.aborted) Object.assign(answer, { pending: false, stopped: true });
+    else Object.assign(answer, { pending: false, error: err.message });
+  } finally {
+    chat.running.delete(name);
+  }
+  if (answer.result) {
+    chat.convo.histories[name] = answer.result.messages;
+    chat.status[name] = "up";
+  } else if (answer.error && /cannot reach|refused|timed out/i.test(answer.error)) chat.status[name] = "down";
+  delete answer.events;  // progress only matters while running; keep saved chats small
+  if (answer.result) { delete answer.result.messages; delete answer.calls; }
+}
+async function ask(question, names, { retryTurn = null } = {}) {
+  const c = chat.convo;
+  const turn = retryTurn || { q: question, answers: {} };
+  if (!retryTurn) { c.turns.push(turn); if (!c.title) c.title = question.length > 60 ? `${question.slice(0, 57)}…` : question; }
+  const jobs = names.map(n => {
+    const prior = turn.answers[n]?.historyLen ?? (c.histories[n]?.length || 0);
+    const history = prior ? (c.histories[n] || []).slice(0, prior) : null;
+    const answer = turn.answers[n] = { pending: true, started: Date.now(), events: [], calls: [], historyLen: prior };
+    return streamAnswer(n, question, history, answer);
+  });
+  setBusy(true); renderThread(true); renderChatList();
+  await Promise.all(jobs);
+  setBusy(false); saveChats(); renderChatList(); renderPickers(); renderProfiles(); renderThread();
+}
+function setBusy(busy) {
+  const b = $("#chat-send");
+  b.textContent = busy ? "Stop" : "Send";
+  b.classList.toggle("stop", busy);
+  b.setAttribute("aria-label", busy ? "Stop the answer" : "Send");
+  renderPickers();
+}
+$("#ask-form").addEventListener("submit", e => {
+  e.preventDefault();
+  if (chat.running.size) { for (const ctl of chat.running.values()) ctl.abort(); return; }
+  const f = e.target, q = f.question.value.trim();
+  if (!q) { f.question.focus(); return; }
+  if (!chat.models.length) { toast("Add a model in the Models tab first.", true); showSideTab("models"); return; }
+  f.question.value = ""; growComposer();
+  ask(q, [...chat.models]);
+});
+const composer = $("#ask-form").question;
+function growComposer() { composer.style.height = "auto"; composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`; }
+composer.addEventListener("input", growComposer);
+composer.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!chat.running.size) $("#ask-form").requestSubmit(); }
+});
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch {
     const ta = Object.assign(document.createElement("textarea"), { value: text });
@@ -1252,42 +1494,23 @@ async function copyText(text) {
     const ok = document.execCommand("copy"); ta.remove(); return ok;
   }
 }
-$("#chat-columns").addEventListener("click", async e => {
-  const ex = e.target.closest("[data-example]");
-  if (ex) { const f = $("#ask-form"); f.question.value = ex.dataset.example; f.requestSubmit(); return; }
-  const cp = e.target.closest("[data-copy]");
+$("#chat-thread").addEventListener("click", async e => {
+  const ex = e.target.closest("[data-example]"), cp = e.target.closest("[data-copy]"), rt = e.target.closest("[data-retry]");
+  if (e.target.closest("[data-goto-models]")) { showSideTab("models"); return; }
+  if (ex && !chat.running.size) { ask(ex.dataset.example, [...chat.models]); return; }
+  if (rt && !chat.running.size) { const t = chat.convo.turns.at(-1); ask(t.q, [rt.dataset.retry], { retryTurn: t }); return; }
   if (cp) {
-    const cut = cp.dataset.copy.indexOf("|"), i = cp.dataset.copy.slice(0, cut), n = cp.dataset.copy.slice(cut + 1);
-    const final = chat.turns[n]?.[Number(i)]?.result?.final;
+    const cut = cp.dataset.copy.indexOf("|"), t = chat.convo.turns[Number(cp.dataset.copy.slice(0, cut))];
+    const final = t?.answers[cp.dataset.copy.slice(cut + 1)]?.result?.final;
     if (final && await copyText(final)) { cp.textContent = "Copied"; setTimeout(() => (cp.textContent = "Copy"), 1500); }
     else toast("Could not copy the answer.", true);
   }
 });
-$("#ask-form").addEventListener("submit", e => {
-  e.preventDefault();
-  const f = e.target, q = f.question.value.trim(), names = [...chat.picked];
-  if (!q) return;
-  if (!names.length) { toast("Tick at least one model first.", true); return; }
-  const btn = f.querySelector("button[type=submit]");
-  btn.disabled = true;
-  for (const n of names) (chat.turns[n] ||= []).push({ q, pending: true, started: Date.now() });
-  renderColumns();
-  f.question.value = "";
-  api("/api/coordinator/ask", { question: q, profiles: names, histories: chat.histories, synthetic_demo: f.synthetic_demo.checked })
-    .then(({ results }) => {
-      results.forEach((r, i) => {
-        const n = names[i], turn = chat.turns[n].findLast(t => t.pending);
-        Object.assign(turn, { pending: false, result: r });
-        if (r.messages) chat.histories[n] = r.messages;
-        if (r.error) chat.up[n] = false; else chat.up[n] = true;
-      });
-    })
-    .catch(err => { for (const n of names) { const t = chat.turns[n].findLast(t => t.pending); if (t) Object.assign(t, { pending: false, result: { error: err.message } }); } })
-    .finally(() => { btn.disabled = false; renderProfiles(); renderColumns(); });
-});
-$("#ask-form").question.addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("#ask-form").requestSubmit(); });
-$("#chat-reset").addEventListener("click", () => { chat.turns = {}; chat.histories = {}; renderColumns(); });
-loaders.assistant = () => guard(loadProfiles);
+
+loadChats();
+chat.convo = newConvo();
+renderChatList(); renderThread();
+loaders.assistant = () => guard(async () => { renderChatList(); await loadProfiles(); });
 
 /* ---------------- progress ---------------- */
 const NEXT_MARK = { " ": "~", "~": "x", "x": " " };
@@ -1534,7 +1757,7 @@ $("#research-reference-save").addEventListener("click",() => guard(async () => {
 $("#research-ask").addEventListener("click",() => {
   const model=selectedResearchModel(); if (!model) return;
   $("#ask-form textarea").value=`Run the installed specialist ${model.id} for ${model.task}, modality ${model.modality}, anatomy ${model.anatomy}, on uploaded input ${$("#research-input").value}. Use run_specialist with inputs containing only input_id. Explain the actual result and limits.`;
-  show("assistant"); $("#ask-form textarea").focus();
+  show("assistant"); growComposer(); $("#ask-form textarea").focus();
 });
 loaders.research = () => guard(loadResearch);
 

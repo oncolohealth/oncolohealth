@@ -339,16 +339,24 @@
       <!-- Assistant -->
       <section class="screen cols-2l" id="screen-assistant" hidden>
         <aside class="pane side">
-          <div class="pane-head"><span>Models</span><button class="btn small" id="profile-new">Add</button></div>
-          <div class="pane-body">
-            <p class="hint" id="config-file"></p>
+          <div class="pane-head side-tabs" role="tablist" aria-label="Assistant sidebar">
+            <button type="button" role="tab" class="side-tab" id="tab-chats" data-side-tab="chats" aria-selected="true" aria-controls="side-chats">Chats</button>
+            <button type="button" role="tab" class="side-tab" id="tab-models" data-side-tab="models" aria-selected="false" aria-controls="side-models">Models</button>
+          </div>
+          <div class="pane-body" id="side-chats" role="tabpanel" aria-labelledby="tab-chats">
+            <button type="button" class="btn primary block" id="chat-new">New chat</button>
+            <ul id="chat-list" class="chat-list" aria-label="Saved chats"></ul>
+            <p class="hint chat-list-note">Chats are saved in this browser only.</p>
+          </div>
+          <div class="pane-body" id="side-models" role="tabpanel" aria-labelledby="tab-models" hidden>
+            <div class="side-row"><p class="hint" id="config-file"></p><button type="button" class="btn small" id="profile-new">Add model</button></div>
             <ul id="profile-list" class="profile-list"></ul>
             <form id="profile-form" class="profile-form" hidden>
               <h3 id="profile-form-title">Add a model</h3>
-              <label>Name<input name="name" required pattern="[A-Za-z0-9._\-]+" placeholder="qwen-fp8-gpu"></label>
-              <label>Server URL<input name="base_url" required placeholder="http://gpu-box:8000/v1"></label>
-              <label>Model<input name="model" required placeholder="Qwen/Qwen3.8-27B-FP8"></label>
-              <label>API key variable <span class="opt">optional</span><input name="api_key_env" placeholder="CW_QWEN_API_KEY"></label>
+              <label>Name<input name="name" required pattern="[A-Za-z0-9._\-]+" placeholder="my-local-model"></label>
+              <label>Server URL<input name="base_url" required placeholder="http://127.0.0.1:8080/v1"></label>
+              <label>Model<input name="model" required placeholder="the name the server lists under /v1/models"></label>
+              <label>API key variable <span class="opt">optional</span><input name="api_key_env" placeholder="MY_MODEL_API_KEY"></label>
               <label>Extra request fields (JSON) <span class="opt">optional</span><textarea name="extra_body" rows="3" placeholder='{"chat_template_kwargs": {"enable_thinking": false}}'></textarea></label>
               <label>Timeout seconds<input name="timeout_s" type="number" min="5" value="120"></label>
               <label class="check"><input type="checkbox" name="make_default"> Use as default</label>
@@ -359,25 +367,23 @@
                 <button type="button" class="btn danger" id="profile-delete" hidden>Delete</button>
               </div>
             </form>
+            <label class="check dev-opt"><input type="checkbox" id="synthetic-demo"> Developer: add the synthetic test specialist (fake outputs) to new questions</label>
           </div>
         </aside>
-        <div class="pane center">
-          <div class="toolbar">
+        <div class="pane center chat-pane">
+          <div class="toolbar chat-bar">
             <h1>Assistant</h1>
-            <span class="toolbar-desc">Ask a research question in plain English. See the catalog checks and tool results behind the answer.</span>
+            <div class="model-pickers" id="model-pickers" aria-label="Models answering"></div>
           </div>
-          <div class="pane-body">
-            <p class="hint">Ask in plain English, or open <a href="#research">Research inference</a> to upload a supported input and run an available trained task. Use its stable input ID here so the Assistant can call the same local specialist. MRI, whole-slide and blood-profile tasks remain unavailable until their actual artifacts and pipelines pass verification.</p>
-            <div id="chat-columns" class="chat-columns"><p class="empty">Tick one model to chat, or several to compare their answers side by side.</p></div>
+          <div class="pane-body chat-scroll" id="chat-scroll">
+            <div id="chat-thread" class="chat-thread" aria-live="polite"></div>
           </div>
           <form id="ask-form" class="ask">
-            <textarea name="question" rows="2" placeholder="What can I do with a bone X-ray in this workspace?" required></textarea>
-            <div class="ask-row">
-              <label class="check"><input type="checkbox" name="synthetic_demo"> Include the synthetic test model</label>
-              <span class="hint kbd-hint">⌘/Ctrl + Enter to send</span>
-              <button type="button" class="btn" id="chat-reset">New conversation</button>
-              <button type="submit" class="btn primary">Ask</button>
+            <div class="composer">
+              <textarea name="question" rows="1" placeholder="Ask about models, datasets, or what can run here…" aria-label="Message"></textarea>
+              <button type="submit" class="btn primary send" id="chat-send">Send</button>
             </div>
+            <div class="ask-foot"><span>Enter to send · Shift+Enter for a new line</span><span>Research tool. Not for clinical decisions.</span></div>
           </form>
         </div>
       </section>

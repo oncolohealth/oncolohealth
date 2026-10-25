@@ -617,7 +617,8 @@ def ping(body: dict) -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def ask(body: dict) -> dict:
+def _question(body: dict) -> str:
+    """The user's text plus server-validated attachment context; raises if both are empty."""
     question = (body.get("question") or "").strip()
     attachments = body.get("attachments") or []
     if attachments:
@@ -625,39 +626,59 @@ def ask(body: dict) -> dict:
             question = (question or "Analyze the attached research input using its selected task.") + attachment_context(attachments)
         except (ValueError, OSError, KeyError) as exc:
             raise ApiError(str(exc)) from exc
-    names = body.get("profiles") or [None]
     if not question:
         raise ApiError("Type a question or attach a supported input first.")
+    return question
+
+
+def _ask_one(name: str | None, question: str, history: list | dict | None, synthetic: bool, cat, on_event=None) -> dict:
+    """One profile, one turn. `history` is that profile's prior messages, or a {profile: messages} map.
+    `on_event` (optional) hears each model call, tool call and observed result as it happens."""
+    local_models, local_adapters = research.tool_registration()
+    if synthetic:
+        local_adapters["synthetic-threshold"] = SyntheticThresholdAdapter()
+    box = default_toolbox(cat, local_adapters,
+                          extra_models=local_models + ([SYNTHETIC_MODEL_RECORD] if synthetic else []))
+    if local_models:
+        box.tools["list_uploaded_inputs"] = Tool("list_uploaded_inputs", "List actual locally uploaded input IDs and formats. Never includes reference labels.",
+                                               {"type":"object", "properties":{}}, lambda: research.list_inputs())
+    try:
+        prov = make_provider(name)
+        # Local specialist tools are registered even for text-only questions.
+        # Enforce the PC-only endpoint policy before any provider network call.
+        if hasattr(prov, "base_url"):
+            from urllib.parse import urlsplit
+            if urlsplit(str(prov.base_url)).hostname not in {"127.0.0.1", "localhost", "::1"}:
+                raise ProviderError("This workbench requires a model endpoint on this PC; external providers cannot receive research questions, inputs or specialist results.")
+        prior = history.get(prov.profile) if isinstance(history, dict) else history
+        history = guided_history(prior, synthetic=synthetic, specialists=local_models)
+        rec = run_turn(prov, box, question, history=history, on_event=on_event)
+        return {"profile": prov.profile, "model": prov.model, "final": rec.final, "stopped": rec.stopped,
+                "steps": rec.steps, "messages": rec.messages}
+    except (ProviderError, KeyError, ValueError) as e:
+        return {"profile": name, "error": str(e)}
+
+
+def ask(body: dict) -> dict:
+    question = _question(body)
+    names = body.get("profiles") or [None]
     histories = body.get("histories") or {}
     synthetic = bool(body.get("synthetic_demo"))
     cat = load_catalog()
 
     def one(name):
-        local_models, local_adapters = research.tool_registration()
-        if synthetic:
-            local_adapters["synthetic-threshold"] = SyntheticThresholdAdapter()
-        box = default_toolbox(cat, local_adapters,
-                              extra_models=local_models + ([SYNTHETIC_MODEL_RECORD] if synthetic else []))
-        if local_models:
-            box.tools["list_uploaded_inputs"] = Tool("list_uploaded_inputs", "List actual locally uploaded input IDs and formats. Never includes reference labels.",
-                                                   {"type":"object", "properties":{}}, lambda: research.list_inputs())
-        try:
-            prov = make_provider(name)
-            # Local specialist tools are registered even for text-only questions.
-            # Enforce the PC-only endpoint policy before any provider network call.
-            if hasattr(prov, "base_url"):
-                from urllib.parse import urlsplit
-                if urlsplit(str(prov.base_url)).hostname not in {"127.0.0.1", "localhost", "::1"}:
-                    raise ProviderError("This workbench requires a model endpoint on this PC; external providers cannot receive research questions, inputs or specialist results.")
-            history = guided_history(histories.get(prov.profile), synthetic=synthetic, specialists=local_models)
-            rec = run_turn(prov, box, question, history=history)
-            return {"profile": prov.profile, "model": prov.model, "final": rec.final, "stopped": rec.stopped,
-                    "steps": rec.steps, "messages": rec.messages}
-        except (ProviderError, KeyError, ValueError) as e:
-            return {"profile": name, "error": str(e)}
+        return _ask_one(name, question, histories, synthetic, cat)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(names))) as ex:
         return {"results": list(ex.map(one, names))}
+
+
+def ask_stream(body: dict, emit) -> None:
+    """One profile, streamed: progress events as the turn runs, then {"type": "done", "result": ...}.
+    `emit` raises when the browser has gone away, which stops the turn at the next step."""
+    result = _ask_one(body.get("profile"), _question(body), body.get("history"), bool(body.get("synthetic_demo")),
+                      load_catalog(), on_event=emit)
+    emit({"type": "done", "result": result})
 
 
 # ---------- progress ----------
@@ -743,3 +764,5 @@ POST_ROUTES = {
     "/api/experiments/preview": experiment_preview, "/api/experiments/save": experiment_save,
     "/api/experiments/record": experiment_record,
 }
+# Streamed endpoints: handler(body, emit) sends newline-delimited JSON events as they happen.
+STREAM_ROUTES = {"/api/coordinator/ask/stream": ask_stream}

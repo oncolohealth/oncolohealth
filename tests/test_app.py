@@ -181,6 +181,36 @@ class ServerGuardTests(unittest.TestCase):
             self.assertEqual(status, 404)
             self.assertIn("expired", json.loads(body)["error"])
 
+    def _post_stream(self, path, body, token="tok"):
+        req = urllib.request.Request(self.base + path, data=json.dumps(body).encode(), method="POST",
+                                     headers={"X-CW-Token": token, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.headers.get("Content-Type"), [json.loads(l) for l in r.read().splitlines() if l.strip()]
+        except urllib.error.HTTPError as e:
+            return e.code, None, []
+
+    def test_streamed_ask_sends_steps_then_the_answer(self):
+        from unittest import mock
+        from cancer_workbench.coordinator import ChatResult, ScriptedProvider, ToolCall
+
+        def provider(name):
+            calls = [ToolCall("c1", "search_catalog", json.dumps({"query": "rad-dino"}))]
+            p = ScriptedProvider([ChatResult(content=None, tool_calls=calls, finish_reason="tool_calls", model="m", profile="p"),
+                                  ChatResult(content="Found it.", tool_calls=[], finish_reason="stop", model="m", profile="p")], profile="p")
+            p.model = "m"
+            return p
+
+        self.assertEqual(self._post_stream("/api/coordinator/ask/stream", {"question": "x"}, token="nope")[0], 403)
+        with mock.patch.object(api, "make_provider", provider):
+            status, ctype, events = self._post_stream("/api/coordinator/ask/stream", {"question": "find rad-dino", "profile": "p"})
+        self.assertEqual((status, ctype), (200, "application/x-ndjson"))
+        self.assertEqual([e["type"] for e in events], ["model", "tool_call", "tool_result", "model", "done"])
+        self.assertEqual(events[2]["observed"]["result"][0]["id"], "rad-dino")
+        self.assertEqual(events[-1]["result"]["final"], "Found it.")
+        status, _, events = self._post_stream("/api/coordinator/ask/stream", {"question": "  "})
+        self.assertEqual((status, events), (200, [{"type": "error", "error": "Type a question or attach a supported input first."}]))
+
     def test_foreign_host_rejected(self):
         self.assertEqual(self._get("/", {"Host": "attacker.example:80"})[0], 421)
 

@@ -48,7 +48,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `coordinator/providers.py` | `OpenAICompatibleProvider` (any `/chat/completions` server), `ScriptedProvider` for tests | done |
 | `coordinator/config.py` | Named profiles from `configs/coordinator.json` or `configs/coordinator.example.json` | done |
 | `coordinator/tools.py` | `ToolBox` with argument validation; `default_toolbox`: `search_catalog`, `get_record`, `route_models`, `run_specialist` | done |
-| `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps` | done |
+| `coordinator/loop.py` | `run_turn`: model proposes tool calls, results are fed back, up to `max_steps`; optional `on_event` callback reports each model call, tool call and observed result as it happens | done |
 | `coordinator/evaluation.py`, `scripts/evaluate_coordinator.py` | Versioned public development workflows, observed trace checks, partial failure capture; offline scripted mode and explicitly selected live profile | done (live evaluation pending) |
 | `experiments/records.py` | `ExperimentRecord`, `JobState`, `REUSE_PATHS` | done (schema only) |
 | `experiments/plan.py` | `plan_experiment`: pure blocked/review-ready drafts; rights, audit, identity and storage gates | done (Experiments UI/API now connected; never executes) |
@@ -67,7 +67,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `evaluation/comparison.py` | Binary ROC-AUC/AP, paired patient-cluster bootstrap differences and invalid-draw accounting | done (stdlib; not wired into baseline) |
 | `retrieval/` | PubMed search + MedCPT rerank | stub (contract in docstring) |
 | `curriculum/` | Export reviewed tool-use transcripts | stub (contract in docstring) |
-| `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token (header for `/api/`, `?t=` for `/media/` images), 32 MB body cap | done |
+| `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token (header for `/api/`, `?t=` for `/media/` images), 32 MB body cap; `STREAM_ROUTES` answer as newline-delimited JSON events (the Assistant uses `/api/coordinator/ask/stream`), and a closed tab stops the turn | done |
 | `app/api.py` | JSON endpoints as plain functions; `GET_ROUTES`, `GET_PARAM_ROUTES`, `POST_ROUTES` | done |
 | `app/jobs.py` | `JobManager`: one background fetch at a time, progress, cancel | done |
 | `app/scoring.py` | `ScoringJobs`: one live UI scoring batch at a time, observed progress and partial results, latest-batch recovery after reload, bounded in-memory history | done |
