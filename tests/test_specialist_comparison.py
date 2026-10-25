@@ -2,7 +2,7 @@ import unittest
 from cancer_workbench.research.evidence import compare_reports
 
 def report(mid,accuracy,auc):
- return {'model_id':mid,'evaluation':{'scope':'local_sample_level_test','dataset':'synthetic','n':156,'class_order':['malignant','normal-benign'],
+ return {'model_id':mid,'evaluation':{'scope':'local_sample_level_test','dataset':'synthetic','n':156,
  'metrics':{'accuracy':accuracy,'roc_auc':auc},'per_class':{'malignant':{'recall':2/3}}}}
 
 class SpecialistComparisonTests(unittest.TestCase):
@@ -23,5 +23,11 @@ class SpecialistComparisonTests(unittest.TestCase):
   b['evaluation']['dataset']='synthetic';del b['evaluation']['metrics']['roc_auc']
   r=compare_reports([a,b],same_test_inputs=True)
   self.assertNotIn('roc_auc',r['differences_vs_first'][0]['metric_difference'])
+ def test_class_definitions_must_match_even_on_the_same_input_files(self):
+  a,b=report('old',.7,.8),report('new',.8,.9)
+  b['evaluation']['class_order']=['malignant','benign','normal']
+  r=compare_reports([a,b],same_test_inputs=True)
+  self.assertFalse(r['comparable_same_source_test'])
+  self.assertEqual(r['differences_vs_first'][0]['metric_difference'],{})
 
 if __name__=='__main__':unittest.main()
