@@ -2,7 +2,7 @@ import unittest
 from cancer_workbench.research.evidence import compare_reports
 
 def report(mid,accuracy,auc):
- return {'model_id':mid,'evaluation':{'scope':'local_sample_level_test','dataset':'synthetic','n':156,
+ return {'model_id':mid,'evaluation':{'scope':'local_sample_level_test','dataset':'synthetic','n':156,'class_order':['malignant','normal-benign'],
  'metrics':{'accuracy':accuracy,'roc_auc':auc},'per_class':{'malignant':{'recall':2/3}}}}
 
 class SpecialistComparisonTests(unittest.TestCase):
