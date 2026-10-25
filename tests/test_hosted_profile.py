@@ -124,6 +124,24 @@ class RedirectBoundaryTests(unittest.TestCase):
             provider.list_models()
         self.assertEqual(reached, [])
 
+    def test_requests_use_the_ipv6_to_ipv4_connection_fallback(self):
+        # networks that resolve AAAA but drop IPv6 would otherwise stall every call for the full timeout
+        import importlib
+        import socket
+        download = importlib.import_module("cancer_workbench.acquisition.download")  # the package exports a function of the same name
+        target = LocalServer({"/v1/models": lambda handler, body: (200, b'{"data": [{"id": "synthetic-model"}]}')})
+        self.addCleanup(target.close)
+        opened = []
+
+        def recording(address, timeout=None, *args, **kwargs):
+            opened.append(address)
+            return socket.create_connection(address, timeout)
+
+        with patch.object(download, "_create_connection", recording):
+            models = OpenAICompatibleProvider("fixture", target.url + "/v1", "synthetic").list_models()
+        self.assertEqual(models, ["synthetic-model"])
+        self.assertEqual(len(opened), 1)
+
     def test_same_origin_redirect_remains_supported(self):
         base = self.redirect_server("/v1/final-models")
         self.assertEqual(OpenAICompatibleProvider("fixture", base, "synthetic").list_models(), ["synthetic-model"])

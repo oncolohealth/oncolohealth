@@ -487,3 +487,11 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
 - [x] `main`, `origin/main` and `codex/research-integration-followup` all point at `2e3f759`, so PR #5's head is now main (fast-forward; no merge commit). `research/overnight-integration`, `research/gemma-26b-coordinator` and `research/experiment-readiness` have no commits that main lacks. The PR #5 "no merge performed" entry above describes the earlier checkpoint.
 - [x] Rechecked on `2e3f759`: **305 discovered**; ML environment 301 pass with 4 opt-in actual-weight skips; plain Python 257 pass, 48 skips. Catalog: 16 models, 17 datasets valid.
 - [x] Finding: all six caches in `runs/features/` are legacy (no measured-input binding), so both baseline runs and the source-shift run are replay-only and live scoring refuses them. A new exploratory baseline run with bound features is under way (next section).
+
+## Inam Qasimi: live Claude coordinator run (2026-10-24, branch `inam/coordinator-ipv6-fallback`)
+
+Branch on main `15d79e2`. Report: [D-claude-live-run.md](docs/reports/D-claude-live-run.md).
+
+- [x] Coordinator requests now use the download code's IPv6-to-IPv4 connection fallback; on a network that resolves IPv6 but drops it, Claude requests no longer hang for the full timeout. One regression; 306 discovered, all pass, 48 skips in plain Python.
+- [x] Claude Opus 5.5 ran live through the `claude-research` profile (hackathon API credits): one researcher workflow, 7 real tool calls, `run_specialist` rejection reported exactly; live suite `coordinator-development-v1` 6 of 6 cases pass. Traces and feedback are checked; answer quality is not scored. No medical inference.
+- [ ] Larger live suite, answer-quality review and timed researcher sessions; native Claude API path for production.

@@ -17,6 +17,8 @@ import urllib.request
 import urllib.parse
 from typing import Any, Protocol
 
+from ..acquisition.download import _HTTPHandler, _HTTPSHandler  # IPv6 -> IPv4 fallback on dead-IPv6 networks
+
 
 @dataclasses.dataclass
 class ToolCall:
@@ -109,7 +111,8 @@ class OpenAICompatibleProvider:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, method=method, headers=self._headers())
         try:
-            with urllib.request.build_opener(_SameOriginRedirects()).open(req, timeout=self.timeout_s) as r:
+            opener = urllib.request.build_opener(_SameOriginRedirects(), _HTTPHandler, _HTTPSHandler)
+            with opener.open(req, timeout=self.timeout_s) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:500]
