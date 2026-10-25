@@ -25,7 +25,7 @@ Nine catalog dataset directories now contain real files: BTXRD, BreastMNIST, Pat
 
 ## Verification and remaining work
 
-New relevant fixture suites pass:14research-runtime/eligibility,5MRI,5attachment and3guidance checks. The rebased core suite discovered335tests:237passed,94optional-dependency/opt-in skips,4setup errors because Windows denied symlink creation(WinError1314) in existing path-escape fixtures. The original failure logs are preserved; no all-suite-pass claim. Linux CI remains to be observed. JavaScript syntax and whitespace checks pass. The MRI source uses LF in `.gitattributes` to retain its pinned implementation hash across a Windows rebase.
+New relevant fixture suites pass:14research-runtime/eligibility,5MRI,5attachment and3guidance checks. The rebased core suite discovered335tests:237passed,94optional-dependency/opt-in skips,4setup errors because Windows denied symlink creation(WinError1314) in existing path-escape fixtures. The original failure logs are preserved; no all-suite-pass claim. All eight GitHub push/PR Ubuntu checks for Python3.11–3.14 subsequently passed before merge. JavaScript syntax and whitespace checks pass. The MRI source uses LF in `.gitattributes` to retain its pinned implementation hash across a Windows rebase.
 
 Current main3 checkpoints and all remote originals are protected. Main4 remains unpromoted. Main5v2 has437 reviewed constructed workflow rows, source-bound masks and preserved development exclusions; its input/launch ZIPs are local in Documents. It has not been submitted/trained because NPS is down. A major-checkpoint acceptance expansion must add MRI/attachment/streaming/result-kind checks, not claim an improvement from a larger rank or step count. No recurring schedule is active.
 
@@ -34,3 +34,9 @@ Current main3 checkpoints and all remote originals are protected. Main4 remains 
 Claude reports a fresh worktree frommain, another app port against the same local model, and a streaming JSON-lines endpoint. Its UI/streaming work remains separate. Preserve this branch's attachment context, loopback policy, shared `research.predict` path, reference isolation and response-limit semantics in the streaming endpoint. Do not duplicate specialist code or start another model server/training job. Detailed API contract: [Jordi-Claude-inference-handoff.md](Jordi-Claude-inference-handoff.md).
 
 All medical samples, weights, raw observation receipts and per-file provenance stay uncommitted in this PC's Documents/data/models/runs folders. Upstream credits and source-linked154-row resource register plus supplement are saved in Documents. MIT-related research/collaborators are attributed as upstream work; institutional endorsement is not implied.
+
+## Published and follow-up status
+
+PR#7 is merged as `0ec2045`; no branch protection or security controls were bypassed. A live structured JSON check exposed a payload/metadata filename collision; the correction and a byte-preserving regression were included before merge and verified against the main app afterward. The earlier failed receipt stays preserved.
+
+Main5 major-checkpointv3 now preserves the same437 reviewed training examples while expanding the bounded recipe to384steps/3000seconds and the required acceptance contract. Input ZIP138,772bytes SHA256 `b40ff0e119ec027da22c89a47b382573fc6de46ddc92577b6d4bac7a424f5292`; launch ZIP146,048bytes SHA256 `c6fe1eefc0ad15b608c2322b0e7ae8fbc60cd10904e3573f80cc33b808b1746d`. These are prepared local packages, not a trained checkpoint. Their snapshot predates the final JSON correction; refreshed source/acceptance checks after Claude's integration are mandatory before NPS execution. Current-source runtime checks must not be silently inferred from an older source-bound receipt.
