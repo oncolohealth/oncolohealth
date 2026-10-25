@@ -1178,7 +1178,9 @@ const DEMO_STEPS = [
 const cleanError = e => String(e).replace(/^\[[^\]]+\]\s*/, "").replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
 // The server only talks to model endpoints on this PC, so remote profiles are listed but not offered for chat.
 const isLocal = p => { try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(p.base_url).hostname); } catch { return false; } };
-const usable = p => p && !/REPLACE_WITH/.test(p.model || "") && isLocal(p);
+// Project rule: the base LLM must be US-developed, so Qwen-family profiles are listed but never offered.
+const excludedByRule = p => /qwen/i.test(`${p?.model || ""} ${p?.base_url_env || ""}`);
+const usable = p => p && !/REPLACE_WITH/.test(p.model || "") && isLocal(p) && !excludedByRule(p);
 function parseArgs(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
 function newConvo() { return { id: `c${Date.now().toString(36)}`, title: "", updated: Date.now(), turns: [], histories: {} }; }
 
@@ -1217,6 +1219,7 @@ async function checkModel(name) {
   const ping = async () => { try { return (await api("/api/coordinator/ping", { profile: name })).ok; } catch { return false; } };
   chat.status[name] = (await ping()) || (await new Promise(r => setTimeout(r, 2500)), await ping()) ? "up" : "down";
   renderPickers(); renderProfiles();
+  if (!chat.convo?.turns.length) renderThread();
 }
 const STATUS_TEXT = { up: "Ready", down: "Not reachable", checking: "Checking…" };
 function renderPickers() {
@@ -1257,7 +1260,7 @@ function renderProfiles() {
     const s = chat.status[name], ok = usable(p);
     return `<li class="${chat.models.includes(name) ? "picked" : ""}">
       <span class="dot ${s === "up" ? "up" : s === "down" ? "down" : ""}" title="${esc(STATUS_TEXT[s] || "Not checked")}"></span>
-      <span class="pname">${esc(name)}${name === chat.defaultName ? ' <span class="pill">default</span>' : ""}${ok ? "" : !isLocal(p) ? ' <span class="pill">not on this PC</span>' : ' <span class="pill">not set up</span>'}</span>
+      <span class="pname">${esc(name)}${name === chat.defaultName ? ' <span class="pill">default</span>' : ""}${ok ? "" : excludedByRule(p) ? ' <span class="pill">excluded: project rule</span>' : !isLocal(p) ? ' <span class="pill">not on this PC</span>' : ' <span class="pill">not set up</span>'}</span>
       <span class="pmeta">${esc(p.model)}<br>${esc(p.base_url)}${p.base_url_env ? ` (or $${esc(p.base_url_env)})` : ""}</span>
       <span class="pactions">${ok ? `<button type="button" class="linkish" data-use="${esc(name)}">Use in chat</button><button type="button" class="linkish" data-ping="${esc(name)}">Test connection</button>` : ""}<button type="button" class="linkish" data-edit="${esc(name)}">Edit</button></span>
     </li>`;
@@ -1612,6 +1615,11 @@ function renderThread(toBottom = false) {
       <h2>What do you want to find out?</h2>
       <p>Ask about models and datasets, or attach a scan or image and a local specialist will run on it. Every lookup and result is shown as it happens.</p>
       ${ready ? "" : `<p class="warn-line">No model is set up yet. Add one in the <button type="button" class="linkish" data-goto-models>Models</button> tab.</p>`}
+      ${ready && chat.models[0] && chat.status[chat.models[0]] === "down" ? `<div class="offline-card">
+        <strong>The local model isn’t answering</strong>
+        <p>Start the model server (see <code>docs/SETUP-local.md</code>, step 3), then retry. It serves one request at a time, so it may also just be busy.</p>
+        <div class="msg-actions"><button type="button" class="btn small" data-recheck-main>Retry</button><a class="btn small ghost" href="#research">Run a specialist without it</a></div>
+      </div>` : ""}
       <div class="example-grid">${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x.q)}" ${ready ? "" : "disabled"}><span class="et">${esc(x.title)}</span><span class="eq">${esc(x.q)}</span></button>`).join("")}</div>
       ${ready ? `<button type="button" class="demo-start" data-demo-start><span class="demo-dot"></span>Guided demo · ${DEMO_STEPS.length} steps</button>` : ""}
       ${samples.length ? `<div class="samples"><span class="samples-label">Try a sample</span>${samples.map(s => `<button type="button" class="sample" data-sample="${esc(s.input_id)}" data-sample-model="${esc(s.model_id)}">${esc(taskLabel(researchModel(s.model_id)))}</button>`).join("")}</div>` : ""}
@@ -1799,6 +1807,7 @@ async function copyText(text) {
 $("#chat-thread").addEventListener("click", async e => {
   const ex = e.target.closest("[data-example]"), cp = e.target.closest("[data-copy]"), rt = e.target.closest("[data-retry]"), sm = e.target.closest("[data-sample]");
   if (e.target.closest("[data-goto-models]")) { showSideTab("models"); return; }
+  if (e.target.closest("[data-recheck-main]")) { chat.status[chat.models[0]] = null; checkModel(chat.models[0]); return; }
   if (e.target.closest("[data-demo-start]") && !chat.running.size) { chat.convo = newConvo(); chat.demo = { i: 0 }; renderChatList(); demoStep(); return; }
   if (e.target.closest("[data-demo-next]")) { demoStep(); return; }
   if (e.target.closest("[data-demo-end]")) { chat.demo = null; renderThread(); return; }
