@@ -106,7 +106,7 @@ data/  models/        downloaded artifacts (gitignored), each with PROVENANCE.js
 | `default` | BTXRD, BreastMNIST, PathMNIST, NoduleMNIST3D, 3 LIDC series; ResNet-50, DINOv2-B, RAD-DINO, BiomedCLIP, MedCPT ×2, MONAI lung + BraTS bundles | ~5.3 GB |
 | `optional` | DermaMNIST (CC BY-NC), Phikon (non-commercial), MSD BrainTumour (7.6 GB) | ~9.1 GB |
 | `gated` | MedSigLIP, MedGemma-4B, UNI2-h, Virchow2, H-optimus-1. Accept terms on HF yourself, then `set -x HF_TOKEN ...` | ~22 GB |
-| `big_machine` | Qwen3.8-27B BF16 / FP8 (needs `--allow-big`) | 55.6 / 30.9 GB |
+| `big_machine` | None at present; the tier stays for weights too large for a laptop (needs `--allow-big`) | — |
 | `manual` | MURA, full LIDC, BraTS 2021, PANDA, CAMELYON16, ISIC, TCGA: registration or too large | instructions in record |
 
 Storage is unlimited by default. Set `CW_STORAGE_BUDGET_GB` to cap it; fetches and uploads then refuse to exceed the cap. Move storage with `CW_DATA_DIR` / `CW_MODELS_DIR`.

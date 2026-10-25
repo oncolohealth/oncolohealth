@@ -28,7 +28,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 
 - [x] Project layout, `pyproject.toml` (stdlib core; `ml`/`imaging`/`clip` extras pinned to exact versions checked 2026-10-23)
 - [x] Shared types: `ResultEnvelope`, `EvidenceState`, `Permission`, `ResultStatus`
-- [x] Catalog: 16 model and 14 dataset records, with revisions, sizes, gating and licenses checked against HF, Zenodo, figshare and TCIA APIs (17 dataset records since the 2026-10-24 subset work below)
+- [x] Catalog: 14 model records (16 before the two Qwen records were removed on 2026-10-25) and 14 dataset records, with revisions, sizes, gating and licenses checked against HF, Zenodo, figshare and TCIA APIs (17 dataset records since the 2026-10-24 subset work below)
 - [x] Catalog validation (`catalog validate`)
 - [x] Acquisition: resumable downloads verified against publisher checksums, optional storage cap (`CW_STORAGE_BUDGET_GB`, unlimited by default), cross-host token stripping, zip-slip-safe extraction, PROVENANCE.json per artifact
 - [x] Router: task/modality/anatomy/channels/dims checks; separate `runnable` verdict; never auto-selects
@@ -84,7 +84,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] Empty error-review template `docs/reports/F-error-review-template.csv` and subgroup policy in F protocol; no real cases reviewed
 
 ### D: Coordinator
-- [ ] 🔒 Live Qwen endpoint. Blocked on the GPU machine: confirm its VRAM to choose BF16 (~80 GB) or FP8 (~40–48 GB). See `docs/big-machine.md`
+- [x] ~~Live Qwen endpoint~~ dropped: Qwen was abandoned; the coordinator is Gemma 4 26B A4B (`docs/gemma-coordinator.md`)
 - [ ] Develop locally against a small model via an Ollama/LM Studio profile meanwhile
 - [x] Enforce coordinator tool argument types/enums and the documented nested schema subset before calling handlers (H source check); synthetic tests cover rejected values and unchanged valid arguments
 - [ ] Held-out workflow evaluation set: missing inputs, unknown models, catalog-only models, tool failures, unsupported requests, conflicting sources
@@ -129,7 +129,6 @@ Run `python3 -m cancer_workbench fetch list` for live status. Storage: unlimited
 | manual | registration / size; see each record's `instructions` |
 
 ## Open decisions (owner: project lead)
-- [ ] GPU machine VRAM → BF16 vs FP8 Qwen
 - [ ] BTXRD endpoint (A + B)
 - [ ] Fetch the optional tier? (non-commercial licenses; 7.6 GB brain MRI)
 - [ ] Which gated models to request access for (MedSigLIP is the doc's primary bone candidate)

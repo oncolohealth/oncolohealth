@@ -53,7 +53,7 @@ Researcher question or permitted input
     → results and reproducibility records
 ```
 
-The initial coordinator candidate is [Qwen3.8-27B](https://huggingface.co/Qwen/Qwen3.8-27B). Its card lists 27 billion language-model parameters and a separate vision encoder. It is a proposed choice, with no project deployment or adaptation yet. Its size does not establish cancer-detection accuracy. Keep the coordinator provider replaceable and compare candidates on actual research workflows, including tool selection, citations, errors, latency, and resource use.
+The selected coordinator is Gemma 4 26B A4B (see `docs/gemma-coordinator.md`). An earlier Qwen candidate was dropped; the base language model must be US-developed. Model size does not establish cancer-detection accuracy. Keep the coordinator provider replaceable and compare candidates on actual research workflows, including tool selection, citations, errors, latency, and resource use.
 
 Core responsibilities can be tools and services behind one coordinator; they do not each require a separate language model:
 
@@ -192,7 +192,7 @@ A small local Python foundation exists. It has no third-party runtime dependenci
 | Experiment planning | Three reuse paths, permission/evidence/profile blockers, explicit draft status | Real execution integration and enforcement |
 | Transfer/distillation | Local linear softmax classifiers on precomputed vectors; aligned teacher probabilities; held-out feature-row evaluation | Real encoder features, image-backbone adaptation, full image-model distillation, independent medical evaluation |
 
-There is no trained cancer model, completed application, live Qwen assistant, internet retrieval integration, real medical image ingestion, complete security boundary, or clinical validation. No real medical dataset or pretrained weights have been acquired for this project. The default registry is catalog-only.
+There is no trained cancer model, completed application, live hosted assistant, internet retrieval integration, real medical image ingestion, complete security boundary, or clinical validation. No real medical dataset or pretrained weights have been acquired for this project. The default registry is catalog-only.
 
 The source layout is:
 

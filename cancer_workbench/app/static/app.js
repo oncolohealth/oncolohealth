@@ -1178,7 +1178,7 @@ const DEMO_STEPS = [
 const cleanError = e => String(e).replace(/^\[[^\]]+\]\s*/, "").replace(/^[A-Za-z]+Error: /, "").replace(/^"(.*)"$/, "$1");
 // The server only talks to model endpoints on this PC, so remote profiles are listed but not offered for chat.
 const isLocal = p => { try { return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(p.base_url).hostname); } catch { return false; } };
-// Project rule: the base LLM must be US-developed, so Qwen-family profiles are listed but never offered.
+// Project rule: the base LLM must be US-developed. Qwen was dropped; this guard still hides any Qwen profile left in an older local config.
 const excludedByRule = p => /qwen/i.test(`${p?.model || ""} ${p?.base_url_env || ""}`);
 const usable = p => p && !/REPLACE_WITH/.test(p.model || "") && isLocal(p) && !excludedByRule(p);
 function parseArgs(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
