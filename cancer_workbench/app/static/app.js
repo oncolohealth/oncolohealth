@@ -94,7 +94,7 @@ $("#theme-toggle").addEventListener("click", () => {
 });
 
 /* ---------------- navigation ---------------- */
-const SCREENS = ["catalog", "downloads", "datasets", "images", "experiments", "assistant", "progress"];
+const SCREENS = ["catalog", "downloads", "datasets", "images", "experiments", "assistant", "progress", "research"];
 const loaders = {};
 function show(name) {
   if (!SCREENS.includes(name)) name = "catalog";
@@ -1465,6 +1465,78 @@ loaders.experiments = () => guard(async () => {
   experimentMode();
   await refreshExperimentHistory();
 });
+
+/* ---------------- local input-to-result research ---------------- */
+const researchUI = {models: [], inputs: [], results: []};
+function selectedResearchModel() { return researchUI.models.find(m => m.id === $("#research-model").value); }
+function researchModelDetail() {
+  const m = selectedResearchModel();
+  $("#research-run").disabled = !m || !$("#research-input").value;
+  $("#research-ask").disabled = $("#research-run").disabled;
+  $("#research-reference-label").innerHTML = (m?.classes || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  $("#research-model-detail").innerHTML = m ? `<h2>${esc(m.name)}</h2><p>${esc(m.modality)} · ${esc(m.anatomy)} · ${esc(m.task)}</p>
+    <p class="banner info">Exploratory research model. Class scores are not a diagnosis or clinically calibrated risk.</p>
+    <p>Accepted input formats: ${esc(m.formats.join(", "))}</p><ul>${m.limitations.map(s => `<li>${esc(s)}</li>`).join("")}</ul>
+    <details><summary>Preprocessing and trained artifact</summary><pre>${esc(JSON.stringify({preprocessing:m.preprocessing,training:m.training,license:m.license},null,2))}</pre></details>` : "<p>No verified trained artifact is available.</p>";
+}
+function renderResearchResult(result) {
+  const prediction = result.prediction;
+  $("#research-result").innerHTML = `<h2>${result.status === "ok" ? "Observed prediction" : "Run failed"}</h2>
+    ${result.error ? `<p class="banner err">${esc(result.error)}</p>` : ""}
+    ${prediction ? `<h3>${esc(prediction.class)}</h3><p>${esc(prediction.meaning)}</p>
+    ${Object.entries(prediction.scores).map(([label,score]) => `<p>${esc(label)}: ${(score*100).toFixed(2)}% <progress max="1" value="${Number(score)}"></progress></p>`).join("")}` : ""}
+    ${result.comparison ? `<p class="banner info">Separate reference: <strong>${esc(result.comparison.reference.label)}</strong>. ${result.comparison.matches ? "Matches" : "Does not match"} this reference.<br>${esc(result.comparison.reference.source)}<br>${esc(result.comparison.meaning)}</p>` : "<p class=\"hint\">No separate reference comparison is attached to this observation.</p>"}
+    <p>${esc(result.note)} Observed execution time: ${Number(result.seconds).toFixed(3)} s.</p>
+    <p>Observation ID: <code>${esc(result.id)}</code> · input: <code>${esc(result.input_id)}</code></p>
+    <details><summary>Complete saved observation and identities</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;
+}
+async function loadResearch() {
+  const [state,history] = await Promise.all([api("/api/research"),api("/api/research/results")]);
+  researchUI.models = state.models.filter(m => m.available); researchUI.inputs = state.inputs; researchUI.results = history.results;
+  for (const [selector,rows] of [["#research-input",state.inputs.map(i => [i.id,`${i.original_name} · ${i.format} · ${i.id.slice(0,12)}`])],
+    ["#research-model",researchUI.models.map(m => [m.id,m.name])]]) {
+    const el = $(selector), prior = el.value;
+    el.innerHTML = `<option value="">Select…</option>` + rows.map(([id,name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join("");
+    if (rows.some(([id]) => id === prior)) el.value = prior;
+    else if (rows.length === 1) el.value = rows[0][0];
+  }
+  $("#research-blockers").innerHTML = [...state.unavailable,...state.models.filter(m => !m.available).map(m => ({task:m.name,blocker:m.blocker}))]
+    .map(m => `<p><strong>${esc(m.task)}</strong><br>${esc(m.blocker)}</p>`).join("");
+  $("#research-history").innerHTML = history.results.length ? history.results.map((r,i) => `<p><button type="button" class="btn small" data-observation="${i}">${esc(r.model_id)} · ${esc(r.status)} · ${esc(r.id.slice(0,10))}</button></p>`).join("") : "<p>No observations yet.</p>";
+  $$("[data-observation]",$("#research-history")).forEach(b => b.addEventListener("click",() => renderResearchResult(researchUI.results[Number(b.dataset.observation)])));
+  researchModelDetail();
+}
+$("#research-model").addEventListener("change",researchModelDetail);
+$("#research-input").addEventListener("change",researchModelDetail);
+$("#research-refresh").addEventListener("click",() => guard(loadResearch));
+$("#research-file").addEventListener("change",() => guard(async () => {
+  const file = $("#research-file").files[0]; if (!file) return;
+  if (file.size > 128000000) throw new Error("Research inputs are limited to 128 MB.");
+  $("#research-upload-status").textContent = `Validating and storing ${file.name}…`;
+  try {
+    const data = await new Promise((resolve,reject) => {const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=reject;reader.readAsDataURL(file);});
+    const item = await api("/api/research/upload",{name:file.name,data});
+    await loadResearch(); $("#research-input").value=item.id; researchModelDetail();
+    $("#research-upload-status").textContent=`Stored ${item.format}. Stable input ID: ${item.id}. Choose its task and run the model.`;
+  } catch (e) {$("#research-upload-status").textContent=e.message; throw e;}
+}));
+$("#research-form").addEventListener("submit",event => {event.preventDefault();guard(async () => {
+  $("#research-run").disabled=true; $("#research-status").textContent="Running the actual local model. The result and any failure will be saved…";
+  try { const result=await api("/api/research/run",{model_id:$("#research-model").value,input_id:$("#research-input").value});
+    renderResearchResult(result); $("#research-status").textContent=`Saved ${result.status} observation.`; await loadResearch();
+  } catch (e) {$("#research-status").textContent=e.message;throw e;} finally {researchModelDetail();}
+});});
+$("#research-reference-save").addEventListener("click",() => guard(async () => {
+  const ref=await api("/api/research/reference",{input_id:$("#research-input").value,model_id:$("#research-model").value,
+    label:$("#research-reference-label").value,source:$("#research-reference-source").value});
+  $("#research-reference-status").textContent=`Saved separate reference: ${ref.label}. Run again to obtain a new observed comparison.`;
+}));
+$("#research-ask").addEventListener("click",() => {
+  const model=selectedResearchModel(); if (!model) return;
+  $("#ask-form textarea").value=`Run the installed specialist ${model.id} for ${model.task}, modality ${model.modality}, anatomy ${model.anatomy}, on uploaded input ${$("#research-input").value}. Use run_specialist with inputs containing only input_id. Explain the actual result and limits.`;
+  show("assistant"); $("#ask-form textarea").focus();
+});
+loaders.research = () => guard(loadResearch);
 
 /* ---------------- boot ---------------- */
 guard(async () => {
