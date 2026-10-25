@@ -1576,7 +1576,11 @@ function renderAnswer(a, name, ti, last) {
   const retry = last ? `<button type="button" class="btn ghost small" data-retry="${esc(name)}">Retry</button>` : "";
   if (a.pending) {
     const lastEv = a.events.at(-1);
-    const stage = !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking" : lastEv.type === "model" ? "Reading the results" : "Looking it up";
+    // A specialist that is known to be slow says so, so a long wait doesn't look like a hang.
+    const running = a.calls.at(-1)?.observed === undefined && a.calls.at(-1)?.name === "run_specialist" ? researchModel(parseArgs(a.calls.at(-1).arguments).model_id) : null;
+    const usual = { detection: "usually 8–10 minutes on this PC's CPU", segmentation: "usually 20–30 seconds" }[running?.output_kind];
+    const stage = running ? `Running the ${taskLabel(running)} model${usual ? `, ${usual}` : ""}`
+      : !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking" : lastEv.type === "model" ? "Reading the results" : "Looking it up";
     return `${resultCards(a.calls, key)}${renderSteps(a.calls, true, key)}<div class="thinking"><span class="shimmer">${stage}</span> <span class="elapsed" data-start="${a.started}">0 s</span></div>`;
   }
   if (a.stopped) return `${renderSteps(a.calls || [], false, key)}<div class="notice">Stopped before an answer was written.</div><div class="msg-actions">${retry}</div>`;
