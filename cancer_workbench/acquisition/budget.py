@@ -1,4 +1,4 @@
-"""Local storage budget for datasets + model weights (default 40 GB, CW_STORAGE_BUDGET_GB overrides)."""
+"""Local storage accounting for datasets + model weights. Unlimited unless CW_STORAGE_BUDGET_GB sets a cap."""
 from __future__ import annotations
 
 import os
@@ -6,11 +6,11 @@ from pathlib import Path
 
 from ..common.paths import DATA_DIR, MODELS_DIR
 
-DEFAULT_BUDGET_GB = 40.0
 
-
-def budget_bytes() -> int:
-    return int(float(os.environ.get("CW_STORAGE_BUDGET_GB", DEFAULT_BUDGET_GB)) * 1e9)
+def budget_bytes() -> int | None:
+    """The optional cap in bytes, or None when storage is unlimited (the default)."""
+    raw = os.environ.get("CW_STORAGE_BUDGET_GB", "").strip()
+    return int(float(raw) * 1e9) if raw else None
 
 
 def usage_bytes(*roots: Path) -> int:
@@ -22,7 +22,11 @@ def usage_bytes(*roots: Path) -> int:
     return total
 
 
-def check(planned_bytes: int) -> tuple[bool, int, int]:
-    """Return (fits, currently_used, budget)."""
+def describe(cap: int | None) -> str:
+    return "no limit" if cap is None else f"{cap / 1e9:.0f} GB"
+
+
+def check(planned_bytes: int) -> tuple[bool, int, int | None]:
+    """Return (fits, currently_used, budget); budget is None and fits is True when unlimited."""
     used, budget = usage_bytes(), budget_bytes()
-    return used + planned_bytes <= budget, used, budget
+    return budget is None or used + planned_bytes <= budget, used, budget

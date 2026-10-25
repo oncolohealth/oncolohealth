@@ -62,6 +62,12 @@ class PlanTests(unittest.TestCase):
                        dict(self.budget, planned_bytes=float("nan")), dict(self.budget, limit_bytes=True)):
             with self.subTest(budget=budget):
                 self.assertEqual(self.plan(budget=budget)["state"], "blocked")
+        self.assertEqual(self.plan(budget={k: v for k, v in self.budget.items() if k != "limit_bytes"})["state"], "blocked")
+
+    def test_null_limit_means_no_cap(self):
+        result = self.plan(budget=dict(self.budget, planned_bytes=10**15, limit_bytes=None))
+        self.assertEqual(result["state"], "ready_for_review")
+        self.assertIsNone(result["budget"]["limit_bytes"])
 
 
 if __name__ == "__main__":

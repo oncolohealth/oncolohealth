@@ -38,7 +38,7 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `acquisition/subsets.py` | Choose part of a source: whole groups by seeded sample (skipping groups on disk) or by ID; cached listings; checklist summaries | done |
 | `acquisition/download.py` | Resumable download, checksum verification, safe zip extraction, cross-host auth stripping, IPv6/IPv4 fallback with short connect timeouts | done |
 | `acquisition/fetch.py` | Plan/fetch catalog records, write `PROVENANCE.json`; `fetch` CLI | done |
-| `acquisition/budget.py` | Storage budget (40 GB default, `CW_STORAGE_BUDGET_GB`) | done |
+| `acquisition/budget.py` | Storage usage; optional cap via `CW_STORAGE_BUDGET_GB` (unlimited by default) | done |
 | `datasets/manifest.py` | Manifest CSV contract (`FIELDS`, `PARTITIONS`), read/write | done |
 | `datasets/audit.py` | `audit_dataset`: leakage, missing patient ids, labels, file integrity | done (no pixel/near-duplicate checks) |
 | `datasets/splits.py` | `grouped_split`: deterministic, group-preserving, label-stratified | done |

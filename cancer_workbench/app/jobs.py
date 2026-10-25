@@ -63,7 +63,7 @@ class JobManager:
             fits, used, cap = budget.check(planned)
             if not fits:
                 job["state"] = "failed"
-                log(f"Over budget: {planned / 1e9:.2f} GB planned, {used / 1e9:.2f} of {cap / 1e9:.0f} GB used.")
+                log(f"Over budget: {planned / 1e9:.2f} GB planned, {used / 1e9:.2f} GB used of {budget.describe(cap)}.")
                 return
             job["state"] = "running"
             for item, rec, row in zip(job["items"], records, rows):

@@ -103,12 +103,14 @@ async function loadCatalog() {
 async function loadStorage() {
   const s = await api("/api/storage");
   state.storage = s;
-  const pct = Math.min(100, (s.used / s.budget) * 100);
-  $("#storage-text").textContent = `${fmtBytes(s.used)} of ${fmtBytes(s.budget)}`;
+  const capped = s.budget != null;
+  const pct = capped ? Math.min(100, (s.used / s.budget) * 100) : 0;
+  $("#storage-text").textContent = capped ? `${fmtBytes(s.used)} of ${fmtBytes(s.budget)}` : `${fmtBytes(s.used)} used`;
   $("#storage-fill").style.width = `${pct}%`;
   $("#budget-fill").style.width = `${pct}%`;
+  $$("#storage-meter .meter-track, .budget-band .meter-track").forEach(t => { t.style.display = capped ? "" : "none"; });
   $("#budget-used").textContent = fmtBytes(s.used);
-  $("#budget-of").textContent = `used of ${fmtBytes(s.budget)} budget`;
+  $("#budget-of").textContent = capped ? `used of ${fmtBytes(s.budget)} budget` : "used · no storage limit";
   const hf = $("#hf-state");
   hf.className = `status-item token-state ${s.hf_token ? "ok" : "no"}`;
   hf.textContent = s.hf_token ? "Hugging Face token set" : "No Hugging Face token";
@@ -457,6 +459,10 @@ function updateSelection() {
   $("#dl-plan").disabled = !ids.length;
   const s = state.storage;
   if (!s) return;
+  if (s.budget == null) {
+    $("#budget-hint").textContent = !ids.length ? "Select items to see how much they add." : `After this download: about ${fmtBytes(s.used + bytes)} used.`;
+    return;
+  }
   const plan = $("#budget-plan");
   const usedPct = Math.min(100, (s.used / s.budget) * 100);
   plan.style.left = `${usedPct}%`;
@@ -464,7 +470,7 @@ function updateSelection() {
   const over = s.used + bytes > s.budget;
   plan.classList.toggle("over", over);
   $("#budget-hint").textContent = !ids.length ? "Select items to see how much they add." :
-    over ? `This selection would go ${fmtBytes(s.used + bytes - s.budget)} over budget. Raise CW_STORAGE_BUDGET_GB or pick fewer items.` :
+    over ? `This selection would go ${fmtBytes(s.used + bytes - s.budget)} over budget. Raise or unset CW_STORAGE_BUDGET_GB, or pick fewer items.` :
     `After this download: about ${fmtBytes(s.used + bytes)} of ${fmtBytes(s.budget)}.`;
 }
 $("#tiers").addEventListener("change", e => {
@@ -496,7 +502,7 @@ $("#dl-plan").addEventListener("click", () => guard(async () => {
   const p = await api("/api/fetch/plan", { ids, subsets: subsetFor(ids) });
   const sel = r => r.selection ? `, ${r.selection.groups.length} ${plural(state.byId[r.id]?.acquisition?.subset?.unit)}` : "";
   $("#dl-plan-result").innerHTML = `<div class="plan-box">
-    <strong>${fmtBytes(p.total)} to download.</strong> ${p.fits ? "Fits the budget." : "Over budget: the download will be refused."}
+    <strong>${fmtBytes(p.total)} to download.</strong> ${p.budget == null ? "" : p.fits ? "Fits the budget." : "Over budget: the download will be refused."}
     <ul>${p.rows.map(r => `<li>${esc(state.byId[r.id]?.name || r.id)}: ${r.error ? `<span class="state blocked">blocked</span> ${esc(r.error)}` : `${r.files.length} files${esc(sel(r))}, ${fmtBytes(r.bytes)}${r.files.some(f => f.integrity === "trust_on_first_use") ? " (no publisher checksum; hashed on arrival)" : ""}`}</li>`).join("")}</ul></div>`;
 }));
 $("#dl-start").addEventListener("click", () => guard(async () => {
@@ -1273,7 +1279,7 @@ function renderExperimentPreview(d) {
     <p>${p.state === "blocked" ? "Resolve these blockers before progressing the experiment." : "This draft is ready for protocol review. It does not authorize execution."}</p>
     <dl class="experiment-facts"><dt>Model</dt><dd>${esc(p.model_id)}</dd><dt>Reuse path</dt><dd>${esc(PATH_NAMES[p.path])}</dd>
       <dt>Dataset</dt><dd>${esc(d.audit.dataset_id)} · ${d.audit.rows} rows</dd><dt>Manifest identity</dt><dd class="mono">${esc(d.manifest.sha256)}</dd>
-      <dt>Storage reservation</dt><dd>${fmtBytes(p.budget.planned_bytes)} additional · ${fmtBytes(p.budget.used_bytes)} used of ${fmtBytes(p.budget.limit_bytes)}</dd></dl>
+      <dt>Storage reservation</dt><dd>${fmtBytes(p.budget.planned_bytes)} additional · ${fmtBytes(p.budget.used_bytes)} used${p.budget.limit_bytes == null ? "" : ` of ${fmtBytes(p.budget.limit_bytes)}`}</dd></dl>
     ${p.blockers.length ? `<h3>Blockers</h3><ul class="experiment-blockers">${p.blockers.map(b => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
     <h3>Dataset audit</h3>${d.audit.findings.length ? `<ul class="experiment-blockers">${d.audit.findings.map(f => `<li>${esc(f.code)}: ${esc(f.detail)}</li>`).join("")}</ul>` : '<p>No findings in these declared-record checks.</p>'}
     ${renderExecutionReview(d.execution_review)}

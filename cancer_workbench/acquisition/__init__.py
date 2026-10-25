@@ -1,4 +1,4 @@
-"""Dataset/model acquisition: resumable verified downloads, storage budget, provenance.
+"""Dataset/model acquisition: resumable verified downloads, optional storage cap, provenance.
 
 Owner: Workstream A (datasets) with C (models). Records live in catalog/*.json;
 files land in data/<id>/ or models/<id>/ with a PROVENANCE.json.
