@@ -649,6 +649,10 @@ def _ask_one(name: str | None, question: str, history: list | dict | None, synth
             "Read a verified local specialist's method, measured test metrics and split limits without rerunning inference. A class score is not test accuracy or disease probability.",
             {"type":"object", "properties":{"model_id":{"type":"string"}}, "required":["model_id"]},
             research.specialist_evidence)
+        box.tools["compare_specialist_evidence"] = Tool("compare_specialist_evidence",
+            "Read BOTH models' verified evaluation metrics, check same test-input membership and compute exact metric differences. Use before ranking models; higher single-image scores do not mean better accuracy or AUROC.",
+            {"type":"object", "properties":{"model_ids":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":4}}, "required":["model_ids"]},
+            research.compare_specialist_evidence)
     try:
         prov = make_provider(name)
         # Local specialist tools are registered even for text-only questions.
