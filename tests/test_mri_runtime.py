@@ -84,7 +84,7 @@ class MRIRuntimeTests(unittest.TestCase):
         _,prepared=self.prepare();meta=self.upload(prepared)
         ref=self.root/"ref.nii.gz";nib.save(nib.Nifti1Image(np.zeros((16,16,16),dtype=np.uint8),np.eye(4)),ref)
         ref_meta=self.upload(ref)
-        model={"id":"fixture-mri","backend":"mri","formats":["nifti"],"classes":["whole_tumor"],
+        model={"id":"fixture-mri","state":"verified","backend":"mri","formats":["nifti"],"classes":["whole_tumor"],
                "training":{"synthetic_test_fixture":True},"preprocessing":{"synthetic":True},"limitations":["fixture only"]}
         folder=self.root/"fixture-mri";folder.mkdir();rt._save(folder/"manifest.json",model)
         events=[]

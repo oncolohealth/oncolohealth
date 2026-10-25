@@ -53,7 +53,7 @@ class CTWorkerContractTests(unittest.TestCase):
                 reference_sha=rt.sha_file(reference)
                 rt._save(rt.REFERENCES/sha/'fixture-ct.json',{'model_id':'fixture-ct','input_sha256':sha,'reference_input_id':'b'*64,
                      'reference_sha256':reference_sha,'reference_convention':'LPS_cccwhd'})
-                model={'id':'fixture-ct','backend':'ct','formats':['nifti'],'training':{},'preprocessing':{},'implementation_sha256':'fixture','limitations':['synthetic fixture']}
+                model={'id':'fixture-ct','state':'verified','classes':['pulmonary_nodule'],'backend':'ct','formats':['nifti'],'training':{},'preprocessing':{},'implementation_sha256':'fixture','limitations':['synthetic fixture']}
                 rt._save(root/'manifest.json',model)
                 events=[];original_resolve=rt.resolve_input
                 def resolve(input_id):
