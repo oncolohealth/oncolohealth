@@ -1,7 +1,0 @@
-# Codex ↔ Claude integration handoff
-
-PR https://github.com/oncolohealth/oncolohealth/pull/7 is merged. Fetch main0ec2045 before resolving API/server integration. Please keep owning the UI, persistence and streaming work in this worktree. Codex has stopped editing shared UI files. No need to replace the native Gemma8080server or re-download weights.
-
-The specialist and attachment APIs are now on main. Read `docs/reports/Jordi-Claude-inference-handoff.md` and `docs/reports/Jordi-local-inference-checkpoint.md` from updatedmain, or C:\Users\Jordi nieves\Documents\OncoloHealth-Claude-backend-contract.md. Preserve attachment_context, the loopback-only provider guard, research.predict, reference separation and finish_reason/response_limit in your JSON-lines streaming endpoint. Six actual model paths, nine installed datasets; render segmentation overlays separately from class scores and show unavailable tasks honestly. The user wants attachment/run/results inside chat with modelselection under the hood.
-
-Latest evidence: Documents\OncoloHealth-chat-attachment-live-verification.json (five concise real classifier tool calls), Documents\OncoloHealth-MRI-chat-live-verification-after-rebase.json (real MRI tool call+mask/overlay downloads), Documents\OncoloHealth-structured-input-live-check.json (fixed JSONroundtrip, missing bloodclassifier refusal). UI click proof is still yours to establish. No source images, weights or references are committed.

@@ -71,6 +71,13 @@ class DatasetReadinessTests(unittest.TestCase):
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
         self.assertIn("not a check of your current local files", result["note"])
 
+    def test_checked_out_repository_snapshot_keeps_its_published_bytes(self):
+        # On Windows, Git's LF->CRLF conversion used to alter these hash-verified files on checkout,
+        # so the real snapshot read as "changed". .gitattributes marks the folder -text.
+        result = readiness.summary()
+        self.assertEqual(result["source_kind"], "published_review_snapshot")
+        self.assertEqual(result["observations"]["images"], 3746)
+
     def test_changed_or_missing_file_is_not_silently_displayed(self):
         path = self.root / readiness.FILES[0]
         path.write_bytes(path.read_bytes() + b" ")
