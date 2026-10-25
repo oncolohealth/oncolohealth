@@ -277,3 +277,32 @@ def scoreboard(profiles: Iterable[dict], observations: Iterable[dict]) -> dict:
     return {"models": rows, "totals": totals,
             "meaning": "Test-set metrics, selected-input reference agreement and execution reliability have different denominators and must not be combined into one accuracy score.",
             "medical_validation": False}
+
+
+def compare_reports(reports: list[dict], *, same_test_inputs: bool = False) -> dict:
+    """Compare verified measurements; an image score never substitutes for a metric."""
+    if not 2 <= len(reports) <= 4:
+        raise ValueError("Compare two to four verified specialist reports.")
+    datasets = [r["evaluation"]["dataset"] for r in reports]
+    denominators = [r["evaluation"]["n"] for r in reports]
+    class_orders = [r["evaluation"].get("class_order") for r in reports]
+    comparable = (same_test_inputs and datasets[0] is not None and len(set(datasets)) == 1
+                  and bool(class_orders[0]) and all(order == class_orders[0] for order in class_orders)
+                  and denominators[0] is not None and len(set(denominators)) == 1
+                  and all(r["evaluation"]["scope"] == "local_sample_level_test" for r in reports))
+    reference = reports[0]
+    differences = []
+    for report in reports[1:]:
+        a, b = reference["evaluation"], report["evaluation"]
+        metrics = {k: b["metrics"][k] - a["metrics"][k] for k in ("accuracy", "balanced_accuracy", "roc_auc")
+                   if k in a["metrics"] and k in b["metrics"]}
+        recalls = {name: b["per_class"][name]["recall"] - a["per_class"][name]["recall"]
+                   for name in a["per_class"] if name in b["per_class"]
+                   and a["per_class"][name].get("recall") is not None and b["per_class"][name].get("recall") is not None}
+        differences.append({"model_id": report["model_id"], "versus": reference["model_id"],
+                            "metric_difference": metrics if comparable else {},
+                            "per_class_recall_difference": recalls if comparable else {}})
+    return {"models": reports, "same_test_inputs_verified": same_test_inputs,
+            "comparable_same_source_test": comparable, "differences_vs_first": differences,
+            "interpretation": "A positive difference means a larger recorded metric; negative means smaller. No significance, clinical superiority or independent validation is established. A higher score for one image does not imply better dataset accuracy, AUROC or calibrated confidence. Report tradeoffs; do not invent an overall winner.",
+            "missing_metric_rule": "Only call a metric unrecorded when absent in the retrieved report, never merely absent from an earlier answer."}

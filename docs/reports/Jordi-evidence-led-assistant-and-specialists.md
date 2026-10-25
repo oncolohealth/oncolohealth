@@ -94,3 +94,17 @@ The persistent local launcher now selects 16,384 context tokens with q8_0 K/V ca
 Four completed, reviewed handler trajectories target actual license/tool-grounding and modality mistakes on training-eligible record groups. They remain separate from the original 437 training rows and await pinned tokenizer/mask/remote admission. Sixteen professional-assistance acceptance cases remain evaluation material, with no reserved medical outcomes or hidden reasoning admitted to training. Main5 is still untrained while NPS visibly returns 502.
 
 The Team Hub Local build checklist now contains our revision-guarded check-in, read back after publication. Shared Claude coordination is in `C:\Users\Jordi nieves\Documents\OncoloHealth-Claude-hourly.md`. Claude's pending UI PRs remain for Jordi's review. A proposed hourly-monitor update was rejected by automatic approval review because of the earlier stop instruction; the existing automation configuration was not changed, and a scheduling preference question is pending.
+
+
+## Fixed-case evaluation completion
+
+Actual local main3 at16,384context/q8_0KV completed20/22unchanged software checks, including real MRI and full CT. Failures: license-uni2-derivatives, compat-ct-nodules. These failures remain part of the result; they are not relabeled or removed to improve the score. Full CT delivered294elapsed-time progress events. This score measures tool/workflow behavior and wording, not medical prediction accuracy. Exact trace/answers: `C:\Users\Jordi nieves\Documents\OncoloHealth-Claude-assistant-eval-20261025-0440.jsonl`; summary: `C:\Users\Jordi nieves\Documents\OncoloHealth-complete-Assistant-evaluation-summary.json`.
+
+
+## Model-comparison correction and cancellation verification
+
+A visible follow-up comparison exposed a new factual error: the model called the original ultrasound AUROC/specificity unmeasured and claimed the new AUROC was higher. The original incorrect conversation text is retained in `OncoloHealth-comparison-failure-visible.txt`. A new comparison tool now retrieves BOTH verified reports, checks exact shared test membership and class definitions, and computes metric/recall differences. Actual local Gemma and the visible saved conversation now correctly report accuracy76.3%→77.6%, AUROC0.833→0.830, malignant recall66.7%→66.7% and specificity79.8%→81.6%. It is not a uniform improvement. The corrected screenshot is `C:\Users\Jordi nieves\Documents\OncoloHealth-comparison-corrected-visible.jpg`. This is a separate targeted verification, not a rewritten20/22benchmark score.
+
+Actual streamed CT cancellation was also verified: after the first real worker progress event, closing only that request stopped its owned process tree and saved the failed/cancelled attempt in4.938seconds. The prior successful fullCT result is preserved. Report: `C:\Users\Jordi nieves\Documents\OncoloHealth-actual-CT-stream-cancellation.json`.
+
+The newly functioning three-head checkpoint, frozen ResNet weights/config/provenance and inference source are packaged as `C:\Users\Jordi nieves\Documents\OncoloHealth-neural-specialists-verified.zip`:104,449,505bytes, SHA-256 `bb337614c5d562ebc4ad1925746ad8fab0ec4ff2629c1c7de66f861d90dac382`. Identical verified copies are at `K:\oncolohealth\models\research-backups\OncoloHealth-neural-specialists-verified.zip` and `K:\oncolohealth-runtime\backups\OncoloHealth-neural-specialists-verified.zip`. This is on-PC redundancy, not off-device backup; no source images/answer keys are in the model archive. Original main3 and specialist copies remain intact.

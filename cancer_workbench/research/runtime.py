@@ -244,6 +244,23 @@ def specialist_evidence(model_id: str) -> dict:
     return evidence_for(model, sha_file(folder / "manifest.json"))
 
 
+def compare_specialist_evidence(model_ids: list[str]) -> dict:
+    """Read both evidence records and verify exact source test membership before deltas."""
+    from .evidence import evidence_for, compare_reports
+    if not isinstance(model_ids,list) or not 2 <= len(model_ids) <= 4 or len(set(model_ids)) != len(model_ids):
+        raise ValueError("Supply two to four different installed model IDs.")
+    reports, memberships = [], []
+    for model_id in model_ids:
+        folder, model = profile(model_id)
+        reports.append(evidence_for(model,sha_file(folder/"manifest.json")))
+        receipt = _json(folder/"training-receipt.json") if (folder/"training-receipt.json").is_file() else {}
+        hashes = receipt.get("selected_pixel_sha256",{}).get("test")
+        source = model.get("training",{}).get("source_file_sha256")
+        memberships.append((source,tuple(sorted(hashes))) if source and hashes else None)
+    same = memberships[0] is not None and all(m == memberships[0] for m in memberships)
+    return compare_reports(reports,same_test_inputs=same)
+
+
 def accuracy_scoreboard() -> dict:
     """Saved held-out evaluation and actual app attempt outcomes remain separate."""
     from .evidence import scoreboard
