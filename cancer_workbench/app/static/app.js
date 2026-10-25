@@ -609,7 +609,36 @@ async function loadDatasets() {
   const { manifests } = await api("/api/manifests");
   $("#manifest-list").innerHTML = manifests.map(m => `<li><button class="linkish" data-audit="${esc(m.path)}" data-ds="${esc(m.dataset_id)}">${esc(m.path)}</button> <span class="hint">${fmtBytes(m.bytes)}</span></li>`).join("") ||
     `<li class="empty">No manifests yet.</li>`;
-  await loadDatasetEvidence();
+  await Promise.all([loadInstalledDatasets(), loadDatasetEvidence()]);
+}
+// What is actually on disk, next to what can actually run: two separate facts.
+async function loadInstalledDatasets() {
+  const panel = $("#dataset-installed");
+  let d, models = [];
+  try { [d, models] = await Promise.all([api("/api/datasets/installed"), api("/api/research").then(s => s.models.filter(m => m.available)).catch(() => [])]); }
+  catch (err) { panel.innerHTML = `<p class="hint">Could not read installed datasets: ${esc(err.message)}</p>`; return; }
+  const label = m => (m.name || m.id).split(":")[0].trim();
+  const trainedOn = (ds, m) => m.training?.dataset === ds.id || (ds.id === "btxrd" && m.id.startsWith("btxrd"));
+  const cards = d.datasets.map(ds => {
+    const splits = Object.fromEntries((ds.arrays || []).filter(a => /^(train|val|test)_images$/.test(a.array)).map(a => [a.array.split("_")[0], a.shape[0]]));
+    const rows = (ds.manifests || []).reduce((n, m) => n + (m.rows || 0), 0);
+    const trained = models.filter(m => trainedOn(ds, m));
+    const mods = (ds.modality || []).map(x => x.toLowerCase());
+    const reads = models.filter(m => !trained.includes(m) && m.training?.dataset == null && !m.id.startsWith("btxrd") && mods.includes(String(m.modality).toLowerCase()));
+    const run = trained.length ? `<span class="ds-run yes">Trained a local model: ${trained.map(m => esc(label(m))).join(", ")}</span>`
+      : reads.length ? `<span class="ds-run maybe">Readable by ${reads.map(m => esc(label(m))).join(", ")} (publisher-trained, not on this data)</span>`
+      : `<span class="ds-run no">Data only: no local model runs on it yet</span>`;
+    return `<article class="ds-card">
+      <header><h3>${esc(ds.name)}</h3><span class="pill">${esc((ds.modality || []).join(", ") || "data")}</span></header>
+      <p class="ds-size">${fmtBytes(ds.actual_bytes)} · ${count(ds.actual_file_count, "file")}${ds.license?.id ? ` · ${esc(ds.license.id)}` : ""}</p>
+      ${Object.keys(splits).length ? `<p class="ds-splits">${["train", "val", "test"].filter(k => k in splits).map(k => `<span><strong>${splits[k].toLocaleString()}</strong> ${k}</span>`).join("")}</p>`
+        : rows ? `<p class="ds-splits"><span><strong>${rows.toLocaleString()}</strong> manifest rows</span></p>` : ""}
+      ${run}
+      ${(ds.unresolved || []).length ? `<details><summary>${count(ds.unresolved.length, "open question")}</summary><ul>${ds.unresolved.map(u => `<li>${esc(u)}</li>`).join("")}</ul></details>` : ""}
+    </article>`;
+  }).join("");
+  panel.innerHTML = `<div class="audit-head"><h2>Installed on this PC</h2><span class="hint">${count(d.count, "dataset")}</span></div>
+    <p class="hint">${esc(d.note)}</p><div class="ds-grid">${cards}</div>`;
 }
 async function loadDatasetEvidence() {
   const panel = $("#dataset-evidence");
@@ -1177,8 +1206,9 @@ async function loadProfiles() {
 async function checkModel(name) {
   if (!name || chat.status[name] === "checking") return;
   chat.status[name] = "checking"; renderPickers(); renderProfiles();
-  try { chat.status[name] = (await api("/api/coordinator/ping", { profile: name })).ok ? "up" : "down"; }
-  catch { chat.status[name] = "down"; }
+  // A local server busy with another request can miss one check, so try twice before saying it's down.
+  const ping = async () => { try { return (await api("/api/coordinator/ping", { profile: name })).ok; } catch { return false; } };
+  chat.status[name] = (await ping()) || (await new Promise(r => setTimeout(r, 2500)), await ping()) ? "up" : "down";
   renderPickers(); renderProfiles();
 }
 const STATUS_TEXT = { up: "Ready", down: "Not reachable", checking: "Checking…" };
@@ -1347,36 +1377,210 @@ function friendlyError(name, err) {
   return { title: `${name} hit a problem`, body: "The answer could not be completed.", detail: msg };
 }
 
+/* ---- research specialists (for attachments and result cards) ---- */
+const composer = $("#ask-form").question;
+function growComposer() { composer.style.height = "auto"; composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`; }
+// Plain task names come from the model's own name ("Bone X-ray: BTXRD ResNet-50…" → "Bone X-ray").
+const taskLabel = m => (m?.name || m?.id || "").split(":")[0].trim();
+const plainWords = s => String(s ?? "").replace(/[-_]+/g, " ").replace(/^./, ch => ch.toUpperCase());
+const pct = v => `${(Number(v) * 100).toFixed(Number(v) >= 0.995 || Number(v) < 0.1 ? 1 : 0)}%`;
+const mediaUrl = path => `/media/${path.split("/").map(encodeURIComponent).join("/")}?t=${encodeURIComponent(TOKEN)}`;
+async function loadResearchState() {
+  try {
+    const s = await api("/api/research");
+    chat.research = { models: s.models.filter(m => m.available), samples: s.samples || [] };
+  } catch { chat.research = { models: [], samples: [] }; }
+}
+const modelsFor = format => (chat.research?.models || []).filter(m => (m.formats || []).includes(format));
+const researchModel = id => (chat.research?.models || []).find(m => m.id === id);
+
+/* ---- attachments in the composer ---- */
+chat.attached = [];   // [{ key, name, status: "uploading"|"ready"|"error", input, media, task, error }]
+let attachSeq = 0;
+function renderTray() {
+  const tray = $("#attach-tray");
+  tray.hidden = !chat.attached.length;
+  tray.innerHTML = chat.attached.map(a => {
+    const choices = a.input ? modelsFor(a.input.format) : [];
+    const task = a.status !== "ready" ? "" : choices.length
+      ? `<select data-task="${a.key}" aria-label="Task for ${esc(a.name)}">
+          <option value="" ${a.task ? "" : "selected"}>${choices.length > 1 ? "Choose a task…" : "No task: just ask"}</option>
+          ${choices.map(m => `<option value="${esc(m.id)}" ${a.task === m.id ? "selected" : ""}>${esc(taskLabel(m))}</option>`).join("")}
+        </select>`
+      : `<span class="chip-note">No installed model reads this file type</span>`;
+    const kind = a.input ? (a.input.format === "image" ? "Image" : a.input.format === "nifti" ? "NIfTI" : a.input.format === "dicom" ? "DICOM" : plainWords(a.input.format)) : "";
+    const shape = a.input?.shape ? ` · ${a.input.shape.join("×")}` : "";
+    return `<div class="chip ${a.status}" data-chip="${a.key}">
+      <div class="thumb-sm">${a.media ? `<img src="${esc(mediaUrl(a.media))}" alt="">` : `<span>${esc(kind || "File")}</span>`}</div>
+      <div class="chip-body">
+        <span class="chip-name" title="${esc(a.name)}">${esc(a.name)}</span>
+        <span class="chip-meta">${a.status === "uploading" ? "Checking file…" : a.status === "error" ? esc(a.error) : esc(kind + shape)}</span>
+        ${task}
+      </div>
+      <button type="button" class="icon-x" data-unattach="${a.key}" aria-label="Remove ${esc(a.name)}">×</button>
+    </div>`;
+  }).join("");
+  updateSendState();
+}
+function updateSendState() {
+  const busy = chat.running.size > 0, uploading = chat.attached.some(a => a.status === "uploading");
+  $("#chat-send").disabled = !busy && uploading;
+}
+async function addFiles(files) {
+  if (!chat.research) await loadResearchState();
+  for (const file of [...files].slice(0, 4 - chat.attached.length)) {
+    const item = { key: `a${++attachSeq}`, name: file.name || "pasted-image.png", status: "uploading" };
+    chat.attached.push(item); renderTray();
+    try {
+      if (file.size > 128_000_000) throw new Error("Files are limited to 128 MB.");
+      const data = await new Promise((resolve, reject) => {
+        const r = new FileReader(); r.onload = () => resolve(String(r.result).split(",")[1]); r.onerror = () => reject(new Error("Could not read the file.")); r.readAsDataURL(file);
+      });
+      const input = await api("/api/research/upload", { name: item.name, data });
+      Object.assign(item, { input, status: "ready" });
+      const fits = modelsFor(input.format);
+      if (fits.length === 1) item.task = fits[0].id;
+      try { item.media = (await api(`/api/research/preview/${encodeURIComponent(input.id)}`)).media || null; } catch { /* preview is optional */ }
+    } catch (err) { Object.assign(item, { status: "error", error: cleanError(err.message) }); }
+    renderTray();
+  }
+  if (files.length > 4) toast("Up to four files per message.");
+}
+// Attach something already uploaded (a reserved sample, or an input from the Research screen).
+async function attachExisting(inputId, workflowId, name) {
+  if (!chat.research) await loadResearchState();
+  const item = { key: `a${++attachSeq}`, name: name || "Uploaded input", status: "uploading" };
+  chat.attached.push(item); renderTray();
+  try {
+    const p = await api(`/api/research/preview/${encodeURIComponent(inputId)}`);
+    Object.assign(item, { input: p.input, media: p.media || null, status: "ready", task: workflowId || null, name: name || p.input.original_name || item.name });
+  } catch (err) { Object.assign(item, { status: "error", error: cleanError(err.message) }); }
+  renderTray();
+}
+$("#attach-btn").addEventListener("click", () => $("#attach-file").click());
+$("#attach-file").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) addFiles(files); });
+$("#attach-tray").addEventListener("change", e => {
+  const s = e.target.closest("[data-task]");
+  if (s) { const a = chat.attached.find(x => x.key === s.dataset.task); if (a) a.task = s.value || null; }
+});
+$("#attach-tray").addEventListener("click", e => {
+  const x = e.target.closest("[data-unattach]");
+  if (x) { chat.attached = chat.attached.filter(a => a.key !== x.dataset.unattach); renderTray(); composer.focus(); }
+});
+composer.addEventListener("paste", e => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+// Drag a file anywhere over the conversation to attach it.
+{
+  const pane = $(".chat-pane");
+  let depth = 0;
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes("Files");
+  pane.addEventListener("dragenter", e => { if (hasFiles(e)) { depth++; pane.classList.add("dropping"); } });
+  pane.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; pane.classList.remove("dropping"); } });
+  pane.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+  pane.addEventListener("drop", e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); depth = 0; pane.classList.remove("dropping");
+    addFiles(e.dataTransfer.files);
+  });
+}
+
 /* ---- rendering the conversation ---- */
-function renderSteps(calls, live) {
+// Only elements that are new since the last render animate in, so streaming updates don't flicker.
+const seen = new Set();
+const enter = key => { if (seen.has(key)) return ""; seen.add(key); return " enter"; };
+
+function renderSteps(calls, live, key) {
   if (!calls.length) return "";
   const d = calls.map(c => ({ c, ...describeCall(c) }));
-  const items = d.map(x => `<li class="${x.bad ? "bad" : x.c.observed === undefined ? "run" : "ok"}"><span class="what">${esc(x.what)}</span>${x.got ? `<span class="got">${esc(x.got)}</span>` : ""}
+  const items = d.map((x, i) => `<li class="${x.bad ? "bad" : x.c.observed === undefined ? "run" : "ok"}${live ? enter(`${key}|s${i}`) : ""}"><span class="what">${esc(x.what)}</span>${x.got ? `<span class="got">${esc(x.got)}</span>` : ""}
     ${x.c.observed !== undefined && !live ? `<details class="raw"><summary>Raw call</summary><pre>arguments ${esc(x.c.arguments)}\n\nobserved ${esc(JSON.stringify(x.c.observed, null, 2))}</pre></details>` : ""}</li>`).join("");
   if (live) return `<ol class="step-list live">${items}</ol>`;
   const anyBad = d.some(x => x.bad);
   return `<details class="steps${anyBad ? " bad" : ""}"><summary>${calls.length === 1 ? esc(d[0].what.replace(/^(\w+)ing\b/, m => ({ Searching: "Searched", Opening: "Opened", Checking: "Checked", Asking: "Asked" }[m] || m))) : `Checked ${count(calls.length, "source")}`}${anyBad ? " · something was refused or failed" : ""}</summary><ol class="step-list">${items}</ol></details>`;
 }
+
+// A specialist's real output, shown as a card above the model's explanation.
+function resultCards(calls, key) {
+  return calls.filter(c => c.name === "run_specialist" && c.observed?.result?.status === "ok" && c.observed.result.outputs)
+    .map((c, i) => resultCard(c.observed.result.outputs, `${key}|r${i}`)).join("");
+}
+function resultCard(o, key) {
+  const m = researchModel(o.model_id);
+  const head = `<div class="rc-head"><span class="rc-task">${esc(taskLabel(m) || plainWords(o.model_id))}</span><span class="rc-tag">Research model · not a diagnosis</span></div>`;
+  const ref = o.comparison?.reference;
+  const foot = `<div class="rc-foot"><span>${o.seconds != null ? `Ran locally in ${Number(o.seconds).toFixed(o.seconds < 1 ? 2 : 1)} s` : "Ran locally"}</span>${o.evaluation_eligibility?.note ? `<span>${esc(o.evaluation_eligibility.note)}</span>` : ""}</div>
+    <details class="rc-more"><summary>Limits and full record</summary>${(o.limitations || []).length ? `<ul>${o.limitations.map(l => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}<pre>${esc(JSON.stringify(o, null, 2))}</pre></details>`;
+  if (o.prediction) {
+    const scores = Object.entries(o.prediction.scores || {}).sort((a, b) => b[1] - a[1]);
+    const top = scores[0]?.[1];
+    const agree = o.comparison && "matches" in o.comparison
+      ? `<div class="rc-ref ${o.comparison.matches ? "agree" : "differ"}"><div><strong>${o.comparison.matches ? "Matches" : "Differs from"} the reference</strong> · the reference says <em>${esc(plainWords(ref?.label))}</em></div>${ref?.source ? `<span>${esc(ref.source)}</span>` : ""}</div>` : "";
+    return `<div class="result-card${enter(key)}">${head}
+      <div class="rc-main"><span class="rc-label">Model output</span><span class="rc-class">${esc(plainWords(o.prediction.class))}</span>${top != null ? `<span class="rc-score">${pct(top)}</span>` : ""}</div>
+      ${scores.length ? `<div class="bars">${scores.slice(0, 6).map(([label, v], i) => `<div class="bar-row${i ? "" : " top"}"><span class="bar-label">${esc(plainWords(label))}</span><span class="bar"><span class="fill" data-w="${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}"></span></span><span class="bar-val">${pct(v)}</span></div>`).join("")}</div>` : ""}
+      ${o.prediction.meaning ? `<p class="rc-meaning">${esc(o.prediction.meaning)}</p>` : ""}
+      ${agree}${foot}</div>`;
+  }
+  if (o.segmentation) {
+    const s = o.segmentation, regions = Object.entries(s.region_voxels || {});
+    const cmp = o.comparison?.regions || {};
+    return `<div class="result-card${enter(key)}">${head}
+      <div class="rc-seg">
+        ${s.overlay_media ? `<a href="${esc(mediaUrl(s.overlay_media))}" target="_blank" rel="noopener" class="rc-overlay"><img src="${esc(mediaUrl(s.overlay_media))}" alt="Segmentation overlay on one slice"></a>` : ""}
+        <table class="rc-regions"><thead><tr><th>Region</th><th>Voxels</th>${Object.keys(cmp).length ? "<th>Reference</th><th>Dice</th>" : ""}</tr></thead>
+          <tbody>${regions.map(([r, v]) => `<tr><td>${esc(plainWords(r))}</td><td>${Number(v).toLocaleString()}</td>${cmp[r] ? `<td>${Number(cmp[r].reference_voxels).toLocaleString()}</td><td>${Number(cmp[r].dice_agreement).toFixed(3)}</td>` : Object.keys(cmp).length ? "<td></td><td></td>" : ""}</tr>`).join("")}</tbody></table>
+      </div>
+      ${o.comparison?.meaning ? `<p class="rc-meaning">${esc(o.comparison.meaning)}</p>` : ""}
+      ${s.mask_media ? `<p class="rc-links"><a href="${esc(mediaUrl(s.mask_media))}" download>Download mask (NIfTI)</a></p>` : ""}
+      ${foot}</div>`;
+  }
+  if (o.detection) {
+    const det = o.detection, scores = det.scores || [], boxes = det.boxes_world_LPS_cccwhd || [];
+    const rows = scores.map((v, i) => ({ v, size: (boxes[i] || []).slice(3, 6) })).sort((a, b) => b.v - a.v).slice(0, 5);
+    const agree = (o.comparison?.agreement || []).map(a => `<li>Score ≥ ${a.score_threshold}: matched <strong>${a.matched} of ${a.reference_boxes}</strong> reference ${a.reference_boxes === 1 ? "box" : "boxes"}, ${count(a.unmatched_detections, "unmatched detection")}${a.matches?.[0] ? ` · best IoU ${Number(Math.max(...a.matches.map(m => m.IoU))).toFixed(2)}` : ""}</li>`).join("");
+    return `<div class="result-card${enter(key)}">${head}
+      <div class="rc-seg">
+        ${det.overlay_media ? `<a href="${esc(mediaUrl(det.overlay_media))}" target="_blank" rel="noopener" class="rc-overlay"><img src="${esc(mediaUrl(det.overlay_media))}" alt="Detected nodule boxes on one CT slice"></a>` : ""}
+        <div>
+          <div class="rc-main"><span class="rc-label">Model output</span><span class="rc-class">${count(det.count ?? scores.length, "nodule candidate")}</span></div>
+          ${rows.length ? `<table class="rc-regions"><thead><tr><th>Candidate</th><th>Score</th><th>Size (mm)</th></tr></thead>
+            <tbody>${rows.map((r, i) => `<tr><td>#${i + 1}</td><td>${Number(r.v).toFixed(2)}</td><td>${r.size.length === 3 ? r.size.map(x => Number(x).toFixed(0)).join(" × ") : ""}</td></tr>`).join("")}</tbody></table>` : ""}
+        </div>
+      </div>
+      <p class="rc-meaning">${esc(det.score_meaning || "Detection scores are not cancer probabilities.")}</p>
+      ${agree ? `<div class="rc-ref differ"><div><strong>Box agreement with the reference</strong> (IoU ≥ 0.1)</div><ul class="rc-agree">${agree}</ul>${o.comparison.meaning ? `<span>${esc(o.comparison.meaning)}</span>` : ""}</div>` : ""}
+      ${foot}</div>`;
+  }
+  return "";
+}
+
 function renderAnswer(a, name, ti, last) {
-  const retry = last ? `<button type="button" class="btn small" data-retry="${esc(name)}">Retry</button>` : "";
+  const key = `${chat.convo.id}|${ti}|${name}`;
+  const retry = last ? `<button type="button" class="btn ghost small" data-retry="${esc(name)}">Retry</button>` : "";
   if (a.pending) {
     const lastEv = a.events.at(-1);
-    const stage = !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking…" : lastEv.type === "model" ? "Reading the results…" : "Looking it up…";
-    return `${renderSteps(a.calls, true)}<div class="thinking">${stage} <span class="elapsed" data-start="${a.started}">0 s</span></div>`;
+    const stage = !lastEv || (lastEv.type === "model" && lastEv.step === 0) ? "Thinking" : lastEv.type === "model" ? "Reading the results" : "Looking it up";
+    return `${resultCards(a.calls, key)}${renderSteps(a.calls, true, key)}<div class="thinking"><span class="shimmer">${stage}</span> <span class="elapsed" data-start="${a.started}">0 s</span></div>`;
   }
-  if (a.stopped) return `${renderSteps(a.calls, false)}<div class="notice">Stopped before an answer was written.</div><div class="msg-actions">${retry}</div>`;
+  if (a.stopped) return `${renderSteps(a.calls || [], false, key)}<div class="notice">Stopped before an answer was written.</div><div class="msg-actions">${retry}</div>`;
   if (a.error) {
     const f = friendlyError(name, a.error);
     return `<div class="error-card"><strong>${esc(f.title)}</strong><p>${esc(f.body)}</p><details><summary>Details</summary><pre>${esc(f.detail)}</pre></details>
-      <div class="msg-actions">${retry}<button type="button" class="btn small" data-goto-models>Open Models</button></div></div>`;
+      <div class="msg-actions">${retry}<button type="button" class="btn ghost small" data-goto-models>Open Models</button></div></div>`;
   }
   const r = a.result;
   const calls = r.steps.flatMap(s => s.tool_calls);
   const secs = r.steps.reduce((x, s) => x + (s.latency_s || 0), 0);
   const body = r.final ? `<div class="md">${mdBlock(r.final)}</div>${r.stopped === "response_limit" ? `<div class="notice">The answer reached the response length limit and may be cut off.</div>` : ""}`
     : `<div class="notice">The model used all its steps without writing an answer. Try asking more specifically.</div>`;
-  return `${renderSteps(calls, false)}${body}
-    <div class="msg-actions">${r.final ? `<button type="button" class="btn small" data-copy="${ti}|${esc(name)}">Copy</button>` : ""}${retry}<span class="meta">${secs.toFixed(1)} s</span></div>`;
+  return `${resultCards(calls, key)}${renderSteps(calls, false, key)}${body}
+    <div class="msg-actions">${r.final ? `<button type="button" class="btn ghost small" data-copy="${ti}|${esc(name)}">Copy</button>` : ""}${retry}<span class="meta">${secs.toFixed(1)} s</span></div>`;
+}
+function renderUserTurn(t, key) {
+  const files = (t.attachments || []).map(x => `<div class="att">${x.media ? `<img src="${esc(mediaUrl(x.media))}" alt="">` : `<span class="att-kind">${esc(x.kind || "File")}</span>`}<span class="att-text"><span class="att-name">${esc(x.name)}</span>${x.task ? `<span class="att-task">${esc(x.task)}</span>` : ""}</span></div>`).join("");
+  return `<div class="msg user${enter(key + "|u")}">${files ? `<div class="atts">${files}</div>` : ""}${t.q ? `<div class="bubble">${esc(t.q)}</div>` : ""}</div>`;
 }
 function renderThread(toBottom = false) {
   const el = $("#chat-thread"), sc = $("#chat-scroll");
@@ -1384,21 +1588,32 @@ function renderThread(toBottom = false) {
   const c = chat.convo;
   if (!c.turns.length) {
     const ready = !chat.loaded || chat.models.length > 0;  // no "set up a model" warning before profiles load
-    el.innerHTML = `<div class="chat-hero">
+    const samples = (chat.research?.samples || []).filter(s => researchModel(s.model_id));
+    el.innerHTML = `<div class="chat-hero${enter(c.id + "|hero")}">
       <h2>What do you want to find out?</h2>
-      <p>Answers come from the workspace catalog and the specialists installed here. Every lookup the model makes is shown with its real result. To run a model on your own file, upload it on the <a href="#research">Research</a> screen first.</p>
+      <p>Ask about models and datasets, or attach a scan or image and a local specialist will run on it. Every lookup and result is shown as it happens.</p>
       ${ready ? "" : `<p class="warn-line">No model is set up yet. Add one in the <button type="button" class="linkish" data-goto-models>Models</button> tab.</p>`}
       <div class="example-grid">${CHAT_EXAMPLES.map(x => `<button type="button" class="example" data-example="${esc(x.q)}" ${ready ? "" : "disabled"}><span class="et">${esc(x.title)}</span><span class="eq">${esc(x.q)}</span></button>`).join("")}</div>
+      ${samples.length ? `<div class="samples"><span class="samples-label">Try a sample</span>${samples.map(s => `<button type="button" class="sample" data-sample="${esc(s.input_id)}" data-sample-model="${esc(s.model_id)}">${esc(taskLabel(researchModel(s.model_id)))}</button>`).join("")}</div>` : ""}
     </div>`;
     return;
   }
   el.innerHTML = c.turns.map((t, ti) => {
     const names = Object.keys(t.answers), last = ti === c.turns.length - 1, multi = names.length > 1;
-    return `<div class="msg user"><div class="bubble">${esc(t.q)}</div></div>
-      <div class="msg bot${multi ? " multi" : ""}">${names.map(n => `<div class="answer">${multi || n !== chat.models[0] ? `<div class="answer-head">${esc(n)}</div>` : ""}${renderAnswer(t.answers[n], n, ti, last && !chat.running.size)}</div>`).join("")}</div>`;
+    const key = `${c.id}|${ti}`;
+    return `${renderUserTurn(t, key)}
+      <div class="msg bot${multi ? " multi" : ""}${enter(key + "|b")}">${names.map(n => `<div class="answer">${multi || n !== chat.models[0] ? `<div class="answer-head">${esc(n)}</div>` : ""}${renderAnswer(t.answers[n], n, ti, last && !chat.running.size)}</div>`).join("")}</div>`;
   }).join("");
-  tickElapsed();
+  tickElapsed(); sizeBars(el);
   if (toBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
+}
+// New cards grow their bars from zero; cards already on screen keep their width through re-renders.
+function sizeBars(root) {
+  for (const f of root.querySelectorAll(".fill[data-w]")) {
+    const w = `${f.dataset.w}%`;
+    if (f.closest(".result-card.enter")) requestAnimationFrame(() => requestAnimationFrame(() => { f.style.width = w; }));
+    else { f.classList.add("still"); f.style.width = w; }
+  }
 }
 function tickElapsed() {
   document.querySelectorAll("#chat-thread .elapsed").forEach(el => { el.textContent = `${Math.round((Date.now() - Number(el.dataset.start)) / 1000)} s`; });
@@ -1406,14 +1621,14 @@ function tickElapsed() {
 setInterval(tickElapsed, 1000);
 
 /* ---- asking ---- */
-async function streamAnswer(name, question, history, answer) {
+async function streamAnswer(name, question, history, answer, attachments) {
   const ctl = new AbortController();
   chat.running.set(name, ctl);
   try {
     const res = await fetch("/api/coordinator/ask/stream", {
       method: "POST", signal: ctl.signal,
       headers: { "X-CW-Token": TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify({ question, profile: name, history, synthetic_demo: $("#synthetic-demo").checked }),
+      body: JSON.stringify({ question, profile: name, history, attachments, synthetic_demo: $("#synthetic-demo").checked }),
     });
     if (!res.ok || !res.body) throw new Error((await res.json().catch(() => ({}))).error || `Request failed (${res.status})`);
     const reader = res.body.getReader(), dec = new TextDecoder();
@@ -1451,15 +1666,23 @@ async function streamAnswer(name, question, history, answer) {
   delete answer.events;  // progress only matters while running; keep saved chats small
   if (answer.result) { delete answer.result.messages; delete answer.calls; }
 }
-async function ask(question, names, { retryTurn = null } = {}) {
+async function ask(question, names, { retryTurn = null, attached = [] } = {}) {
   const c = chat.convo;
-  const turn = retryTurn || { q: question, answers: {} };
-  if (!retryTurn) { c.turns.push(turn); if (!c.title) c.title = question.length > 60 ? `${question.slice(0, 57)}…` : question; }
+  const turn = retryTurn || {
+    q: question, answers: {},
+    payload: attached.map(a => (a.task ? { input_id: a.input.id, workflow_id: a.task } : { input_id: a.input.id })),
+    attachments: attached.map(a => ({ name: a.name, media: a.media, kind: a.input.format === "image" ? "Image" : plainWords(a.input.format), task: a.task ? taskLabel(researchModel(a.task)) : "" })),
+  };
+  if (!retryTurn) {
+    c.turns.push(turn);
+    const titled = question || (turn.attachments[0] ? `${turn.attachments[0].task || "File"}: ${turn.attachments[0].name}` : "");
+    if (!c.title) c.title = titled.length > 60 ? `${titled.slice(0, 57)}…` : titled;
+  }
   const jobs = names.map(n => {
     const prior = turn.answers[n]?.historyLen ?? (c.histories[n]?.length || 0);
     const history = prior ? (c.histories[n] || []).slice(0, prior) : null;
     const answer = turn.answers[n] = { pending: true, started: Date.now(), events: [], calls: [], historyLen: prior };
-    return streamAnswer(n, question, history, answer);
+    return streamAnswer(n, turn.q, history, answer, turn.payload?.length ? turn.payload : undefined);
   });
   setBusy(true); renderThread(true); renderChatList();
   await Promise.all(jobs);
@@ -1467,22 +1690,24 @@ async function ask(question, names, { retryTurn = null } = {}) {
 }
 function setBusy(busy) {
   const b = $("#chat-send");
-  b.textContent = busy ? "Stop" : "Send";
   b.classList.toggle("stop", busy);
   b.setAttribute("aria-label", busy ? "Stop the answer" : "Send");
+  b.title = busy ? "Stop" : "Send";
+  updateSendState();
   renderPickers();
 }
 $("#ask-form").addEventListener("submit", e => {
   e.preventDefault();
   if (chat.running.size) { for (const ctl of chat.running.values()) ctl.abort(); return; }
   const f = e.target, q = f.question.value.trim();
-  if (!q) { f.question.focus(); return; }
+  if (chat.attached.some(a => a.status === "uploading")) return;
+  const attached = chat.attached.filter(a => a.status === "ready");
+  if (!q && !attached.length) { f.question.focus(); return; }
   if (!chat.models.length) { toast("Add a model in the Models tab first.", true); showSideTab("models"); return; }
   f.question.value = ""; growComposer();
-  ask(q, [...chat.models]);
+  chat.attached = []; renderTray();
+  ask(q, [...chat.models], { attached });
 });
-const composer = $("#ask-form").question;
-function growComposer() { composer.style.height = "auto"; composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`; }
 composer.addEventListener("input", growComposer);
 composer.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!chat.running.size) $("#ask-form").requestSubmit(); }
@@ -1495,9 +1720,15 @@ async function copyText(text) {
   }
 }
 $("#chat-thread").addEventListener("click", async e => {
-  const ex = e.target.closest("[data-example]"), cp = e.target.closest("[data-copy]"), rt = e.target.closest("[data-retry]");
+  const ex = e.target.closest("[data-example]"), cp = e.target.closest("[data-copy]"), rt = e.target.closest("[data-retry]"), sm = e.target.closest("[data-sample]");
   if (e.target.closest("[data-goto-models]")) { showSideTab("models"); return; }
   if (ex && !chat.running.size) { ask(ex.dataset.example, [...chat.models]); return; }
+  if (sm) {
+    await attachExisting(sm.dataset.sample, sm.dataset.sampleModel, `${sm.textContent.trim()} sample`);
+    if (!composer.value.trim()) { composer.value = "What does the model find here, and how much should I trust it?"; growComposer(); }
+    composer.focus();
+    return;
+  }
   if (rt && !chat.running.size) { const t = chat.convo.turns.at(-1); ask(t.q, [rt.dataset.retry], { retryTurn: t }); return; }
   if (cp) {
     const cut = cp.dataset.copy.indexOf("|"), t = chat.convo.turns[Number(cp.dataset.copy.slice(0, cut))];
@@ -1510,7 +1741,11 @@ $("#chat-thread").addEventListener("click", async e => {
 loadChats();
 chat.convo = newConvo();
 renderChatList(); renderThread();
-loaders.assistant = () => guard(async () => { renderChatList(); await loadProfiles(); });
+loaders.assistant = () => guard(async () => {
+  renderChatList();
+  await Promise.all([loadProfiles(), loadResearchState()]);
+  renderThread();
+});
 
 /* ---------------- progress ---------------- */
 const NEXT_MARK = { " ": "~", "~": "x", "x": " " };
@@ -1754,10 +1989,10 @@ $("#research-reference-save").addEventListener("click",() => guard(async () => {
     label:$("#research-reference-label").value,source:$("#research-reference-source").value});
   $("#research-reference-status").textContent=`Saved separate reference: ${ref.label}. Run again to obtain a new observed comparison.`;
 }));
-$("#research-ask").addEventListener("click",() => {
-  const model=selectedResearchModel(); if (!model) return;
-  $("#ask-form textarea").value=`Run the installed specialist ${model.id} for ${model.task}, modality ${model.modality}, anatomy ${model.anatomy}, on uploaded input ${$("#research-input").value}. Use run_specialist with inputs containing only input_id. Explain the actual result and limits.`;
-  show("assistant"); growComposer(); $("#ask-form textarea").focus();
+$("#research-ask").addEventListener("click", () => {
+  const model = selectedResearchModel(), id = $("#research-input").value; if (!model || !id) return;
+  const name = $("#research-input").selectedOptions[0]?.textContent.split(" · ")[0];
+  show("assistant"); attachExisting(id, model.id, name).then(() => composer.focus());
 });
 loaders.research = () => guard(loadResearch);
 
