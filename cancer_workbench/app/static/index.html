@@ -45,6 +45,9 @@
       <button data-screen="progress" class="nav-btn" aria-label="Progress" data-tip="Progress  Alt+7">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 2 2 4-4"/><path d="M13.5 7H20"/><path d="m4 16 2 2 4-4"/><path d="M13.5 16H20"/></svg>
       </button>
+      <button data-screen="research" class="nav-btn" aria-label="Research inference" data-tip="Research inference  Alt+8">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h11l5 5v13H4Z"/><path d="M14 3v6h6M8 14h8M8 17h5"/></svg>
+      </button>
     </nav>
 
     <main class="workspace">
@@ -245,6 +248,45 @@
         </aside>
       </section>
 
+      <section class="screen cols-2l" id="screen-research" hidden>
+        <aside class="pane side">
+          <div class="pane-head"><span>Local research inference</span></div>
+          <div class="pane-body">
+            <p class="hint">Upload a de-identified research input, choose its matching task, then run the trained model. Files and inference stay on this PC.</p>
+            <label class="btn primary upload-btn">Upload input<input id="research-file" type="file" accept=".png,.jpg,.jpeg,.nii,.nii.gz,.dcm,.zip,.csv,.json"></label>
+            <p id="research-upload-status" class="hint" role="status">JPEG/PNG, NIfTI, DICOM/series ZIP or CSV/JSON. Up to 128 MB. An accepted upload does not imply an available model.</p>
+            <form id="research-form" class="experiment-form">
+              <label>Uploaded item<select id="research-input" required></select></label>
+              <label>Trained research task<select id="research-model" required></select></label>
+              <p class="hint">Choose the task for the actual modality. A matching file extension alone does not establish suitability.</p>
+              <button class="btn primary block" type="submit" id="research-run">Run model locally</button>
+              <button class="btn block" type="button" id="research-ask">Use this item in Assistant</button>
+            </form>
+            <details class="section">
+              <summary>Separate reference / answer key</summary>
+              <div class="section-body">
+                <p class="hint">Optional reference from a dataset or reviewer. Stored separately and read only after prediction. It is never a model input.</p>
+                <label>Reference class<select id="research-reference-label"></select></label>
+                <label>Reference source<input id="research-reference-source" placeholder="Dataset, sample ID, reviewer or answer-key source"></label>
+                <button class="btn block" type="button" id="research-reference-save">Save separate reference</button>
+                <p id="research-reference-status" class="hint" role="status"></p>
+              </div>
+            </details>
+            <button class="btn small" type="button" id="research-refresh">Refresh inputs and results</button>
+          </div>
+        </aside>
+        <div class="pane center">
+          <div class="toolbar"><h1>Input → observed result</h1><span class="toolbar-desc">Actual trained artifacts, native outputs and separate reference comparisons.</span></div>
+          <div class="pane-body">
+            <div id="research-model-detail"></div>
+            <p id="research-status" role="status" class="hint"></p>
+            <div id="research-result" aria-live="polite"><p class="empty">Run a compatible task to obtain an observed model result.</p></div>
+            <details class="section" open><summary>Unavailable tasks and exact dependencies</summary><div id="research-blockers" class="section-body"></div></details>
+            <details class="section"><summary>Saved observations, including failures</summary><div id="research-history" class="section-body"></div></details>
+          </div>
+        </div>
+      </section>
+
       <!-- Experiments -->
       <section class="screen cols-2l" id="screen-experiments" hidden>
         <aside class="pane side">
@@ -322,13 +364,14 @@
         <div class="pane center">
           <div class="toolbar">
             <h1>Assistant</h1>
-            <span class="toolbar-desc">Ask any configured model. It can search the catalog, check compatibility and run installed specialists; every tool call and its real result is shown.</span>
+            <span class="toolbar-desc">Ask a research question in plain English. See the catalog checks and tool results behind the answer.</span>
           </div>
           <div class="pane-body">
+            <p class="hint">Ask in plain English, or open <a href="#research">Research inference</a> to upload a supported input and run an available trained task. Use its stable input ID here so the Assistant can call the same local specialist. MRI, whole-slide and blood-profile tasks remain unavailable until their actual artifacts and pipelines pass verification.</p>
             <div id="chat-columns" class="chat-columns"><p class="empty">Tick one model to chat, or several to compare their answers side by side.</p></div>
           </div>
           <form id="ask-form" class="ask">
-            <textarea name="question" rows="2" placeholder="Which models could segment a four-sequence brain MRI, and can any of them run here?" required></textarea>
+            <textarea name="question" rows="2" placeholder="What can I do with a bone X-ray in this workspace?" required></textarea>
             <div class="ask-row">
               <label class="check"><input type="checkbox" name="synthetic_demo"> Include the synthetic test model</label>
               <span class="hint kbd-hint">⌘/Ctrl + Enter to send</span>

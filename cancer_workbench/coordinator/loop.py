@@ -33,9 +33,10 @@ def run_turn(provider: Provider, toolbox: ToolBox, user_message: str, *, history
         res: ChatResult = provider.chat(messages, tools=toolbox.schemas(), **params)
         messages.append(res.assistant_message())
         step = {"profile": res.profile, "model": res.model, "latency_s": round(res.latency_s, 3), "usage": res.usage, "tool_calls": []}
+        step["finish_reason"] = res.finish_reason
         steps.append(step)
         if not res.tool_calls:
-            return TurnRecord(messages, steps, res.content, "answered")
+            return TurnRecord(messages, steps, res.content, "response_limit" if res.finish_reason == "length" else "answered")
         for call in res.tool_calls:
             observed = toolbox.call(call.name, call.arguments)
             step["tool_calls"].append({"name": call.name, "arguments": call.arguments, "observed": observed})
