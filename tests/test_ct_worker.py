@@ -29,6 +29,7 @@ class CTWorkerLifetimeTests(unittest.TestCase):
                 while not ready.is_file() and time.monotonic()<deadline:time.sleep(.05)
                 self.assertTrue(ready.is_file(),'worker did not establish its owner guard')
                 proc.kill()
+                proc.wait(timeout=8)
                 # Inherited output handles close only when the owner and its child exit.
                 proc.communicate(timeout=8)
             finally:
