@@ -8,7 +8,7 @@ Every new cancer model today starts from zero: its own hunt for data, its own cl
 - **Assistant:** a local fine-tune of Google's Gemma 4 26B. Ask in plain English or attach a scan; every lookup and specialist run streams in with its real result.
 - **Evaluation:** reference labels are kept apart and compared only after the prediction, so results stay honest, including the ones that disagree.
 
-Everything runs on one PC (the demo machine uses a 16 GB RTX 5070 Ti); no question, scan or result leaves it.
+Model inference runs on one PC (the demo machine uses a 16 GB RTX 5070 Ti). [Live dataset discovery](docs/live-dataset-discovery.md) sends public research search terms to official TCIA/GDC metadata APIs; it does not upload scans, profiles, full chat histories or specialist results. The same guide covers source inspection, coordinator training preparation and a local structured-table baseline trainer.
 
 **Start here:** [run it on your machine](docs/SETUP-local.md) · [two-minute demo script](docs/DEMO-script.md) · [architecture](ARCHITECTURE.md) · [progress](PROGRESS.md) · [scientific ground rules](Cancer-AI-Research-Context.md)
 

@@ -65,7 +65,10 @@ app (local web UI + JSON API) and __main__ (CLI) sit on top and call everything 
 | `evaluation/aggregate.py` | Binary patient max/mean aggregation; declared IDs and consistent labels/partition required | done (stdlib) |
 | `evaluation/leakage.py` | Declared split and namespaced pretraining overlap; unresolved coverage stays explicit | done (stdlib; no pixel or identity inference) |
 | `evaluation/comparison.py` | Binary ROC-AUC/AP, paired patient-cluster bootstrap differences and invalid-draw accounting | done (stdlib; not wired into baseline) |
-| `retrieval/` | PubMed search + MedCPT rerank | stub (contract in docstring) |
+| `retrieval/datasets.py` | Live official TCIA collection and TCGA/GDC project/file metadata discovery; bounded public queries, source URLs, access and errors | implemented; isolated local-model tool loops verified |
+| `retrieval/` (literature) | PubMed search + MedCPT rerank | stub (contract in docstring) |
+| `learning/tabular.py`, `learning/requirements.py` | Explicit-unit/group/split numeric baseline fit/reload/predict and task-specific training requirements | synthetic training checks pass; no real blood model supplied or promoted |
+| `curriculum/discovery_masks.py`, `scripts/prepare_discovery_training.py` | Source-observed discovery tool examples, current schemas and pinned-parent assistant masks; separate acceptance prompts | four rows token-verified; content/rights and combined main5 admission pending, no optimizer run |
 | `curriculum/` | Export reviewed tool-use transcripts | stub (contract in docstring) |
 | `app/server.py` | Stdlib HTTP server on `127.0.0.1`, Host check + per-launch token (header for `/api/`, `?t=` for `/media/` images), 32 MB body cap; `STREAM_ROUTES` answer as newline-delimited JSON events (the Assistant uses `/api/coordinator/ask/stream`), and a closed tab stops the turn | done |
 | `app/api.py` | JSON endpoints as plain functions; `GET_ROUTES`, `GET_PARAM_ROUTES`, `POST_ROUTES` | done |

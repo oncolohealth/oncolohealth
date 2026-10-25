@@ -13,6 +13,8 @@ from typing import Any, Callable
 from ..adapters.base import Adapter, execute_specialist
 from ..registry.store import Catalog
 from ..routing.router import route_models
+from ..retrieval.datasets import search_public_datasets, list_tcga_files
+from ..learning.requirements import get_training_requirements
 
 _PUBLIC_FIELDS = ("id", "name", "kind", "summary", "tasks", "modality", "anatomy", "input", "outputs",
                   "license", "access", "evidence_state", "inference_permission", "counts", "labels",
@@ -132,7 +134,7 @@ def _public(rec: dict) -> dict:
     return {k: rec[k] for k in _PUBLIC_FIELDS if k in rec} | {"record_type": rec.get("_kind")}
 
 
-def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None, extra_models: list[dict] | None = None) -> ToolBox:
+def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None, extra_models: list[dict] | None = None, *, online_discovery: bool = True) -> ToolBox:
     adapters = adapters or {}
     models = catalog.models + [dict(m, _kind="model") for m in (extra_models or [])]
     by_id = {m["id"]: m for m in models} | {d["id"]: d for d in catalog.datasets}
@@ -166,7 +168,22 @@ def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None
         return execute_specialist(model, req, adapters).to_dict()
 
     s = {"type": "string"}
-    return ToolBox([
+    box = ToolBox([
+        Tool("get_training_requirements", "Explain source data, labels, splits, runnable code and missing implementation for a specific training task. Preparation only, never starts downloads/training or claims a model is installed.",
+             {"type": "object", "properties": {"task": {"type": "string", "enum": ["coordinator_tools", "tabular_profile", "bone_xray", "mammography", "whole_slide", "volume_specialist"]}}, "required": ["task"]}, get_training_requirements),
+        Tool("search_public_datasets", "Search LIVE official TCIA imaging collections or TCGA/GDC project metadata on the internet. Use for finding public research data beyond the local catalog. Send only public research terms, never patient details. Returns current source URLs, counts, access and citation information; does not download or train.",
+             {"type": "object", "properties": {
+                 "source": {"type": "string", "enum": ["tcia", "tcga", "gdc"]},
+                 "query": {"type": "string", "maxLength": 200},
+                 "limit": {"type": "integer", "minimum": 1, "maximum": 10},
+                 "page": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["source"]}, search_public_datasets),
+        Tool("list_tcga_files", "Inspect LIVE TCGA/GDC files for a project ID. Returns official links, byte sizes, MD5, formats and file-specific access. Optional exact data_type, e.g. Slide Image or Gene Expression Quantification. Metadata only; default access=open. Does not download files or create a trained model.",
+             {"type": "object", "properties": {
+                 "project_id": {"type": "string", "maxLength": 30},
+                 "data_type": {"type": "string", "maxLength": 200},
+                 "access": {"type": "string", "enum": ["open", "controlled", "all"]},
+                 "limit": {"type": "integer", "minimum": 1, "maximum": 10},
+                 "page": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["project_id"]}, list_tcga_files),
         Tool("search_catalog", "Search the model/dataset catalog. Returns ids and evidence states.",
              {"type": "object", "properties": {"query": s, "record_type": {"type": "string", "enum": ["model", "dataset"]}}}, search_catalog),
         Tool("get_record", "Get one catalog record: license, access, inputs, outputs, evidence state, unresolved issues.",
@@ -179,3 +196,7 @@ def default_toolbox(catalog: Catalog, adapters: dict[str, Adapter] | None = None
                                                "input_refs": {"type": "array", "items": s}},
               "required": ["model_id", "task", "modality", "anatomy", "inputs"]}, run_specialist),
     ])
+    if not online_discovery:
+        for name in ("search_public_datasets", "list_tcga_files", "get_training_requirements"):
+            box.tools.pop(name)
+    return box

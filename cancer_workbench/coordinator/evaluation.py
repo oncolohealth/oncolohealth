@@ -60,7 +60,7 @@ def evaluation_toolbox():
     return default_toolbox(load_catalog(), {
         "synthetic-threshold": SyntheticThresholdAdapter(),
         "synthetic-failure": SyntheticThresholdAdapter(fail=True),
-    }, extra_models=[SYNTHETIC_MODEL_RECORD, failure])
+    }, extra_models=[SYNTHETIC_MODEL_RECORD, failure], online_discovery=False)
 
 
 def scripted_provider(case: dict):
