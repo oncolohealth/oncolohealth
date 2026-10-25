@@ -396,7 +396,7 @@ def set_reference(body: dict) -> dict:
     return ref
 
 
-def predict(model_id: str, input_id: str) -> dict:
+def predict(model_id: str, input_id: str, *, on_progress=None) -> dict:
     started = time.monotonic()
     receipt = {"id":uuid.uuid4().hex, "model_id":model_id, "input_id":input_id,
                "started_utc":datetime.now(timezone.utc).isoformat(), "status":"failed", "note":NOTE}
@@ -440,19 +440,31 @@ def predict(model_id: str, input_id: str) -> dict:
                 with (directory/"worker.log").open("w",encoding="utf-8") as log:
                     worker=subprocess.Popen([sys.executable,"-B","-m","cancer_workbench.research.ct_worker","--input",str(path),"--out",str(directory),"--parent-pid",str(os.getpid())],
                         stdout=log,stderr=subprocess.STDOUT,creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+                    worker_started = time.monotonic()
                     try:
-                        worker.wait(timeout=600)
-                    except subprocess.TimeoutExpired:
-                        import os
+                        while True:
+                            remaining = 600 - (time.monotonic() - worker_started)
+                            if remaining <= 0:
+                                raise TimeoutError("CT inference reached its ten-minute CPU worker limit.")
+                            try:
+                                worker.wait(timeout=min(2,remaining))
+                                break
+                            except subprocess.TimeoutExpired:
+                                if on_progress:
+                                    on_progress({"phase":"local_CT_inference", "observation_id":receipt["id"],
+                                                 "elapsed_seconds":round(time.monotonic()-worker_started,1),
+                                                 "message":"Local CT worker is running; progress percentage is not measured."})
+                    except BaseException:
+                        # Caller disconnect/cancellation and timeout both stop only our owned worker.
                         if os.name == "nt":
-                            # Windows venv redirectors may have an interpreter child.
-                            # Terminate only this freshly created worker's process tree.
-                            subprocess.run(["taskkill","/PID",str(worker.pid),"/T","/F"],stdout=log,stderr=subprocess.STDOUT,check=False,
+                            stopped = subprocess.run(["taskkill","/PID",str(worker.pid),"/T","/F"],stdout=log,stderr=subprocess.STDOUT,check=False,
                                            creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
+                            if stopped.returncode and worker.poll() is None:
+                                worker.kill()
                         else:
                             worker.kill()
                         worker.wait(timeout=15)
-                        raise RuntimeError("CT inference reached its ten-minute CPU limit; its worker was stopped. Saved observation " + receipt["id"])
+                        raise
                 if worker.returncode:
                     raise RuntimeError("CT inference worker failed; see saved worker.log in observation " + receipt["id"])
                 observed=_json(directory/"detector-result.json")
@@ -528,6 +540,7 @@ class ResearchAdapter:
     def __init__(self, model_id):
         self.id = "local-research:"+model_id
         self.model_id = model_id
+        self.on_progress = None
 
     def validate(self, inputs):
         if not isinstance(inputs,dict) or set(inputs) != {"input_id"}:
@@ -539,7 +552,7 @@ class ResearchAdapter:
         return []
 
     def run(self, inputs):
-        result = predict(self.model_id,inputs["input_id"])
+        result = predict(self.model_id,inputs["input_id"],on_progress=self.on_progress)
         if result["status"] != "ok":
             raise RuntimeError(result["error"] + "; saved observation " + result["id"])
         # Keep native receipts on disk; give the model the actual material output

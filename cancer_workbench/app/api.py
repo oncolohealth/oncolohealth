@@ -635,6 +635,9 @@ def _ask_one(name: str | None, question: str, history: list | dict | None, synth
     """One profile, one turn. `history` is that profile's prior messages, or a {profile: messages} map.
     `on_event` (optional) hears each model call, tool call and observed result as it happens."""
     local_models, local_adapters = research.tool_registration()
+    if on_event:
+        for adapter in local_adapters.values():
+            adapter.on_progress = lambda progress: on_event({"type":"progress", **progress})
     if synthetic:
         local_adapters["synthetic-threshold"] = SyntheticThresholdAdapter()
     box = default_toolbox(cat, local_adapters,
