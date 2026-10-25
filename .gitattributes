@@ -1,2 +1,4 @@
 
 cancer_workbench/research/*.py text eol=lf
+# Hash-verified handoff artifacts must keep their exact published bytes (no CRLF conversion on Windows).
+docs/research-handoff/** -text
