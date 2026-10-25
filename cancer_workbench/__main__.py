@@ -10,10 +10,24 @@ def _catalog(argv: list[str]) -> int:
     from .registry import load_catalog
 
     ap = argparse.ArgumentParser(prog="python -m cancer_workbench catalog")
-    ap.add_argument("cmd", choices=["validate", "show"])
-    ap.add_argument("id", nargs="?")
+    ap.add_argument("cmd", choices=["validate", "show", "contribute", "contributions"])
+    ap.add_argument("id", nargs="?", help="record id for show; submission JSON file for contribute")
     args = ap.parse_args(argv)
     cat = load_catalog()
+    if args.cmd in ("contribute", "contributions"):
+        from .registry.contrib import accept, pending
+
+        if args.cmd == "contributions":
+            for rec in pending():
+                print(f"{rec['id']:44} {rec['contribution']['review']:8} {rec['contribution']['contributor']}")
+            return 0
+        if not args.id:
+            print("usage: catalog contribute SUBMISSION.json", file=sys.stderr)
+            return 1
+        with open(args.id, encoding="utf-8") as f:
+            rec, errs = accept(json.load(f), cat)
+        print("\n".join(errs) if errs else f"queued for review: catalog/contributions/{rec['id']}.json")
+        return 1 if errs else 0
     if args.cmd == "validate":
         errs = cat.validate()
         print("\n".join(errs) or f"ok: {len(cat.models)} models, {len(cat.datasets)} datasets")

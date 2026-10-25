@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OncoloHealth: one research assistant for every cancer model</title>
+<meta name="description" content="A cancer research workbench that maps public datasets and models, audits them for leaks, runs imaging specialists locally and evaluates them on one shared yardstick. Researchers can contribute their own models and datasets.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Fraunces:opsz,wght@9..144,300..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./">OncoloHealth</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#honest">Evidence</a>
+      <a href="#team">Team</a>
+      <a class="btn primary" href="contribute.html">Contribute</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="bloom coral"></div><div class="bloom blue"></div>
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Cancer research workbench</p>
+      <h1>One research assistant <i>for every cancer model.</i></h1>
+      <p class="lede">So the next model never starts from scratch. Find the data, catch the leaks, run the specialists and compare honestly, all on one PC.</p>
+      <div class="actions">
+        <a class="btn primary" href="contribute.html">Contribute a model or dataset</a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+      <p class="team">Jordi Nieves · Sebastian Rueda-Villamil · Moshe Helman · Inam Qasimi · Cal Hacks</p>
+    </div>
+    <img class="art" src="assets/plate-lungs.png" alt="Lungs drawn as stacked CT slices, with one nodule flagged the way a detection model marks it" width="1000" height="760">
+  </div>
+</section>
+
+<section class="stats" aria-label="What runs today">
+  <div class="wrap">
+    <div class="stat"><b>94</b><span>public cancer datasets mapped</span></div>
+    <div class="stat"><b>7</b><span>imaging specialists running locally</span></div>
+    <div class="stat"><b>9</b><span>datasets installed and audited</span></div>
+    <div class="stat"><b>1 PC</b><span>nothing leaves the machine</span></div>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="wrap">
+    <p class="eyebrow">What we built</p>
+    <h2>One place where the work <i>finally stacks up.</i></h2>
+    <div class="ledger">
+      <div class="row"><span class="n">01</span><h3>Catalog</h3><p>Knows every public cancer dataset and model, and the fine print on each: license, access, evidence.</p><span class="proof">94 mapped · 9 installed</span></div>
+      <div class="row"><span class="n">02</span><h3>Audit</h3><p>Hunts down duplicates, conflicting labels and patient leaks before anyone trains on them.</p><span class="proof">21 duplicate pairs caught</span></div>
+      <div class="row"><span class="n">03</span><h3>Specialists</h3><p>Real imaging models that run on your own scans, on your own machine.</p><span class="proof">7 running locally</span></div>
+      <div class="row"><span class="n">04</span><h3>Assistant</h3><p>Answers in plain English and shows every lookup it made to get there.</p><span class="proof">Fine-tuned, on one GPU</span></div>
+      <div class="row"><span class="n">05</span><h3>Evaluate</h3><p>One yardstick for every model, with the answer key locked away until it has predicted.</p><span class="proof">Tested on unseen hospitals</span></div>
+      <div class="row"><span class="n">06</span><h3>Contribute</h3><p>Any lab can add a model or dataset by link. It goes through the same checks and joins the catalog for everyone.</p><span class="proof"><a href="contribute.html">Open to every lab →</a></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="contribute">
+  <div class="bloom coral"></div>
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Contribute</p>
+      <h2>Built to grow <i>with every lab.</i></h2>
+      <p class="lede">Share a model or dataset as a link to your files, a zip, a Hugging Face page or a Zenodo record. We check it the same way we check everything else, then it joins the catalog so the next researcher can build on it.</p>
+      <ol class="steps">
+        <li><b>1</b><span>Describe it: what it is, the scan type and body part, the license.</span></li>
+        <li><b>2</b><span>Link the files. We never host patient data, and identifiable data is refused.</span></li>
+        <li><b>3</b><span>It enters the catalog as <em>cataloged</em>, held for review. It only climbs the evidence ladder when we reproduce it.</span></li>
+      </ol>
+      <div><a class="btn primary" href="contribute.html">Start a contribution</a></div>
+    </div>
+    <img class="art" src="assets/plate-cells.png" alt="Line drawing of red blood cells, one irregular cell flagged" width="1100" height="760">
+  </div>
+</section>
+
+<section class="honest" id="honest">
+  <div class="wrap">
+    <p class="eyebrow">How we stay honest</p>
+    <h2>Every claim comes <i>with receipts.</i></h2>
+    <p class="lede" style="margin-top:18px">Every model and dataset sits on one ladder. The assistant can’t call anything “ready” until it reaches step four.</p>
+    <div class="ladder" aria-label="Evidence ladder">
+      <div><small>1</small>Cataloged</div>
+      <div><small>2</small>Access obtained</div>
+      <div><small>3</small>Runnable</div>
+      <div><small>4</small>Reproduced here</div>
+      <div><small>5</small>Externally evaluated</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer id="team">
+  <div class="wrap">
+    <div><b>OncoloHealth</b><br>Jordi Nieves · Sebastian Rueda-Villamil · Moshe Helman · Inam Qasimi</div>
+    <div>Built at Cal Hacks 13.0. Research software, not a diagnostic device.</div>
+  </div>
+</footer>
+</body>
+</html>
