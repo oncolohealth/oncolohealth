@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from typing import Any
+from typing import Any, Callable
 
 from .providers import ChatResult, Provider
 from .tools import ToolBox
@@ -25,11 +25,16 @@ class TurnRecord:
 
 
 def run_turn(provider: Provider, toolbox: ToolBox, user_message: str, *, history: list[dict] | None = None,
-             max_steps: int = 6, **params: Any) -> TurnRecord:
+             max_steps: int = 6, on_event: Callable[[dict[str, Any]], None] | None = None, **params: Any) -> TurnRecord:
+    """Run one user turn. `on_event`, if given, hears about progress as it happens:
+    {"type": "model", "step": n} before each model call, {"type": "tool_call", ...} before a tool
+    runs and {"type": "tool_result", ...} with its observed result. Raising from it stops the turn."""
+    emit = on_event or (lambda event: None)
     messages = list(history) if history else [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.append({"role": "user", "content": user_message})
     steps: list[dict[str, Any]] = []
-    for _ in range(max_steps):
+    for n in range(max_steps):
+        emit({"type": "model", "step": n})
         res: ChatResult = provider.chat(messages, tools=toolbox.schemas(), **params)
         messages.append(res.assistant_message())
         step = {"profile": res.profile, "model": res.model, "latency_s": round(res.latency_s, 3), "usage": res.usage, "tool_calls": []}
@@ -37,7 +42,10 @@ def run_turn(provider: Provider, toolbox: ToolBox, user_message: str, *, history
         if not res.tool_calls:
             return TurnRecord(messages, steps, res.content, "answered")
         for call in res.tool_calls:
+            emit({"type": "tool_call", "name": call.name, "arguments": call.arguments})
             observed = toolbox.call(call.name, call.arguments)
-            step["tool_calls"].append({"name": call.name, "arguments": call.arguments, "observed": observed})
+            entry = {"name": call.name, "arguments": call.arguments, "observed": observed}
+            step["tool_calls"].append(entry)
+            emit({"type": "tool_result", **entry})
             messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(observed)})
     return TurnRecord(messages, steps, None, "max_steps")

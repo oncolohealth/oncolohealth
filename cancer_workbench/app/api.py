@@ -604,6 +604,18 @@ def ping(body: dict) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _ask_one(name: str | None, question: str, history: list | None, synthetic: bool, cat, on_event=None) -> dict:
+    box = default_toolbox(cat, {"synthetic-threshold": SyntheticThresholdAdapter()} if synthetic else {},
+                          extra_models=[SYNTHETIC_MODEL_RECORD] if synthetic else None)
+    try:
+        prov = make_provider(name)
+        rec = run_turn(prov, box, question, history=history or None, on_event=on_event)
+        return {"profile": prov.profile, "model": prov.model, "final": rec.final, "stopped": rec.stopped,
+                "steps": rec.steps, "messages": rec.messages}
+    except (ProviderError, KeyError, ValueError) as e:
+        return {"profile": name, "error": str(e)}
+
+
 def ask(body: dict) -> dict:
     question = (body.get("question") or "").strip()
     names = body.get("profiles") or [None]
@@ -614,18 +626,21 @@ def ask(body: dict) -> dict:
     cat = load_catalog()
 
     def one(name):
-        box = default_toolbox(cat, {"synthetic-threshold": SyntheticThresholdAdapter()} if synthetic else {},
-                              extra_models=[SYNTHETIC_MODEL_RECORD] if synthetic else None)
-        try:
-            prov = make_provider(name)
-            rec = run_turn(prov, box, question, history=histories.get(prov.profile) or None)
-            return {"profile": prov.profile, "model": prov.model, "final": rec.final, "stopped": rec.stopped,
-                    "steps": rec.steps, "messages": rec.messages}
-        except (ProviderError, KeyError, ValueError) as e:
-            return {"profile": name, "error": str(e)}
+        return _ask_one(name, question, histories.get(name), synthetic, cat)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(names))) as ex:
         return {"results": list(ex.map(one, names))}
+
+
+def ask_stream(body: dict, emit) -> None:
+    """One profile, streamed: progress events as the turn runs, then {"type": "done", "result": ...}.
+    `emit` raises when the browser has gone away, which stops the turn at the next step."""
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise ApiError("Type a question first.")
+    result = _ask_one(body.get("profile"), question, body.get("history"), bool(body.get("synthetic_demo")),
+                      load_catalog(), on_event=emit)
+    emit({"type": "done", "result": result})
 
 
 # ---------- progress ----------
@@ -674,3 +689,5 @@ POST_ROUTES = {
     "/api/experiments/preview": experiment_preview, "/api/experiments/save": experiment_save,
     "/api/experiments/record": experiment_record,
 }
+# Streamed endpoints: handler(body, emit) sends newline-delimited JSON events as they happen.
+STREAM_ROUTES = {"/api/coordinator/ask/stream": ask_stream}

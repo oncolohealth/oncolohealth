@@ -64,11 +64,13 @@ def make_handler(token: str, port_ref: dict):
                         if path.startswith(prefix):
                             return self._json(200, fn(urllib.parse.unquote(path[len(prefix):])))
                 else:
-                    if path in api.POST_ROUTES:
+                    if path in api.POST_ROUTES or path in api.STREAM_ROUTES:
                         n = int(self.headers.get("Content-Length") or 0)
                         if n > MAX_BODY:
                             return self._json(413, {"error": "Request too large."})
                         body = json.loads(self.rfile.read(n) or b"{}") if n else {}
+                        if path in api.STREAM_ROUTES:
+                            return self._stream(api.STREAM_ROUTES[path], body)
                         return self._json(200, api.POST_ROUTES[path](body))
                 return self._json(404, {"error": f"No such endpoint: {path}"})
             except api.ApiError as e:
@@ -76,6 +78,36 @@ def make_handler(token: str, port_ref: dict):
             except Exception as e:
                 traceback.print_exc()
                 return self._json(500, {"error": f"{type(e).__name__}: {e}"})
+
+        def _stream(self, fn, body: dict) -> None:
+            """Newline-delimited JSON, one event per line, flushed as it happens. The response has no
+            length, so the connection closes when the handler returns. Once streaming has started,
+            failures are sent as {"type": "error"} events instead of an HTTP status."""
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+
+            def emit(event: dict) -> None:
+                # A closed browser tab raises here (BrokenPipe/ConnectionReset), which ends the turn.
+                self.wfile.write(json.dumps(event).encode() + b"\n")
+                self.wfile.flush()
+
+            gone = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+            try:
+                fn(body, emit)
+            except gone:
+                return
+            except Exception as e:
+                if not isinstance(e, api.ApiError):
+                    traceback.print_exc()
+                try:
+                    emit({"type": "error", "error": str(e) if isinstance(e, api.ApiError) else f"{type(e).__name__}: {e}"})
+                except gone:
+                    pass
 
         def _media(self, url):
             if urllib.parse.parse_qs(url.query).get("t") != [token]:

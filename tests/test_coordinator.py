@@ -39,6 +39,22 @@ class ToolLoopTests(unittest.TestCase):
         self.assertIn("unknown tool", obs[0]["error"])
         self.assertIn("not valid JSON", obs[1]["error"])
 
+    def test_progress_events_arrive_in_order_and_can_stop_the_turn(self):
+        call = ToolCall("c1", "get_record", json.dumps({"id": "rad-dino"}))
+        events = []
+        rec = run_turn(ScriptedProvider([_reply(calls=[call]), _reply("done")]), self.box, "q", on_event=events.append)
+        self.assertEqual([e["type"] for e in events], ["model", "tool_call", "tool_result", "model"])
+        self.assertEqual(events[2]["observed"]["result"]["id"], "rad-dino")
+        self.assertEqual(rec.final, "done")
+
+        def hang_up(event):
+            if event["type"] == "tool_call":
+                raise BrokenPipeError
+        prov = ScriptedProvider([_reply(calls=[call]), _reply("never")])
+        with self.assertRaises(BrokenPipeError):
+            run_turn(prov, self.box, "q", on_event=hang_up)
+        self.assertEqual(len(prov.calls), 1)  # the tool never ran and the model was not asked again
+
     def test_search_falls_back_to_word_matching(self):
         search = lambda **a: [h["id"] for h in self.box.call("search_catalog", json.dumps(a))["result"]]
         self.assertEqual(search(query="rad-dino", record_type="model"), ["rad-dino"])  # exact substring unchanged
