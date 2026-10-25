@@ -69,7 +69,7 @@ def execution_review(preview: dict, *, recorded: bool = False) -> dict:
             {"code": "evidence", "label": "Scientific evidence and reuse rights",
              "detail": "Review genuine grouping and diagnostic references, contradictory records and the exact reuse permission. Inference permission does not imply adaptation or distillation permission."},
             {"code": "resources", "label": "Runtime and resource scope",
-             "detail": "Verify dependencies, hardware, usable free space, storage destinations and explicit compute/time limits. The configured storage budget is not a measured free-disk or GPU/RAM check."},
+             "detail": "Verify dependencies, hardware, usable free space, storage destinations and explicit compute/time limits. Any configured storage cap is not a measured free-disk or GPU/RAM check."},
             {"code": "controls", "label": "Logs, outputs and cancellation",
              "detail": "Specify log/output/checkpoint destinations, failure recovery and cancellation behavior. This planning workspace does not dispatch jobs or implement job cancellation."},
             {"code": "authorization", "label": "Execution authorization",

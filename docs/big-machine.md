@@ -23,7 +23,6 @@ KV cache for long contexts needs extra memory on top of the weights. Limit the c
 
 ```fish
 set -x CW_MODELS_DIR /path/with/space
-set -x CW_STORAGE_BUDGET_GB 120
 python -m cancer_workbench fetch plan qwen3.8-27b-fp8
 python -m cancer_workbench fetch get qwen3.8-27b-fp8 --allow-big
 ```

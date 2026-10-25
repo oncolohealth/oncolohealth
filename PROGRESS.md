@@ -30,7 +30,7 @@ Evidence states (`cataloged → access_obtained → runnable → locally_reprodu
 - [x] Shared types: `ResultEnvelope`, `EvidenceState`, `Permission`, `ResultStatus`
 - [x] Catalog: 16 model and 14 dataset records, with revisions, sizes, gating and licenses checked against HF, Zenodo, figshare and TCIA APIs (17 dataset records since the 2026-10-24 subset work below)
 - [x] Catalog validation (`catalog validate`)
-- [x] Acquisition: resumable downloads verified against publisher checksums, 40 GB budget guard, cross-host token stripping, zip-slip-safe extraction, PROVENANCE.json per artifact
+- [x] Acquisition: resumable downloads verified against publisher checksums, optional storage cap (`CW_STORAGE_BUDGET_GB`, unlimited by default), cross-host token stripping, zip-slip-safe extraction, PROVENANCE.json per artifact
 - [x] Router: task/modality/anatomy/channels/dims checks; separate `runnable` verdict; never auto-selects
 - [x] `execute_specialist` + clearly SYNTHETIC adapter; catalog-only models cannot execute
 - [x] Dataset manifest contract, `audit_dataset` (patient/duplicate leakage, missing ids, labels, file hashes), deterministic `grouped_split`
@@ -118,7 +118,7 @@ Team Hub checklist update for this UI work is prepared in `DOCS.md` for the proj
 
 ## Local artifacts
 
-Run `python3 -m cancer_workbench fetch list` for live status. Budget: 40 GB (`CW_STORAGE_BUDGET_GB`).
+Run `python3 -m cancer_workbench fetch list` for live status. Storage: unlimited unless `CW_STORAGE_BUDGET_GB` is set.
 
 | Tier | Status |
 |---|---|
@@ -487,3 +487,8 @@ The new offline release/evidence review adds 25 tests to main's 218. Current loc
 - [x] `main`, `origin/main` and `codex/research-integration-followup` all point at `2e3f759`, so PR #5's head is now main (fast-forward; no merge commit). `research/overnight-integration`, `research/gemma-26b-coordinator` and `research/experiment-readiness` have no commits that main lacks. The PR #5 "no merge performed" entry above describes the earlier checkpoint.
 - [x] Rechecked on `2e3f759`: **305 discovered**; ML environment 301 pass with 4 opt-in actual-weight skips; plain Python 257 pass, 48 skips. Catalog: 16 models, 17 datasets valid.
 - [x] Finding: all six caches in `runs/features/` are legacy (no measured-input binding), so both baseline runs and the source-shift run are replay-only and live scoring refuses them. A new exploratory baseline run with bound features is under way (next section).
+
+## Sebastian: storage cap removed by default (2026-10-24)
+
+- [x] Removed the 40 GB default storage budget. Datasets and weights are now unlimited unless `CW_STORAGE_BUDGET_GB` is set, which restores a cap for the CLI fetcher, download jobs and uploads. The UI shows usage only when no cap is set. The experiment plan accepts `limit_bytes: null` as "no cap" (key still required).
+- [x] Plain Python: **307 discovered**, 259 pass, 48 skips (two new regressions). `node --check` on `app.js` passes.

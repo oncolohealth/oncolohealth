@@ -20,7 +20,8 @@ def plan_experiment(path: str, model: dict, dataset_audit: dict | None = None, b
 
     Transfer/distillation rights are supplied as a reviewed overlay in
     model['reuse_permissions'][path] = {'status': 'allowed', 'evidence': '...'}.
-    Budget is {used_bytes, planned_bytes, limit_bytes}; no resource estimates
+    Budget is {used_bytes, planned_bytes, limit_bytes}; limit_bytes None means
+    no configured cap. No resource estimates
     are invented. Catalog records and all input objects remain unchanged.
     """
     if path not in REUSE_PATHS:
@@ -66,11 +67,13 @@ def plan_experiment(path: str, model: dict, dataset_audit: dict | None = None, b
 
     checked_budget = None
     keys = ("used_bytes", "planned_bytes", "limit_bytes")
-    if not isinstance(budget, dict) or any(not _nonnegative_number(budget.get(k)) for k in keys):
-        blockers.append("budget requires finite nonnegative used_bytes, planned_bytes and limit_bytes")
+    limit = budget.get("limit_bytes", False) if isinstance(budget, dict) else False
+    if (not isinstance(budget, dict) or any(not _nonnegative_number(budget.get(k)) for k in keys[:2])
+            or not (limit is None or _nonnegative_number(limit))):
+        blockers.append("budget requires finite nonnegative used_bytes and planned_bytes, and limit_bytes (null for no cap)")
     else:
         checked_budget = {k: budget[k] for k in keys}
-        if budget["used_bytes"] + budget["planned_bytes"] > budget["limit_bytes"]:
+        if limit is not None and budget["used_bytes"] + budget["planned_bytes"] > limit:
             blockers.append("planned storage exceeds budget")
     return {
         "path": path, "model_id": model.get("id"), "model_revision": revision,

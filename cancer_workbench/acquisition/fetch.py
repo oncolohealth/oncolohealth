@@ -156,7 +156,7 @@ def main(argv: list[str]) -> int:
                 f"{acq.get('approx_bytes', 0) / 1e9:7.2f}  {local}"
             )
         used = budget.usage_bytes()
-        print(f"\nused {used / 1e9:.2f} GB of {budget.budget_bytes() / 1e9:.0f} GB budget")
+        print(f"\nused {used / 1e9:.2f} GB; budget {budget.describe(budget.budget_bytes())}")
         return 0
 
     if args.cmd == "units":
@@ -197,12 +197,12 @@ def main(argv: list[str]) -> int:
             skipped = f", {sel['skipped_on_disk']} already on disk skipped" if sel.get("skipped_on_disk") else ""
             print(f"{'':38} {len(sel['groups'])} of {sel['population_groups']} {sel['unit']}s{skipped}{short}")
     fits, used, cap = budget.check(total)
-    print(f"\nplanned {total / 1e9:.2f} GB; used {used / 1e9:.2f} GB; budget {cap / 1e9:.0f} GB -> {'OK' if fits else 'OVER BUDGET'}")
+    print(f"\nplanned {total / 1e9:.2f} GB; used {used / 1e9:.2f} GB; budget {budget.describe(cap)} -> {'OK' if fits else 'OVER BUDGET'}")
     if args.cmd == "plan":
         return 0
 
     if not fits:
-        print("Refusing: over budget. Raise CW_STORAGE_BUDGET_GB or fetch fewer records.", file=sys.stderr)
+        print("Refusing: over budget. Raise or unset CW_STORAGE_BUDGET_GB, or fetch fewer records.", file=sys.stderr)
         return 2
     big = [r["id"] for r in records if r["acquisition"].get("tier") == "big_machine"]
     if big and not args.allow_big:

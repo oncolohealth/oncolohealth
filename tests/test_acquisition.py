@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from cancer_workbench.acquisition import IntegrityError, download, safe_extract_zip, verify
+from cancer_workbench.acquisition import IntegrityError, budget, download, safe_extract_zip, verify
 from helpers import LocalServer
 
 PAYLOAD = b"synthetic-bytes-" * 5000
@@ -113,6 +113,16 @@ class ZipSafetyTests(unittest.TestCase):
             zf.writestr("a/b.txt", "hello")
         safe_extract_zip(z, tmp / "out")
         self.assertEqual((tmp / "out/a/b.txt").read_text(), "hello")
+
+
+
+class BudgetTests(unittest.TestCase):
+    def test_storage_is_unlimited_unless_a_cap_is_set(self):
+        with mock.patch.object(budget, "usage_bytes", return_value=10**15):
+            with mock.patch.dict("os.environ", {"CW_STORAGE_BUDGET_GB": ""}):
+                self.assertEqual(budget.check(10**15), (True, 10**15, None))
+            with mock.patch.dict("os.environ", {"CW_STORAGE_BUDGET_GB": "40"}):
+                self.assertEqual(budget.check(1), (False, 10**15, 40 * 10**9))
 
 
 if __name__ == "__main__":
