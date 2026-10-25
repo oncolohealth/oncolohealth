@@ -13,10 +13,10 @@
   --line-strong: #3e4046;
   --text: #e4e5e9;
   --text-2: #a3a6ae;
-  --text-3: #73767f;
+  --text-3: #969aa3;
   --accent: #4c8dff;
   --accent-hover: #66a0ff;
-  --accent-ink: #ffffff;
+  --accent-ink: #0d1a33;
   --accent-soft: rgba(76, 141, 255, 0.16);
   --ok: #45c08a;
   --warn: #e5a63b;
@@ -637,8 +637,10 @@ details.steps[open] > summary { margin-bottom: 7px; }
 .section-bar { height: 3px; background: var(--off); border-radius: 2px; margin: 6px 0 8px; overflow: hidden; }
 .section-bar div { height: 100%; width: 0; background: var(--ok); }
 .items { list-style: none; padding: 0; margin: 0; display: grid; gap: 1px; }
-.items li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; align-items: start; padding: 3px 6px; border-radius: 4px; }
+.items li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; align-items: start; padding: 3px 6px; border-radius: 4px; }
 .items li:hover { background: var(--hover); }
+/* Long paths and run-together words must wrap instead of widening the page. */
+.items li .txt { overflow-wrap: anywhere; }
 .items li.done .txt { color: var(--text-3); }
 .mark { width: 15px; height: 15px; border-radius: 3px; border: 1.5px solid var(--text-3); background: var(--input); cursor: pointer; padding: 0; display: grid; place-items: center; margin-top: 2px; }
 .mark:hover { border-color: var(--accent); }
@@ -817,7 +819,11 @@ details.steps[open] > summary { margin-bottom: 7px; }
   .tier-rows .subset-list li { grid-template-columns: 14px minmax(0, 1fr) auto; padding: 4px 8px; }
   .tier-rows .subset-list li > :nth-child(4) { grid-column: auto; text-align: right; }
   .subset-list .why { display: none; }
+  .tier-rows .pill { white-space: normal; }
+  .records th, .records td { padding-left: 8px; padding-right: 8px; }
   .scoring-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Saved chats sit above the conversation here, so keep them to about three rows. */
+  #screen-assistant .chat-list { max-height: 172px; overflow-y: auto; overscroll-behavior: contain; }
   .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
