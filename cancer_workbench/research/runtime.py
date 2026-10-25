@@ -191,7 +191,8 @@ def upload(body: dict) -> dict:
         raise ValueError("Unsupported file format. Choose a supported image, volume, DICOM series or profile.")
     sha = hashlib.sha256(raw).hexdigest()
     INPUTS.mkdir(parents=True, exist_ok=True)
-    path = INPUTS / (sha + extension)
+    # JSON input bytes must not share the <id>.json metadata sidecar path.
+    path = INPUTS / (sha + (".input.json" if extension == ".json" else extension))
     # Validate a temporary file before publishing the registered input.
     temp = INPUTS / (uuid.uuid4().hex + extension)
     try:
@@ -210,6 +211,8 @@ def profile(model_id: str) -> tuple[Path, dict]:
     if not isinstance(model_id, str) or not re.fullmatch(r"[a-z0-9-]{1,100}", model_id):
         raise ValueError("Unknown specialist model ID.")
     folder = ARTIFACTS / model_id
+    if not (folder / "manifest.json").is_file():
+        raise ValueError("No verified trained specialist is installed for " + model_id + ". Uploading data does not create a classifier.")
     data = _json(folder / "manifest.json")
     if data.get("id") != model_id or data.get("state") != "verified":
         raise ValueError("Specialist has not completed its saved-artifact verification.")

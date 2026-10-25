@@ -92,6 +92,19 @@ class ResearchRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"not an entire CT"):
             rt.pixels(path,{"kind":"volume-patch"})
 
+    def test_json_profile_bytes_remain_separate_from_metadata(self):
+        raw=b'{"purpose":"synthetic format fixture", "WBC":6.2}'
+        with mock.patch("cancer_workbench.acquisition.budget.check",return_value=(True,{})):
+            meta=rt.upload({"name":"profile.json","data":base64.b64encode(raw).decode()})
+        path,registered=rt.resolve_input(meta["id"])
+        self.assertEqual(path.read_bytes(),raw)
+        self.assertEqual(registered["format"],"structured")
+        self.assertNotEqual(path,rt.INPUTS/(meta["id"]+".json"))
+        self.assertEqual(len(rt.list_inputs()),1)
+        result=rt.predict("missing-blood-classifier",meta["id"])
+        self.assertEqual(result["status"],"failed")
+        self.assertIn("No verified trained specialist",result["error"])
+
     def test_malformed_profile_or_archive_is_not_registered(self):
         with mock.patch("cancer_workbench.acquisition.budget.check",return_value=(True,{})):
             with self.assertRaises(ValueError):
