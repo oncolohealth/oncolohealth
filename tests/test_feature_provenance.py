@@ -12,7 +12,7 @@ from unittest import mock
 
 from cancer_workbench.adapters import encoder
 from cancer_workbench.learning import provenance
-from helpers import write_processor_config
+from helpers import symlink_or_skip, write_processor_config
 
 ENC = "resnet50-a1-in1k"
 
@@ -61,10 +61,13 @@ class MeasuredIdentityTests(FileFixtures):
 
     def test_source_paths_and_external_symlinks_do_not_escape(self):
         outside = self.root / "outside.bin"; outside.write_bytes(b"SYNTHETIC outside")
-        (self.images / "linked.bin").symlink_to(outside)
-        for value in (str(outside), "../outside.bin", "linked.bin"):
+        for value in (str(outside), "../outside.bin"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 provenance.image_sources([dict(self.rows[0], file=value, sha256="")], self.images)
+        with self.subTest(value="linked.bin"):
+            symlink_or_skip(self, self.images / "linked.bin", outside)
+            with self.assertRaises(ValueError):
+                provenance.image_sources([dict(self.rows[0], file="linked.bin", sha256="")], self.images)
 
     def test_non_regular_source_is_refused_without_opening_it(self):
         with self.assertRaises(ValueError):
@@ -135,7 +138,7 @@ class MeasuredIdentityTests(FileFixtures):
     def test_model_file_external_symlink_is_refused(self):
         weight = self.models / ENC / "model.safetensors"
         outside = self.root / "outside-model"; outside.write_bytes(b"SYNTHETIC")
-        weight.unlink(); weight.symlink_to(outside)
+        weight.unlink(); symlink_or_skip(self, weight, outside)
         with self.assertRaises(ValueError):
             provenance.model_identity(ENC)
 

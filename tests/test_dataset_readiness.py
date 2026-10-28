@@ -13,6 +13,7 @@ from unittest import mock
 
 from cancer_workbench.app import api
 from cancer_workbench.datasets import readiness
+from helpers import symlink_or_skip
 
 
 class DatasetReadinessTests(unittest.TestCase):
@@ -97,10 +98,12 @@ class DatasetReadinessTests(unittest.TestCase):
     def test_escaping_symlink_and_oversized_file_are_refused(self):
         outside = self.root.parent / (self.root.name + "-outside")
         self.addCleanup(lambda: outside.unlink(missing_ok=True))
-        path = self.root / readiness.FILES[0]; outside.write_bytes(path.read_bytes()); path.unlink(); path.symlink_to(outside)
-        with self.assertRaises(readiness.SnapshotError):
-            readiness.summary(self.root)
-        path.unlink(); path.write_bytes(b" " * (readiness.LIMIT_BYTES + 1))
+        path = self.root / readiness.FILES[0]; outside.write_bytes(path.read_bytes()); path.unlink()
+        with self.subTest("escaping symlink"):
+            symlink_or_skip(self, path, outside)
+            with self.assertRaises(readiness.SnapshotError):
+                readiness.summary(self.root)
+        path.unlink(missing_ok=True); path.write_bytes(b" " * (readiness.LIMIT_BYTES + 1))
         with self.assertRaisesRegex(readiness.SnapshotError, "read limit"):
             readiness.summary(self.root)
 

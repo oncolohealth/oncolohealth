@@ -73,3 +73,18 @@ def write_processor_config(folder, encoder_id: str) -> None:
             "test_input_size": [3, spec["size"], spec["size"]], "test_crop_pct": 1.0, "crop_mode": "center",
             "interpolation": "bicubic", "mean": spec["mean"], "std": spec["std"]}}
     Path(folder, spec["processor_config"]).write_text(json.dumps(value))
+
+
+def symlink_or_skip(test, link, target, directory: bool = False) -> None:
+    """Create `link` -> `target`, or skip the test (or the enclosing subTest) where Windows refuses to.
+
+    Windows needs Developer Mode or admin rights to create symlinks (WinError 1314). Any other failure still raises.
+    """
+    from pathlib import Path
+
+    try:
+        Path(link).symlink_to(target, target_is_directory=directory)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) != 1314:
+            raise
+        test.skipTest("creating a symlink needs Developer Mode or admin rights on Windows")
