@@ -160,7 +160,8 @@ class ServerGuardTests(unittest.TestCase):
             with urllib.request.urlopen(req) as r:
                 return r.status, r.read()
         except urllib.error.HTTPError as e:
-            return e.code, e.read()
+            with e:  # close the error's response; Python 3.14 warns when it is left open
+                return e.code, e.read()
 
     def test_api_requires_token(self):
         self.assertEqual(self._get("/api/storage")[0], 403)
@@ -188,7 +189,8 @@ class ServerGuardTests(unittest.TestCase):
             with urllib.request.urlopen(req) as r:
                 return r.status, r.headers.get("Content-Type"), [json.loads(l) for l in r.read().splitlines() if l.strip()]
         except urllib.error.HTTPError as e:
-            return e.code, None, []
+            with e:
+                return e.code, None, []
 
     def test_streamed_ask_sends_steps_then_the_answer(self):
         from unittest import mock
