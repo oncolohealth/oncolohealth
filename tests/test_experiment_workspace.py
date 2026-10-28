@@ -14,6 +14,7 @@ from cancer_workbench.datasets import write_manifest
 from cancer_workbench.experiments import workspace
 from cancer_workbench.experiments.records import ExperimentRecord, JobState, REUSE_PATHS
 from cancer_workbench.registry.store import Catalog
+from helpers import symlink_or_skip
 
 
 class DraftApiTests(unittest.TestCase):
@@ -170,11 +171,14 @@ class WorkspaceHistoryTests(unittest.TestCase):
     def test_path_keys_and_external_symlinks_are_refused(self):
         outside = self.root.parent / "outside"; outside.mkdir()
         (outside / "records.json").write_text("[]")
-        (self.root / "linked").symlink_to(outside, target_is_directory=True)
-        for key in ("run:../outside:0", "run:linked:0", "run:folder:-1", "draft:../../outside", "draft:" + "f" * 31):
+        for key in ("run:../outside:0", "run:folder:-1", "draft:../../outside", "draft:" + "f" * 31):
             with self.subTest(key=key), self.assertRaises((ValueError, FileNotFoundError)):
                 workspace.detail(self.root, key)
-        self.assertTrue(workspace.history(self.root)["warnings"])
+        with self.subTest(key="run:linked:0"):
+            symlink_or_skip(self, self.root / "linked", outside, directory=True)
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                workspace.detail(self.root, "run:linked:0")
+            self.assertTrue(workspace.history(self.root)["warnings"])
 
     def test_history_and_file_limits_are_explicit(self):
         self._record()
