@@ -1,0 +1,259 @@
+/* OncoloHealth fx: scan dividers and the SEQ HUD.
+   Dividers are ordinary full-width bands in the page flow; nothing here pins or sticks.
+   Motion is transform/opacity only. */
+
+/* ---------- scan dividers ---------- */
+.fx-scan {
+  display: block;
+  pointer-events: none; /* decorative; also keeps stray [data-scan] click handlers from firing */
+}
+.fx-scan.fx-scan--built {
+  position: relative;
+  width: 100%;
+  height: clamp(380px, 62vh, 700px);
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--fx-ink);
+}
+/* soft hand-off from a peach section above / below into the page cream */
+.fx-scan--built:not(.is-navy)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--scan-from, transparent), transparent 24%, transparent 78%, var(--scan-to, transparent));
+}
+.fx-scan--built.is-navy {
+  background: var(--scan-band, transparent);
+  color: var(--fx-cream);
+  --bloom-x: 72%;
+  --bloom-y: -38%;
+}
+.fx-scan__stage {
+  position: absolute;
+  inset: 0;
+}
+.fx-scan__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+}
+
+/* readout row: SEQ id · tick ruler · technique · acquisition */
+.fx-scan__hud {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: clamp(18px, 3.4vh, 32px);
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  font-family: var(--fx-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: .08em;
+  font-feature-settings: 'tnum' 1;
+  white-space: nowrap;
+  color: rgba(23, 34, 55, .6);
+}
+.fx-scan__id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fx-scan__id b {
+  font-weight: 500;
+  color: var(--fx-ink);
+  letter-spacing: .1em;
+}
+.fx-scan__rule {
+  --tick: rgba(23, 34, 55, .22);
+  --tick-major: rgba(23, 34, 55, .38);
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 24px;
+  height: 7px;
+  margin-bottom: 2px;
+  background:
+    repeating-linear-gradient(to right, var(--tick-major) 0 1px, transparent 1px 64px) left bottom / 100% 7px no-repeat,
+    repeating-linear-gradient(to right, var(--tick) 0 1px, transparent 1px 8px) left bottom / 100% 3px no-repeat;
+}
+.fx-scan__rule::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--tick);
+}
+.fx-scan__rule i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--fx-peach-deep);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform .18s linear;
+}
+.fx-scan__meta {
+  color: rgba(23, 34, 55, .42);
+}
+.fx-scan__st {
+  color: var(--fx-peach-deep);
+  min-width: 15ch;
+  text-align: right;
+}
+.is-navy .fx-scan__hud { color: rgba(251, 245, 241, .6); }
+.is-navy .fx-scan__id b { color: var(--fx-cream); }
+.is-navy .fx-scan__rule { --tick: rgba(251, 245, 241, .2); --tick-major: rgba(251, 245, 241, .36); }
+.is-navy .fx-scan__rule i { background: var(--fx-peach-light); }
+.is-navy .fx-scan__meta { color: rgba(251, 245, 241, .4); }
+.is-navy .fx-scan__st { color: var(--fx-peach-light); }
+
+/* staggered entrance of the readout the first time a band comes into view */
+.fx:not(.fx-reduced) .fx-scan__hud > * {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .6s var(--fx-ease), transform .7s var(--fx-ease);
+}
+.fx:not(.fx-reduced) .fx-scan__hud > .fx-scan__rule { transform: scaleX(.6); transform-origin: left center; }
+.fx-scan.is-in .fx-scan__hud > *,
+.fx-scan.is-in .fx-scan__hud > .fx-scan__rule { opacity: 1; transform: none; }
+.fx-scan.is-in .fx-scan__hud > :nth-child(2) { transition-delay: .08s; }
+.fx-scan.is-in .fx-scan__hud > :nth-child(3) { transition-delay: .16s; }
+.fx-scan.is-in .fx-scan__hud > :nth-child(4) { transition-delay: .24s; }
+
+.fx-scan--built.is-static .fx-scan__rule i { transform: scaleX(1); }
+
+@media (max-width: 760px) {
+  .fx-scan.fx-scan--built { height: clamp(300px, 52vh, 460px); }
+  .fx-scan__meta { display: none; }
+}
+@media (max-width: 600px) {
+  .fx-scan__hud { font-size: 10px; gap: 12px; letter-spacing: .05em; }
+  .fx-scan__st { min-width: 0; flex-shrink: 0; white-space: nowrap; }
+  .fx-scan__rule { min-width: 24px; }
+}
+
+/* ---------- SEQ HUD ---------- */
+.fx-hud {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100vw - 40px);
+  height: 32px;
+  padding: 0 13px 0 12px;
+  border-radius: 3px;
+  background: rgba(255, 250, 246, .84);
+  -webkit-backdrop-filter: saturate(1.3) blur(12px);
+  backdrop-filter: saturate(1.3) blur(12px);
+  border: 1px solid rgba(23, 34, 55, .08);
+  box-shadow: 0 1px 2px rgba(17, 30, 50, .06), 0 12px 28px -14px rgba(17, 30, 50, .3);
+  font-family: var(--fx-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: .07em;
+  font-feature-settings: 'tnum' 1;
+  white-space: nowrap;
+  color: rgba(23, 34, 55, .62);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .5s var(--fx-ease), transform .6s var(--fx-ease);
+}
+.fx-hud.is-on { opacity: 1; transform: none; }
+.fx-hud.is-on.is-docked { opacity: 0; transform: translateY(8px); transition-duration: .3s; }
+.fx-hud__dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fx-peach-deep);
+}
+.fx-hud__dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--fx-peach-deep);
+  opacity: 0;
+  animation: fx-hud-ping 2.6s var(--fx-ease) infinite;
+}
+.fx-hud__seq { font-weight: 500; color: var(--fx-ink); letter-spacing: .1em; }
+.fx-hud__sep { color: rgba(23, 34, 55, .32); }
+.fx-hud__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fx-hud__bar {
+  position: relative;
+  width: 48px;
+  height: 5px;
+  margin-left: 4px;
+  background:
+    repeating-linear-gradient(to right, rgba(23, 34, 55, .28) 0 1px, transparent 1px 12px) left bottom / 100% 5px no-repeat;
+  overflow: hidden;
+}
+.fx-hud__bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: rgba(23, 34, 55, .16);
+}
+.fx-hud__bar i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--fx-peach-deep);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+.fx-hud__pct { min-width: 4ch; text-align: right; color: var(--fx-ink); }
+@keyframes fx-hud-ping {
+  0% { opacity: .55; transform: scale(.4); }
+  70%, 100% { opacity: 0; transform: scale(1.4); }
+}
+/* The HUD lives in the sticky header, under the brand: a status line, never over content. */
+.site-header > .fx-hud {
+  position: absolute;
+  left: 56px;
+  bottom: 7px;
+  max-width: none;
+  height: 16px;
+  padding: 0;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  font-size: 9.5px;
+  color: rgba(23, 34, 55, .55);
+}
+.site-header > .fx-hud.is-on.is-docked { opacity: 1; transform: none; }
+.site-header > .fx-hud .fx-hud__bar { width: 44px; }
+@media (max-width: 900px) {
+  .site-header > .fx-hud { left: 24px; bottom: 5px; }
+}
+@media (max-width: 600px) {
+  .fx-hud { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-hud { transition: none; }
+  .fx-hud__dot::after { animation: none; }
+  .fx-scan__rule i { transition: none; }
+}

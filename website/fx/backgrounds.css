@@ -1,0 +1,15 @@
+/* Hero backgrounds for the models, open-source, support and quote pages.
+   Same treatment as .editorial-atmosphere in style.css (copied so this file
+   stands alone); photos are National Cancer Institute, see Sources & licenses. */
+.atmosphere-models,.atmosphere-open-source,.atmosphere-support,.atmosphere-quote{position:absolute;z-index:0;inset:0 -3% 0 42%;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none;opacity:.39;filter:saturate(.58) contrast(.92);mask-image:linear-gradient(90deg,transparent 0%,#000 38%,#000 100%);-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 38%,#000 100%)}
+
+/* Research pages: cream hero, warm photo */
+.atmosphere-models{background-image:url('../background-models.webp');background-position:center 50%;opacity:.25;filter:sepia(.35) saturate(.7) contrast(.88)}
+.atmosphere-open-source{background-image:url('../background-open-source.webp');background-position:center 45%;opacity:.4;filter:saturate(.55) contrast(1.1)}
+.atmosphere-support{background-image:url('../background-support.webp');background-position:center 35%;opacity:.38;filter:saturate(.45) contrast(.92)}
+
+/* Business page: navy hero, photo blended into the blue */
+.atmosphere-quote{background-image:url('../background-quote.webp');background-position:center 40%;opacity:.26;filter:grayscale(.6) contrast(1.05);mix-blend-mode:luminosity}
+
+@media(max-width:900px){.atmosphere-models,.atmosphere-open-source,.atmosphere-support,.atmosphere-quote{left:34%;opacity:.25}.atmosphere-quote{opacity:.2}}
+@media(max-width:520px){.atmosphere-models,.atmosphere-open-source,.atmosphere-support,.atmosphere-quote{left:15%;opacity:.18}.atmosphere-quote{opacity:.15}}
